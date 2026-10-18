@@ -4,6 +4,7 @@ import { Stock, StockItem } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface StockSectionProps {
   data: Stock;
@@ -17,6 +18,7 @@ function StockCard({ item }: { item: StockItem }) {
     item.minimumThreshold > 0
       ? Math.min((item.quantity / (item.minimumThreshold * 2)) * 100, 100)
       : 100;
+  const sizes = dashboardConfig.sizes.products;
 
   return (
     <div
@@ -30,7 +32,11 @@ function StockCard({ item }: { item: StockItem }) {
             <img
               src={item.image}
               alt={item.name}
-              className="w-12 h-12 object-contain shrink-0"
+              style={{
+                width: `${sizes.imageWidth}px`,
+                height: `${sizes.imageHeight}px`,
+              }}
+              className="object-contain shrink-0"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
@@ -38,7 +44,12 @@ function StockCard({ item }: { item: StockItem }) {
           ) : (
             <span className="text-3xl shrink-0">{item.icon}</span>
           )}
-          <h3 className="text-lg font-bold text-white truncate">{toEnglishDigits(item.name)}</h3>
+          <h3
+            className="font-bold text-white truncate"
+            style={{ fontSize: `${sizes.nameFontSize}px` }}
+          >
+            {toEnglishDigits(item.name)}
+          </h3>
         </div>
         {isLowStock && (
           <AlertTriangle className="w-5 h-5 text-statusRed shrink-0" />
@@ -46,10 +57,18 @@ function StockCard({ item }: { item: StockItem }) {
       </div>
 
       <div className="flex items-baseline gap-2">
-        <span className={`text-4xl font-bold tabular-nums ${isLowStock ? "text-statusRed" : "text-white"}`}>
+        <span
+          className={`font-bold tabular-nums ${isLowStock ? "text-statusRed" : "text-white"}`}
+          style={{ fontSize: `${sizes.numberFontSize}px` }}
+        >
           {formatNumber(count)}
         </span>
-        <span className="text-gray-400 text-sm">{item.unit}</span>
+        <span
+          className="text-gray-400"
+          style={{ fontSize: `${sizes.unitFontSize}px` }}
+        >
+          {item.unit}
+        </span>
       </div>
 
       <div>
@@ -71,6 +90,8 @@ function StockCard({ item }: { item: StockItem }) {
 }
 
 export default function StockSection({ data, className }: StockSectionProps) {
+  const sizes = dashboardConfig.sizes.products;
+
   return (
     <div className={className}>
       <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -83,7 +104,12 @@ export default function StockSection({ data, className }: StockSectionProps) {
           }}
         >
           <div className="flex flex-col min-h-0">
-            <h3 className="text-lg font-semibold text-brandOrange mb-2 shrink-0">المنتجات المعبأة</h3>
+            <h3
+              className="font-semibold text-brandOrange mb-2 shrink-0"
+              style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}
+            >
+              المنتجات المعبأة
+            </h3>
             <div
               className="flex-1 min-h-0 grid gap-3"
               style={{ gridTemplateColumns: `repeat(${Math.max(data.products.length, 1)}, minmax(0, 1fr))` }}
@@ -95,7 +121,12 @@ export default function StockSection({ data, className }: StockSectionProps) {
           </div>
 
           <div className="flex flex-col min-h-0">
-            <h3 className="text-lg font-semibold text-brandOrange mb-2 shrink-0">الشكاير</h3>
+            <h3
+              className="font-semibold text-brandOrange mb-2 shrink-0"
+              style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}
+            >
+              الشكاير
+            </h3>
             <div
               className="flex-1 min-h-0 grid gap-3"
               style={{ gridTemplateColumns: `repeat(${Math.max(data.sacks.length, 1)}, minmax(0, 1fr))` }}

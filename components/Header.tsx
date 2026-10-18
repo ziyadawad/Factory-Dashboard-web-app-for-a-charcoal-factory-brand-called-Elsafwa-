@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Maximize2 } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface HeaderProps {
   lastUpdate: string | null;
@@ -10,6 +11,7 @@ interface HeaderProps {
 }
 
 export default function Header({ lastUpdate, isConnected }: HeaderProps) {
+  const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -95,16 +97,35 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
   return (
     <header className="shrink-0 bg-card border-b border-cardBorder px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <img src="/logo.png" alt="الصفوة" className="w-14 h-14" />
+        <img
+          src="/logo.png"
+          alt="الصفوة"
+          style={{ width: sizes.logoHeight, height: sizes.logoHeight }}
+        />
         <div>
-          <h1 className="text-2xl font-bold text-white">لوحة متابعة المصنع</h1>
-          <p className="text-gray-400 text-sm">الصفوة</p>
+          <h1
+            className="font-bold text-white"
+            style={{ fontSize: `${sizes.titleFontSize}px` }}
+          >
+            لوحة متابعة المصنع
+          </h1>
+          <p
+            className="text-gray-400"
+            style={{ fontSize: `${sizes.subtitleFontSize}px` }}
+          >
+            الصفوة
+          </p>
         </div>
       </div>
 
       <div className="flex items-center gap-8">
         <div className="text-left">
-          <p className="text-3xl font-bold text-white tabular-nums">{currentTime}</p>
+          <p
+            className="font-bold text-white tabular-nums"
+            style={{ fontSize: `${sizes.clockFontSize}px` }}
+          >
+            {currentTime}
+          </p>
           <p className="text-gray-400 text-sm">{currentDate}</p>
         </div>
 

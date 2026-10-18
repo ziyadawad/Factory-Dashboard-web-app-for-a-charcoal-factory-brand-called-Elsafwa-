@@ -1,8 +1,9 @@
-import { DashboardData, KilnStatus } from "./types";
+import { DashboardData } from "./types";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 // Replace this function with the real factory system call
 // If FACTORY_API_URL is set in environment variables, fetch from the real system
-// Otherwise, return mock data for development
+// Otherwise, return data from config file
 export async function getDashboardData(): Promise<DashboardData> {
   const factoryApiUrl = process.env.FACTORY_API_URL;
   const factoryApiKey = process.env.FACTORY_API_KEY;
@@ -24,124 +25,61 @@ export async function getDashboardData(): Promise<DashboardData> {
       return await response.json();
     } catch (error) {
       console.error("Error fetching from factory API:", error);
-      // Fall back to mock data if API fails
+      // Fall back to config data if API fails
     }
   }
 
-  // Mock data with slight random variations for testing live refresh
-  const randomVariation = (base: number, variance: number): number => {
-    return Math.floor(base + (Math.random() - 0.5) * variance);
-  };
+  // Return data from config file
+  const config = dashboardConfig.data;
 
-  const absentNamesPool = [
-    "أحمد محمد",
-    "محمد علي",
-    "عمر حسن",
-    "خالد يوسف",
-    "محمود عبدالله",
-    "إبراهيم سعيد",
-    "سامي كمال",
-    "طارق عادل",
-  ];
-
-  const shuffleAndPick = (array: string[], count: number): string[] => {
-    const shuffled = [...array].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
-  };
-
-  const presentCount = randomVariation(12, 2);
-  const absentCount = randomVariation(3, 2);
-
-  const kilnStatuses: KilnStatus[] = ["working", "working", "working", "maintenance", "stopped"];
-  const shuffledKilns = kilnStatuses.sort(() => Math.random() - 0.5);
+  // Calculate kiln counts from the list
+  const workingCount = config.kilns.filter((k) => k.status === "working").length;
+  const maintenanceCount = config.kilns.filter((k) => k.status === "maintenance").length;
+  const stoppedCount = config.kilns.filter((k) => k.status === "stopped").length;
 
   return {
     attendance: {
-      present: presentCount,
-      absent: absentCount,
-      total: presentCount + absentCount,
-      absentNames: shuffleAndPick(absentNamesPool, absentCount),
+      present: config.attendance.present,
+      absent: config.attendance.absent,
+      total: config.attendance.present + config.attendance.absent,
+      absentNames: config.attendance.absentNames,
     },
     stock: {
-      products: [
-        {
-          id: "quarter",
-          name: "ربع كيلو",
-          quantity: randomVariation(1500, 100),
-          unit: "باكت",
-          minimumThreshold: 500,
-          image: "/products/quarter.png",
-        },
-        {
-          id: "half",
-          name: "نص كيلو",
-          quantity: randomVariation(1200, 80),
-          unit: "باكت",
-          minimumThreshold: 400,
-          image: "/products/half.png",
-        },
-        {
-          id: "kilo",
-          name: "كيلو",
-          quantity: randomVariation(800, 60),
-          unit: "باكت",
-          minimumThreshold: 300,
-          image: "/products/kilo.png",
-        },
-        {
-          id: "3kg",
-          name: "3 كيلو",
-          quantity: randomVariation(450, 40),
-          unit: "باكت",
-          minimumThreshold: 150,
-          image: "/products/3kg.png",
-        },
-      ],
-      sacks: [
-        {
-          id: "orange",
-          name: "شكاير برتقال",
-          quantity: randomVariation(2000, 150),
-          unit: "شكارة",
-          minimumThreshold: 500,
-          icon: "🌳",
-        },
-        {
-          id: "mango",
-          name: "شكاير مانجو",
-          quantity: randomVariation(1800, 120),
-          unit: "شكارة",
-          minimumThreshold: 400,
-          icon: "🥭",
-        },
-        {
-          id: "casuarina",
-          name: "شكاير كازوارينا",
-          quantity: randomVariation(1500, 100),
-          unit: "شكارة",
-          minimumThreshold: 300,
-          icon: "🌲",
-        },
-      ],
+      products: config.stock.products.map((product, index) => ({
+        id: ["quarter", "half", "kilo", "3kg"][index],
+        name: product.name,
+        quantity: product.quantity,
+        unit: product.unit,
+        minimumThreshold: product.minimum,
+        image: product.image,
+      })),
+      sacks: config.stock.sacks.map((sack, index) => ({
+        id: ["orange", "mango", "casuarina"][index],
+        name: sack.name,
+        quantity: sack.quantity,
+        unit: sack.unit,
+        minimumThreshold: sack.minimum,
+        icon: ["�", "🥭", "🌲"][index],
+      })),
     },
     kilns: {
-      working: shuffledKilns.filter((s) => s === "working").length,
-      maintenance: shuffledKilns.filter((s) => s === "maintenance").length,
-      stopped: shuffledKilns.filter((s) => s === "stopped").length,
-      total: 5,
-      kilns: shuffledKilns.map((status, index) => ({
+      working: workingCount,
+      maintenance: maintenanceCount,
+      stopped: stoppedCount,
+      total: config.kilns.length,
+      kilns: config.kilns.map((kiln, index) => ({
         id: `kiln-${index + 1}`,
-        name: `فرن ${index + 1}`,
-        status,
+        name: kiln.name,
+        status: kiln.status,
       })),
     },
     floorWorkers: {
-      present: randomVariation(85, 10),
-      total: 100,
+      present: config.floorWorkers.presentToday,
+      total: config.floorWorkers.totalRegistered,
     },
     treasury: {
-      balance: randomVariation(1250000, 50000),
-      todayChange: randomVariation(15000, 10000),
+      balance: config.treasury.balance,
+      todayChange: config.treasury.todayChange,
     },
     updatedAt: new Date().toISOString(),
   };

@@ -9,6 +9,7 @@ import KilnsSection from "@/components/KilnsSection";
 import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import { DashboardData } from "@/lib/types";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -25,6 +26,7 @@ export default function Dashboard() {
 
   const [flashSection, setFlashSection] = useState<string | null>(null);
   const prevDataRef = useRef<DashboardData | null>(null);
+  const sizes = dashboardConfig.sizes.cards;
 
   useEffect(() => {
     if (data && prevDataRef.current) {
@@ -72,7 +74,12 @@ export default function Dashboard() {
 
       <main className="flex-1 min-h-0 p-4 overflow-hidden">
         {data ? (
-          <div className="grid grid-cols-4 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 h-full">
+          <div
+            className="grid grid-cols-4 gap-4 h-full"
+            style={{
+              gridTemplateRows: `[minmax(0,${sizes.topRowHeight})_minmax(0,${sizes.warehouseHeight})]`,
+            }}
+          >
             {/* Top row */}
             <div className={flashClass("treasury")}>
               <TreasurySection data={data.treasury} />

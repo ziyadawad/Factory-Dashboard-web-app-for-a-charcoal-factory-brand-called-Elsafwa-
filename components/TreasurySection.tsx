@@ -4,6 +4,7 @@ import { Treasury } from "@/lib/types";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface TreasurySectionProps {
   data: Treasury;
@@ -12,6 +13,7 @@ interface TreasurySectionProps {
 export default function TreasurySection({ data }: TreasurySectionProps) {
   const { count } = useCountUp(data.balance, 800);
   const formattedBalance = formatNumber(count);
+  const sizes = dashboardConfig.sizes.treasury;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -20,7 +22,8 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
         <p
           dir="ltr"
-          className="text-5xl font-bold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent mb-1 tabular-nums"
+          className="font-bold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent mb-1 tabular-nums"
+          style={{ fontSize: `${sizes.numberFontSize}px` }}
         >
           {formattedBalance}
         </p>

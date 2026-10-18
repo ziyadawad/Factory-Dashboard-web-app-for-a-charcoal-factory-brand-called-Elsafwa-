@@ -2,12 +2,15 @@
 
 import { Kilns } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface KilnsSectionProps {
   data: Kilns;
 }
 
 export default function KilnsSection({ data }: KilnsSectionProps) {
+  const sizes = dashboardConfig.sizes.kilns;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "working":
@@ -40,15 +43,30 @@ export default function KilnsSection({ data }: KilnsSectionProps) {
 
       <div className="grid grid-cols-3 gap-2 mb-2 shrink-0">
         <div className="bg-background rounded-xl py-2 text-center border border-statusGreen/30">
-          <p className="text-3xl font-bold text-statusGreen tabular-nums">{formatNumber(data.working)}</p>
+          <p
+            className="font-bold text-statusGreen tabular-nums"
+            style={{ fontSize: `${sizes.countFontSize}px` }}
+          >
+            {formatNumber(data.working)}
+          </p>
           <p className="text-gray-400 text-xs">شغالة</p>
         </div>
         <div className="bg-background rounded-xl py-2 text-center border border-statusAmber/30">
-          <p className="text-3xl font-bold text-statusAmber tabular-nums">{formatNumber(data.maintenance)}</p>
+          <p
+            className="font-bold text-statusAmber tabular-nums"
+            style={{ fontSize: `${sizes.countFontSize}px` }}
+          >
+            {formatNumber(data.maintenance)}
+          </p>
           <p className="text-gray-400 text-xs">صيانة</p>
         </div>
         <div className="bg-background rounded-xl py-2 text-center border border-statusRed/30">
-          <p className="text-3xl font-bold text-statusRed tabular-nums">{formatNumber(data.stopped)}</p>
+          <p
+            className="font-bold text-statusRed tabular-nums"
+            style={{ fontSize: `${sizes.countFontSize}px` }}
+          >
+            {formatNumber(data.stopped)}
+          </p>
           <p className="text-gray-400 text-xs">متوقفة</p>
         </div>
       </div>

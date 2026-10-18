@@ -4,6 +4,7 @@ import { Attendance } from "@/lib/types";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface AttendanceSectionProps {
   data: Attendance;
@@ -14,6 +15,7 @@ const MAX_VISIBLE_NAMES = 4;
 export default function AttendanceSection({ data }: AttendanceSectionProps) {
   const { count: presentCount } = useCountUp(data.present, 600);
   const { count: absentCount } = useCountUp(data.absent, 600);
+  const sizes = dashboardConfig.sizes.attendance;
 
   const chartData = [
     { name: "حاضر", value: data.present, color: "#22C55E" },
@@ -22,6 +24,10 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
 
   const presentPercentage =
     data.total > 0 ? ((data.present / data.total) * 100).toFixed(0) : "0";
+
+  // Calculate donut radii based on size
+  const outerRadius = 50 - (sizes.donutThickness / 2);
+  const innerRadius = outerRadius - sizes.donutThickness;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -35,8 +41,8 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius="68%"
-                outerRadius="92%"
+                innerRadius={`${innerRadius}%`}
+                outerRadius={`${outerRadius}%`}
                 paddingAngle={5}
                 dataKey="value"
                 stroke="none"
@@ -50,18 +56,33 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
           </ResponsiveContainer>
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <p className="text-3xl font-bold text-white tabular-nums">{presentPercentage}%</p>
+          <p
+            className="font-bold text-white tabular-nums"
+            style={{ fontSize: `${sizes.percentFontSize}px` }}
+          >
+            {presentPercentage}%
+          </p>
           <p className="text-gray-400 text-xs">نسبة الحضور</p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-2 shrink-0">
         <div className="bg-background rounded-xl py-2 text-center">
-          <p className="text-2xl font-bold text-statusGreen tabular-nums">{formatNumber(presentCount)}</p>
+          <p
+            className="font-bold text-statusGreen tabular-nums"
+            style={{ fontSize: `${sizes.labelFontSize}px` }}
+          >
+            {formatNumber(presentCount)}
+          </p>
           <p className="text-gray-400 text-xs">حاضر</p>
         </div>
         <div className="bg-background rounded-xl py-2 text-center">
-          <p className="text-2xl font-bold text-statusRed tabular-nums">{formatNumber(absentCount)}</p>
+          <p
+            className="font-bold text-statusRed tabular-nums"
+            style={{ fontSize: `${sizes.labelFontSize}px` }}
+          >
+            {formatNumber(absentCount)}
+          </p>
           <p className="text-gray-400 text-xs">غائب</p>
         </div>
       </div>

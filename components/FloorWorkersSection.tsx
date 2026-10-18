@@ -3,6 +3,7 @@
 import { FloorWorkers } from "@/lib/types";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber } from "@/lib/format";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 interface FloorWorkersSectionProps {
   data: FloorWorkers;
@@ -11,13 +12,19 @@ interface FloorWorkersSectionProps {
 export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) {
   const { count } = useCountUp(data.present, 700);
   const percentage = data.total > 0 ? ((data.present / data.total) * 100).toFixed(0) : "0";
+  const sizes = dashboardConfig.sizes.floorWorkers;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className="text-xl font-bold text-white mb-2 shrink-0">عمال الأرضية</h2>
 
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
-        <p className="text-7xl font-bold text-white mb-1 tabular-nums">{formatNumber(count)}</p>
+        <p
+          className="font-bold text-white mb-1 tabular-nums"
+          style={{ fontSize: `${sizes.numberFontSize}px` }}
+        >
+          {formatNumber(count)}
+        </p>
         <p className="text-gray-400 text-lg mb-3">عامل حاضر اليوم</p>
 
         <div className="w-full bg-background rounded-xl p-3">
