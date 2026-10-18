@@ -11,8 +11,8 @@ export const dashboardConfig = {
     // رصيد الخزنة - الباقي في الخزنة والتغيير في اليوم
     // Treasury balance - money in treasury and today's change
     treasury: {
-      balance: 800000, // الرصيد الحالي بالجنيه - current balance in EGP
-      todayChange: 15000, // التغيير في اليوم (موجب للزيادة، سالب للنقصان) - today's change (positive for increase, negative for decrease)
+      balance: 316178, // الرصيد الحالي بالجنيه - current balance in EGP
+      todayChange: 0, // التغيير في اليوم (موجب للزيادة، سالب للنقصان) - today's change (positive for increase, negative for decrease)
     },
 
     // حضور الإدارة - العمال في الإدارة
@@ -152,9 +152,9 @@ export const dashboardConfig = {
       // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
       // fine = ناعم ، coarse = خشن ، quantity = الكمية ، minimum = الحد الأدنى
       sacks: [
-        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 75, minimum: 0 }, coarse: { quantity: 75, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
-        { name: "شكاير مانجو",    unit: "شكارة", fine: { quantity: 75, minimum: 0 }, coarse: { quantity: 75, minimum: 0 } },
-        { name: "شكاير كازوارينا", unit: "شكارة", fine: { quantity: 80, minimum: 0 }, coarse: { quantity: 80, minimum: 0 } },
+        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 828, minimum: 0 }, coarse: { quantity: 490, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
+        { name: "شكاير مانجو",    unit: "شكارة", fine: { quantity: 66, minimum: 0 }, coarse: { quantity: 101, minimum: 0 } },
+        { name: "شكاير كازوارينا", unit: "شكارة", fine: { quantity: 1058, minimum: 0 }, coarse: { quantity: 82, minimum: 0 } },
       ],
     },
   },

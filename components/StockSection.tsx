@@ -161,7 +161,7 @@ function SackHalf({ label, level, unit }: { label: string; level: SackLevel; uni
       <div className="flex flex-wrap items-baseline gap-x-1">
         <span
           className={`font-bold tabular-nums leading-none ${isLow ? "text-statusRed" : "text-white"}`}
-          style={{ fontSize: `${sizes.sackNumberFontSize}px` }}
+          style={{ fontSize: `${sizes.numberFontSize}px` }}
         >
           {formatNumber(count)}
         </span>
