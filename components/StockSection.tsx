@@ -25,20 +25,20 @@ function StockCard({ item }: { item: StockItem }) {
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           {item.image ? (
             <img
               src={item.image}
               alt={item.name}
-              className="w-12 h-12 object-contain shrink-0"
+              className="h-28 w-auto object-contain shrink-0 drop-shadow-lg"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
             />
           ) : (
-            <span className="text-3xl shrink-0">{item.icon}</span>
+            <span className="text-4xl shrink-0">{item.icon}</span>
           )}
-          <h3 className="text-lg font-bold text-white truncate">{toEnglishDigits(item.name)}</h3>
+          <h3 className="text-xl font-bold text-white truncate">{toEnglishDigits(item.name)}</h3>
         </div>
         {isLowStock && (
           <AlertTriangle className="w-5 h-5 text-statusRed shrink-0" />
@@ -83,7 +83,10 @@ export default function StockSection({ data, className }: StockSectionProps) {
           }}
         >
           <div className="flex flex-col min-h-0">
-            <h3 className="text-lg font-semibold text-brandOrange mb-2 shrink-0">المنتجات المعبأة</h3>
+            <div className="flex items-center gap-3 mb-2 shrink-0">
+              <div className="w-1 h-8 bg-brandOrange rounded-full"></div>
+              <h3 className="text-2xl font-bold text-brandOrange">المنتجات المعبأة</h3>
+            </div>
             <div
               className="flex-1 min-h-0 grid gap-3"
               style={{ gridTemplateColumns: `repeat(${Math.max(data.products.length, 1)}, minmax(0, 1fr))` }}
@@ -95,7 +98,10 @@ export default function StockSection({ data, className }: StockSectionProps) {
           </div>
 
           <div className="flex flex-col min-h-0">
-            <h3 className="text-lg font-semibold text-brandOrange mb-2 shrink-0">الشكاير</h3>
+            <div className="flex items-center gap-3 mb-2 shrink-0">
+              <div className="w-1 h-8 bg-brandOrange rounded-full"></div>
+              <h3 className="text-2xl font-bold text-brandOrange">الشكاير</h3>
+            </div>
             <div
               className="flex-1 min-h-0 grid gap-3"
               style={{ gridTemplateColumns: `repeat(${Math.max(data.sacks.length, 1)}, minmax(0, 1fr))` }}
