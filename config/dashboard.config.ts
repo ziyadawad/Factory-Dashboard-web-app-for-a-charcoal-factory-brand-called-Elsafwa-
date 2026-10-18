@@ -11,28 +11,26 @@ export const dashboardConfig = {
     // رصيد الخزنة - الباقي في الخزنة والتغيير في اليوم
     // Treasury balance - money in treasury and today's change
     treasury: {
-      balance: 1250000, // الرصيد الحالي بالجنيه - current balance in EGP
+      balance: 800000, // الرصيد الحالي بالجنيه - current balance in EGP
       todayChange: 15000, // التغيير في اليوم (موجب للزيادة، سالب للنقصان) - today's change (positive for increase, negative for decrease)
     },
 
     // حضور الإدارة - العمال في الإدارة
     // Management attendance - office workers
     attendance: {
-      present: 12, // عدد الحاضرين - number of present workers
-      absent: 3, // عدد الغائبين - number of absent workers
+      present: 9, // عدد الحاضرين - number of present workers
+      absent: 1, // عدد الغائبين - number of absent workers
       absentNames: [
         // أسماء الغائبين - names of absent workers
-        "أحمد محمد",
-        "محمد علي",
-        "عمر حسن",
+        " ايناس اشرف",
       ],
     },
 
     // عمال الأرضية - العمال على الأرض
     // Floor workers - workers on the floor
     floorWorkers: {
-      presentToday: 85, // عدد الحاضرين اليوم - number present today
-      totalRegistered: 100, // الإجمالي المسجل - total registered workers
+      presentToday: 25, // عدد الحاضرين اليوم - number present today
+      totalRegistered: 50, // الإجمالي المسجل - total registered workers
     },
 
     // الأفران - حالة كل فرن
@@ -43,9 +41,10 @@ export const dashboardConfig = {
       // Possible statuses: "working", "maintenance", "stopped"
       { name: "فرن 1", status: "working" as const },
       { name: "فرن 2", status: "working" as const },
-      { name: "فرن 3", status: "working" as const },
+      { name: "فرن 3", status: "maintenance" as const },
       { name: "فرن 4", status: "maintenance" as const },
-      { name: "فرن 5", status: "stopped" as const },
+      { name: "فرن 5", status: "working" as const },
+      { name: "فرن 6", status: "stoping" as const },
     ],
 
     // المخزون - المنتجات والشكاير
@@ -57,28 +56,28 @@ export const dashboardConfig = {
           name: "ربع كيلو", // اسم المنتج - product name
           quantity: 1500, // الكمية الحالية - current quantity
           unit: "باكت", // وحدة القياس - unit of measurement
-          minimum: 500, // الحد الأدنى - minimum threshold
+          minimum: 0, // الحد الأدنى - minimum threshold
           image: "/products/quarter.png", // مسار الصورة - image path
         },
         {
           name: "نص كيلو",
           quantity: 1200,
           unit: "باكت",
-          minimum: 400,
+          minimum: 0,
           image: "/products/half.png",
         },
         {
           name: "كيلو",
           quantity: 800,
           unit: "باكت",
-          minimum: 300,
+          minimum: 0,
           image: "/products/kilo.png",
         },
         {
           name: "3 كيلو",
           quantity: 450,
           unit: "باكت",
-          minimum: 150,
+          minimum: 0,
           image: "/products/3kg.png",
         },
       ],
@@ -87,19 +86,19 @@ export const dashboardConfig = {
       sacks: [
         {
           name: "شكاير برتقال", // اسم النوع - type name
-          quantity: 2000, // الكمية الحالية - current quantity
+          quantity: 150, // الكمية الحالية - current quantity
           unit: "شكارة", // وحدة القياس - unit of measurement
-          minimum: 500, // الحد الأدنى - minimum threshold
+          minimum: 0, // الحد الأدنى - minimum threshold
         },
         {
           name: "شكاير مانجو",
-          quantity: 1800,
+          quantity: 150,
           unit: "شكارة",
-          minimum: 400,
+          minimum: 0,
         },
         {
           name: "شكاير كازوارينا",
-          quantity: 1500,
+          quantity: 160,
           unit: "شكارة",
           minimum: 300,
         },
