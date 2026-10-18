@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Factory, Package, Axe, Truck, LucideIcon } from "lucide-react";
 import { FloorWorkers, WorkerGroup } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
@@ -27,6 +27,36 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
   const totalPresent = groups.reduce((sum, { group }) => sum + group.presentNames.length, 0);
   const totalRegistered = groups.reduce((sum, { group }) => sum + group.total, 0);
 
+  // حجم خط واحد للأسماء في الأقسام الأربعة (أصغر حجم يكفي الكل)
+  // One shared chip font size for all 4 groups (the smallest one that makes every group fit).
+  // كل ما "round" يزيد بنبدأ القياس من الأول - every new round restarts the measurement
+  const [chipFit, setChipFit] = useState({ fontSize: sizes.nameChipFontSize, round: 0 });
+
+  const remeasure = useCallback(
+    () => setChipFit((f) => ({ fontSize: sizes.nameChipFontSize, round: f.round + 1 })),
+    [sizes.nameChipFontSize]
+  );
+
+  // قسم الأسماء فيه مش كافية - a group overflows at this font size, try one step smaller
+  const shrinkChips = useCallback(
+    (fontSize: number, round: number) =>
+      setChipFit((f) =>
+        f.round !== round || fontSize <= sizes.minNameChipFontSize
+          ? f
+          : { ...f, fontSize: Math.min(f.fontSize, fontSize - 1) }
+      ),
+    [sizes.minNameChipFontSize]
+  );
+
+  // لما الأسماء تتغير نقيس تاني - re-measure when any names change
+  const allNamesKey = groups.map(({ group }) => group.presentNames.join("|")).join("||");
+  const prevAllNamesKey = useRef(allNamesKey);
+  useIsomorphicLayoutEffect(() => {
+    if (prevAllNamesKey.current === allNamesKey) return;
+    prevAllNamesKey.current = allNamesKey;
+    remeasure();
+  }, [allNamesKey, remeasure]);
+
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
@@ -39,7 +69,16 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
 
       <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-2">
         {groups.map(({ group, icon, key }) => (
-          <GroupBox key={key} group={group} icon={icon} sizes={sizes} />
+          <GroupBox
+            key={key}
+            group={group}
+            icon={icon}
+            sizes={sizes}
+            chipFontSize={chipFit.fontSize}
+            round={chipFit.round}
+            onOverflow={shrinkChips}
+            onResize={remeasure}
+          />
         ))}
       </div>
     </div>
@@ -50,25 +89,29 @@ interface GroupBoxProps {
   group: WorkerGroup;
   icon: LucideIcon;
   sizes: typeof dashboardConfig.sizes.floorWorkers;
+  chipFontSize: number;
+  round: number;
+  onOverflow: (fontSize: number, round: number) => void;
+  onResize: () => void;
 }
 
-function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
+function GroupBox({ group, icon: Icon, sizes, chipFontSize, round, onOverflow, onResize }: GroupBoxProps) {
   const present = group.presentNames.length;
   const percentage = group.total > 0 ? Math.min(100, (present / group.total) * 100) : 0;
   const initialVisible = Math.min(present, sizes.maxVisibleNames);
-  const namesKey = group.presentNames.join("|");
 
-  // بنصغر الخط خطوة خطوة لحد ما الأسماء تكفي، وبعدها بنخبي أسماء ونعرض "+N"
-  // Shrink the font step by step until the chips fit, then hide names behind "+N"
-  const [fit, setFit] = useState({ fontSize: sizes.nameChipFontSize, visible: initialVisible });
+  // الترتيب: كل الأسماء بالحجم العادي، بعدين نصغر الخط، وآخر حاجة نخبي أسماء ونعرض "+N"
+  // Order: all names at the normal size, then a smaller font, and only at the minimum font hide names behind "+N".
+  // عدد الأسماء المخفية تابع للـ round، فأي قياس جديد بيرجع يعرض كل الأسماء
+  // Hidden names belong to a round, so each new measurement starts with every name shown again
+  const [hide, setHide] = useState({ round, visible: initialVisible });
+  const visible = hide.round === round ? Math.min(hide.visible, initialVisible) : initialVisible;
+  const sectionRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
-  // نرجع للبداية لما الأسماء أو مساحة القسم تتغير - restart when names or box size change
-  useIsomorphicLayoutEffect(() => {
-    const reset = () => setFit({ fontSize: sizes.nameChipFontSize, visible: initialVisible });
-    reset();
-
-    const el = chipsRef.current;
+  // لما مقاس القسم يتغير (أو الشاشة) نقيس تاني - re-measure when the section (or window) is resized
+  useEffect(() => {
+    const el = sectionRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     let width = el.clientWidth;
     let height = el.clientHeight;
@@ -76,28 +119,30 @@ function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
       if (el.clientWidth === width && el.clientHeight === height) return;
       width = el.clientWidth;
       height = el.clientHeight;
-      reset();
+      onResize();
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [namesKey, initialVisible, sizes.nameChipFontSize]);
+  }, [onResize]);
 
+  // بنقيس بعد الرسم: لو الأسماء أطول من المساحة نصغر الخط، ولو وصلنا لأصغر حجم نخبي اسم
+  // Measure after layout: on overflow shrink the shared font, and only at the minimum hide one more name
   useIsomorphicLayoutEffect(() => {
     const el = chipsRef.current;
     if (!el || el.scrollHeight <= el.clientHeight) return;
-    setFit((f) => {
-      if (f.fontSize > sizes.minNameChipFontSize) return { ...f, fontSize: f.fontSize - 1 };
-      if (f.visible > 0) return { ...f, visible: f.visible - 1 };
-      return f;
-    });
-  }, [fit, sizes.minNameChipFontSize]);
+    if (chipFontSize > sizes.minNameChipFontSize) {
+      onOverflow(chipFontSize, round);
+    } else if (visible > 0) {
+      setHide({ round, visible: visible - 1 });
+    }
+  });
 
-  const visibleNames = group.presentNames.slice(0, fit.visible);
+  const visibleNames = group.presentNames.slice(0, visible);
   const hiddenCount = present - visibleNames.length;
-  const chipStyle = { fontSize: `${fit.fontSize}px`, padding: "1px 7px", lineHeight: 1.4 };
+  const chipStyle = { fontSize: `${chipFontSize}px`, padding: "1px 7px", lineHeight: 1.4 };
 
   return (
-    <div className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
+    <div ref={sectionRef} className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <Icon className="w-4 h-4 text-brandOrange shrink-0" />
