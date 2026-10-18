@@ -67,7 +67,7 @@ export default function Dashboard() {
     `min-h-0 ${flashSection === section ? "animate-flash" : ""}`;
 
   return (
-    <ScaleToFit>
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
       <Header lastUpdate={lastUpdate} isConnected={isConnected} />
 
       <main className="flex-1 min-h-0 p-4 overflow-hidden">
@@ -96,42 +96,6 @@ export default function Dashboard() {
           </div>
         )}
       </main>
-    </ScaleToFit>
-  );
-}
-
-// The dashboard is laid out on a fixed 1920x1080 canvas and scaled to fit the
-// screen, so everything is always visible on one page without scrolling.
-const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
-
-function ScaleToFit({ children }: { children: React.ReactNode }) {
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const updateScale = () => {
-      setScale(
-        Math.min(window.innerWidth / CANVAS_WIDTH, window.innerHeight / CANVAS_HEIGHT)
-      );
-    };
-
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
-  }, []);
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-background">
-      <div
-        className="flex flex-col shrink-0 overflow-hidden bg-background"
-        style={{
-          width: CANVAS_WIDTH,
-          height: CANVAS_HEIGHT,
-          transform: `scale(${scale})`,
-        }}
-      >
-        {children}
-      </div>
     </div>
   );
 }
