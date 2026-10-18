@@ -5,6 +5,7 @@
 :root {
   --background: #0B0F1A;
   --foreground: #ffffff;
+  --font-cairo: 'Cairo Variable';
 }
 
 body {
