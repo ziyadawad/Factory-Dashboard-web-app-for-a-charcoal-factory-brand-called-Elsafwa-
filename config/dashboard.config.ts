@@ -140,9 +140,9 @@ export const dashboardConfig = {
     // الحضور - بطاقة حضور الإدارة مع الدونت
     // Attendance - management attendance card with donut chart
     attendance: {
-      donutSize: 100, // حجم الدونت - donut size (affects inner/outer radius calculation)
-      donutThickness: 24, // سماكة الدونت - donut thickness (outerRadius - innerRadius)
-      percentFontSize: 30, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
+      donutSize: 140, // حجم الدونت الثابت بالبكسل - fixed donut size in pixels (140px x 140px)
+      donutThickness: 14, // سماكة الدونت بالبكسل - donut thickness in pixels (ring thickness)
+      percentFontSize: 28, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
       labelFontSize: 12, // حجم كلمات "حاضر" و "غائب" - font size for "present" and "absent" labels
     },
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Attendance } from "@/lib/types";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -25,44 +25,51 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
   const presentPercentage =
     data.total > 0 ? ((data.present / data.total) * 100).toFixed(0) : "0";
 
-  // Calculate donut radii based on size
-  const outerRadius = 50 - (sizes.donutThickness / 2);
+  // Fixed donut dimensions
+  const donutSize = sizes.donutSize;
+  const outerRadius = donutSize / 2;
   const innerRadius = outerRadius - sizes.donutThickness;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className="text-xl font-bold text-white mb-2 shrink-0">حضور الإدارة</h2>
 
-      <div className="flex-1 min-h-0 relative">
-        <div className="absolute inset-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                innerRadius={`${innerRadius}%`}
-                outerRadius={`${outerRadius}%`}
-                paddingAngle={5}
-                dataKey="value"
-                stroke="none"
-                isAnimationActive={false}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <p
-            className="font-bold text-white tabular-nums"
-            style={{ fontSize: `${sizes.percentFontSize}px` }}
-          >
-            {presentPercentage}%
-          </p>
-          <p className="text-gray-400 text-xs">نسبة الحضور</p>
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        <div
+          className="relative"
+          style={{ width: `${donutSize}px`, height: `${donutSize}px` }}
+        >
+          <PieChart width={donutSize} height={donutSize}>
+            <Pie
+              data={chartData}
+              cx={donutSize / 2}
+              cy={donutSize / 2}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
+              paddingAngle={5}
+              dataKey="value"
+              stroke="none"
+              isAnimationActive={false}
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+          </PieChart>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <p
+              className="font-bold text-white tabular-nums"
+              style={{ fontSize: `${sizes.percentFontSize}px` }}
+            >
+              {presentPercentage}%
+            </p>
+            <p
+              className="text-gray-400 whitespace-nowrap"
+              style={{ fontSize: `${sizes.labelFontSize}px` }}
+            >
+              نسبة الحضور
+            </p>
+          </div>
         </div>
       </div>
 
