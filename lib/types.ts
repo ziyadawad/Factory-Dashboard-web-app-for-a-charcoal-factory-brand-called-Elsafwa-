@@ -18,6 +18,7 @@ export interface StockItem {
 }
 
 export interface Stock {
+  // quarter, half, kilo, 2kg, 3kg - in display order
   products: StockItem[];
   sacks: StockItem[];
 }

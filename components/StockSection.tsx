@@ -1,10 +1,21 @@
 "use client";
 
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Stock, StockItem } from "@/lib/types";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Package } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+
+// useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+// أصغر حجم لاسم المنتج لو مش واخد المساحة - smallest product name font size when it doesn't fit
+const MIN_NAME_FONT_SIZE = 12;
+
+// المسافة بين القسمين وبين الكروت (gap-4 / gap-3) - gaps between sections and between cards
+const SECTION_GAP = 16;
+const CARD_GAP = 12;
 
 interface StockSectionProps {
   data: Stock;
@@ -19,6 +30,30 @@ function StockCard({ item }: { item: StockItem }) {
       ? Math.min((item.quantity / (item.minimumThreshold * 2)) * 100, 100)
       : 100;
   const sizes = dashboardConfig.sizes.products;
+  const [imageFailed, setImageFailed] = useState(false);
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const [nameFontSize, setNameFontSize] = useState(sizes.nameFontSize);
+
+  // لما الشاشة تتغير نرجع الحجم الأصلي ونقيس تاني - on resize, reset and re-measure
+  useEffect(() => {
+    const el = nameRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      setNameFontSize(sizes.nameFontSize);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sizes.nameFontSize]);
+
+  // لو الاسم أطول من المساحة نصغر الخط شوية - shrink the name font until it fits
+  useIsomorphicLayoutEffect(() => {
+    const el = nameRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (nameFontSize > MIN_NAME_FONT_SIZE) setNameFontSize(nameFontSize - 1);
+  }, [nameFontSize, item.name]);
 
   return (
     <div
@@ -28,7 +63,7 @@ function StockCard({ item }: { item: StockItem }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          {item.image ? (
+          {item.image && !imageFailed ? (
             <img
               src={item.image}
               alt={item.name}
@@ -37,16 +72,26 @@ function StockCard({ item }: { item: StockItem }) {
                 height: `${sizes.imageHeight}px`,
               }}
               className="object-contain shrink-0"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
+              onError={() => setImageFailed(true)}
             />
+          ) : item.image ? (
+            // الصورة مش موجودة - أيقونة مكانها بنفس المقاس - image missing: placeholder icon in the same box
+            <div
+              style={{
+                width: `${sizes.imageWidth}px`,
+                height: `${sizes.imageHeight}px`,
+              }}
+              className="flex items-center justify-center shrink-0 text-gray-500"
+            >
+              <Package className="w-3/5 h-3/5" />
+            </div>
           ) : (
             <span className="text-3xl shrink-0">{item.icon}</span>
           )}
           <h3
-            className="font-bold text-white truncate"
-            style={{ fontSize: `${sizes.nameFontSize}px` }}
+            ref={nameRef}
+            className="font-bold text-white whitespace-nowrap min-w-0"
+            style={{ fontSize: `${nameFontSize}px` }}
           >
             {toEnglishDigits(item.name)}
           </h3>
@@ -91,6 +136,12 @@ function StockCard({ item }: { item: StockItem }) {
 
 export default function StockSection({ data, className }: StockSectionProps) {
   const sizes = dashboardConfig.sizes.products;
+  const productCount = Math.max(data.products.length, 1);
+  const sackCount = Math.max(data.sacks.length, 1);
+  const cardCount = productCount + sackCount;
+
+  // عرض قسم المنتجات محسوب عشان كل الكروت تبقى بنفس العرض بالظبط - products section width so every card is exactly equal
+  const productsColumn = `calc((100% - ${SECTION_GAP + (cardCount - 2) * CARD_GAP}px) * ${productCount} / ${cardCount} + ${(productCount - 1) * CARD_GAP}px)`;
 
   return (
     <div className={className}>
@@ -100,7 +151,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
         <div
           className="flex-1 min-h-0 grid gap-4"
           style={{
-            gridTemplateColumns: `${Math.max(data.products.length, 1)}fr ${Math.max(data.sacks.length, 1)}fr`,
+            gridTemplateColumns: `${productsColumn} minmax(0, 1fr)`,
           }}
         >
           <div className="flex flex-col min-h-0">

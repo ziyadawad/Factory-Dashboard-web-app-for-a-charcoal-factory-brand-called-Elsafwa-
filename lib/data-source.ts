@@ -6,6 +6,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // Otherwise, return data from config file
 // The API must return floorWorkers as { production, packing, saw, drivers },
 // each { label, total, presentNames } - present count is presentNames.length
+// stock.products must be in display order: quarter, half, kilo, 2kg, 3kg
 export async function getDashboardData(): Promise<DashboardData> {
   const factoryApiUrl = process.env.FACTORY_API_URL;
   const factoryApiKey = process.env.FACTORY_API_KEY;
@@ -48,7 +49,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     stock: {
       products: config.stock.products.map((product, index) => ({
-        id: ["quarter", "half", "kilo", "3kg"][index],
+        id: ["quarter", "half", "kilo", "2kg", "3kg"][index],
         name: product.name,
         quantity: product.quantity,
         unit: product.unit,
