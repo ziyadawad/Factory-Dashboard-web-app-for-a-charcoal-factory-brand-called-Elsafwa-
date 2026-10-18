@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Maximize2 } from "lucide-react";
+import { DATE_LOCALE } from "@/lib/format";
 
 interface HeaderProps {
   lastUpdate: string | null;
@@ -17,7 +18,7 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString("ar-EG", {
+        now.toLocaleTimeString(DATE_LOCALE, {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
@@ -25,7 +26,7 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
         })
       );
       setCurrentDate(
-        now.toLocaleDateString("ar-EG", {
+        now.toLocaleDateString(DATE_LOCALE, {
           weekday: "long",
           year: "numeric",
           month: "long",
@@ -83,7 +84,7 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
 
   const formatLastUpdate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString("ar-EG", {
+    return date.toLocaleTimeString(DATE_LOCALE, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -92,9 +93,9 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
   };
 
   return (
-    <header className="bg-card border-b border-cardBorder px-6 py-4 flex items-center justify-between">
+    <header className="shrink-0 bg-card border-b border-cardBorder px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <img src="/logo.png" alt="الصفوة" className="w-16 h-16" />
+        <img src="/logo.png" alt="الصفوة" className="w-14 h-14" />
         <div>
           <h1 className="text-2xl font-bold text-white">لوحة متابعة المصنع</h1>
           <p className="text-gray-400 text-sm">الصفوة</p>
@@ -103,7 +104,7 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
 
       <div className="flex items-center gap-8">
         <div className="text-left">
-          <p className="text-3xl font-bold text-white">{currentTime}</p>
+          <p className="text-3xl font-bold text-white tabular-nums">{currentTime}</p>
           <p className="text-gray-400 text-sm">{currentDate}</p>
         </div>
 
