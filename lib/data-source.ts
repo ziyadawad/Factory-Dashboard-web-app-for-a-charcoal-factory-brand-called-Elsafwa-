@@ -86,7 +86,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           quantity: randomVariation(800, 60),
           unit: "كرتونة",
           minimumThreshold: 300,
-          image: "/products/kilo.jpg",
+          image: "/products/kilo.png",
         },
         {
           id: "3kg",
@@ -94,7 +94,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           quantity: randomVariation(450, 40),
           unit: "كرتونة",
           minimumThreshold: 150,
-          image: "/products/3kg.jpg",
+          image: "/products/3kg.png",
         },
       ],
       sacks: [
