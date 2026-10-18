@@ -88,10 +88,10 @@ npm run dev
     sacks: [{
       id: string,
       name: string,
-      quantity: number,
       unit: string,
-      minimumThreshold: number,
-      icon?: string
+      icon?: string,
+      fine: { quantity: number, minimumThreshold: number },   // ناعم
+      coarse: { quantity: number, minimumThreshold: number }  // خشن
     }]
   },
   kilns: {
@@ -152,7 +152,7 @@ npm run dev
 - عمال الأرضية (`floorWorkers.presentToday`, `floorWorkers.totalRegistered`)
 - حالة الأفران (`kilns`) - عدّل الحالة لكل فرن بين "working" (شغالة)، "maintenance" (صيانة)، أو "stopped" (متوقفة)
 - المنتجات (`stock.products`) - الكمية، الوحدة، الحد الأدنى
-- الشكاير (`stock.sacks`) - الكمية، الوحدة، الحد الأدنى
+- الشكاير (`stock.sacks`) - الوحدة، والكمية والحد الأدنى لكل من الناعم (`fine`) والخشن (`coarse`)
 
 **مثال**: لتغيير رصيد الخزنة إلى 2,000,000 جنيه:
 ```typescript

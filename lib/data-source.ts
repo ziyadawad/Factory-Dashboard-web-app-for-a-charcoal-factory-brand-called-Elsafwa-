@@ -7,6 +7,8 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // The API must return floorWorkers as { production, packing, saw, drivers },
 // each { label, total, presentNames } - present count is presentNames.length
 // stock.products must be in display order: quarter, half, kilo, 2kg, 3kg
+// stock.sacks must be in display order: orange, mango, casuarina,
+// each { id, name, unit, icon?, fine: { quantity, minimumThreshold }, coarse: { quantity, minimumThreshold } }
 export async function getDashboardData(): Promise<DashboardData> {
   const factoryApiUrl = process.env.FACTORY_API_URL;
   const factoryApiKey = process.env.FACTORY_API_KEY;
@@ -56,14 +58,17 @@ export async function getDashboardData(): Promise<DashboardData> {
         minimumThreshold: product.minimum,
         image: product.image,
       })),
-      sacks: config.stock.sacks.map((sack, index) => ({
-        id: ["orange", "mango", "casuarina"][index],
-        name: sack.name,
-        quantity: sack.quantity,
-        unit: sack.unit,
-        minimumThreshold: sack.minimum,
-        icon: ["�", "🥭", "🌲"][index],
-      })),
+      sacks: (["orange", "mango", "casuarina"] as const).map((id, index) => {
+        const sack = config.stock.sacks[id];
+        return {
+          id,
+          name: sack.name,
+          unit: sack.unit,
+          fine: { quantity: sack.fine.quantity, minimumThreshold: sack.fine.minimum },
+          coarse: { quantity: sack.coarse.quantity, minimumThreshold: sack.coarse.minimum },
+          icon: ["�", "🥭", "🌲"][index],
+        };
+      }),
     },
     kilns: {
       working: workingCount,

@@ -17,10 +17,26 @@ export interface StockItem {
   icon?: string;
 }
 
+// One half of a sack card (fine / coarse)
+export interface SackLevel {
+  quantity: number;
+  minimumThreshold: number;
+}
+
+export interface SackItem {
+  id: string;
+  name: string;
+  unit: string;
+  icon?: string;
+  fine: SackLevel; // ناعم
+  coarse: SackLevel; // خشن
+}
+
 export interface Stock {
   // quarter, half, kilo, 2kg, 3kg - in display order
   products: StockItem[];
-  sacks: StockItem[];
+  // orange, mango, casuarina - in display order
+  sacks: SackItem[];
 }
 
 export interface Kiln {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Stock, StockItem } from "@/lib/types";
+import { SackItem, SackLevel, Stock, StockItem } from "@/lib/types";
 import { AlertTriangle, Package } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
@@ -134,6 +134,113 @@ function StockCard({ item }: { item: StockItem }) {
   );
 }
 
+// نص كارت الشكاير (ناعم أو خشن) - one half of a sack card (fine or coarse)
+function SackHalf({ label, level, unit }: { label: string; level: SackLevel; unit: string }) {
+  const { count } = useCountUp(level.quantity, 500);
+  const isLow = level.quantity <= level.minimumThreshold;
+  const progressPercentage =
+    level.minimumThreshold > 0
+      ? Math.min((level.quantity / (level.minimumThreshold * 2)) * 100, 100)
+      : 100;
+  const sizes = dashboardConfig.sizes.products;
+
+  return (
+    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-gray-400" style={{ fontSize: "13px" }}>
+          {label}
+        </span>
+        {isLow && <span className="text-statusRed font-bold text-xs">منخفض</span>}
+      </div>
+
+      <div className="flex flex-wrap items-baseline gap-x-1">
+        <span
+          className={`font-bold tabular-nums leading-none ${isLow ? "text-statusRed" : "text-white"}`}
+          style={{ fontSize: `${sizes.sackNumberFontSize}px` }}
+        >
+          {formatNumber(count)}
+        </span>
+        <span className="text-gray-400 text-xs">{unit}</span>
+      </div>
+
+      <div>
+        <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden">
+          <div
+            className={`absolute top-0 right-0 h-full rounded-full transition-all duration-500 ${
+              isLow ? "bg-statusRed" : "bg-gradient-to-r from-brandYellow to-brandOrange"
+            }`}
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
+        <p className="text-gray-500 text-xs mt-1 whitespace-nowrap">
+          الحد الأدنى: {formatNumber(level.minimumThreshold)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// كارت الشكاير متقسم نصين: ناعم (يمين) وخشن (شمال) - sack card split into fine (right) and coarse (left)
+function SackCard({ item }: { item: SackItem }) {
+  const isLowStock =
+    item.fine.quantity <= item.fine.minimumThreshold ||
+    item.coarse.quantity <= item.coarse.minimumThreshold;
+  const sizes = dashboardConfig.sizes.products;
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const [nameFontSize, setNameFontSize] = useState(sizes.nameFontSize);
+
+  // لما الشاشة تتغير نرجع الحجم الأصلي ونقيس تاني - on resize, reset and re-measure
+  useEffect(() => {
+    const el = nameRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      setNameFontSize(sizes.nameFontSize);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sizes.nameFontSize]);
+
+  // لو الاسم أطول من المساحة نصغر الخط شوية - shrink the name font until it fits
+  useIsomorphicLayoutEffect(() => {
+    const el = nameRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (nameFontSize > MIN_NAME_FONT_SIZE) setNameFontSize(nameFontSize - 1);
+  }, [nameFontSize, item.name]);
+
+  return (
+    <div
+      className={`bg-background border-2 rounded-2xl p-3 h-full min-h-0 flex flex-col gap-2 overflow-hidden ${
+        isLowStock ? "border-statusRed" : "border-cardBorder"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-3xl shrink-0">{item.icon}</span>
+          <h3
+            ref={nameRef}
+            className="font-bold text-white whitespace-nowrap min-w-0"
+            style={{ fontSize: `${nameFontSize}px` }}
+          >
+            {toEnglishDigits(item.name)}
+          </h3>
+        </div>
+        {isLowStock && (
+          <AlertTriangle className="w-5 h-5 text-statusRed shrink-0" />
+        )}
+      </div>
+
+      <div className="flex-1 min-h-0 flex gap-2">
+        <SackHalf label="ناعم" level={item.fine} unit={item.unit} />
+        <div className="w-px bg-cardBorder shrink-0" />
+        <SackHalf label="خشن" level={item.coarse} unit={item.unit} />
+      </div>
+    </div>
+  );
+}
+
 export default function StockSection({ data, className }: StockSectionProps) {
   const sizes = dashboardConfig.sizes.products;
   const productCount = Math.max(data.products.length, 1);
@@ -183,7 +290,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
               style={{ gridTemplateColumns: `repeat(${Math.max(data.sacks.length, 1)}, minmax(0, 1fr))` }}
             >
               {data.sacks.map((sack) => (
-                <StockCard key={sack.id} item={sack} />
+                <SackCard key={sack.id} item={sack} />
               ))}
             </div>
           </div>

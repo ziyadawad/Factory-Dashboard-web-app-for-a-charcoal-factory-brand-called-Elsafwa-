@@ -148,26 +148,31 @@ export const dashboardConfig = {
       ],
 
       // الشكاير - sacks
-      sacks: [
-        {
+      // كل نوع شكاير متقسم نصين: ناعم (fine) وخشن (coarse)، ولكل نص كمية وحد أدنى
+      // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
+      sacks: {
+        // شكاير برتقال - orange sacks
+        orange: {
           name: "شكاير برتقال", // اسم النوع - type name
-          quantity: 150, // الكمية الحالية - current quantity
           unit: "شكارة", // وحدة القياس - unit of measurement
-          minimum: 0, // الحد الأدنى - minimum threshold
+          fine: { quantity: 80, minimum: 50 }, // الناعم: الكمية الحالية والحد الأدنى - fine: current quantity and minimum
+          coarse: { quantity: 70, minimum: 50 }, // الخشن: الكمية الحالية والحد الأدنى - coarse: current quantity and minimum
         },
-        {
+        // شكاير مانجو - mango sacks
+        mango: {
           name: "شكاير مانجو",
-          quantity: 150,
           unit: "شكارة",
-          minimum: 0,
+          fine: { quantity: 75, minimum: 50 }, // الناعم - fine
+          coarse: { quantity: 75, minimum: 50 }, // الخشن - coarse
         },
-        {
+        // شكاير كازوارينا - casuarina sacks
+        casuarina: {
           name: "شكاير كازوارينا",
-          quantity: 160,
           unit: "شكارة",
-          minimum: 300,
+          fine: { quantity: 90, minimum: 150 }, // الناعم - fine
+          coarse: { quantity: 70, minimum: 150 }, // الخشن - coarse
         },
-      ],
+      },
     },
   },
 
@@ -244,6 +249,7 @@ export const dashboardConfig = {
       imageHeight: 48, // ارتفاع صورة المنتج - product image height
       nameFontSize: 18, // حجم اسم المنتج - product name font size
       numberFontSize: 36, // حجم رقم الكمية - quantity number font size
+      sackNumberFontSize: 30, // حجم رقم الكمية في نصين كارت الشكاير (ناعم/خشن) - quantity font size in sack card halves (fine/coarse)
       unitFontSize: 14, // حجم وحدة القياس (باكت/شكارة) - unit font size
       sectionTitleFontSize: 18, // حجم عناوين الأقسام ("المنتجات المعبأة" و "الشكاير") - section title font size
     },
