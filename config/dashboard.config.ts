@@ -37,15 +37,16 @@ export const dashboardConfig = {
         total: 20, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "أحمد محمد",
-          "محمود علي",
-          "خالد حسن",
-          "يوسف إبراهيم",
-          "طارق كمال",
-          "سامي عادل",
-          "عمر يوسف",
-          "إبراهيم سعيد",
-          "عادل محمود",
+          "محمد",
+          "أحمد",
+          "محمود",
+          "خالد",
+          "يوسف",
+          "طارق",
+          "سامي",
+          "عمر",
+          "إبراهيم",
+          "عادل",
         ],
       },
       packing: {
@@ -54,38 +55,49 @@ export const dashboardConfig = {
         total: 15, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "محمود حسن",
-          "علي محمود",
-          "حسن يوسف",
-          "إبراهيم كمال",
-          "سعيد طارق",
-          "كمال سامي",
-          "عادل عمر",
-          "يوسف خالد",
+          "مصطفى",
+          "علي",
+          "حسن",
+          "كريم",
+          "سعيد",
+          "كمال",
+          "وليد",
+          "هاني",
+          "شريف",
+          "رامي",
         ],
       },
       saw: {
         // عمال المنشار - saw workers
         label: "عمال منشار", // اسم المجموعة - group name
-        total: 8, // الإجمالي المسجل في القسم - total registered in department
+        total: 12, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "محمود طارق",
-          "علي سعيد",
-          "حسن كمال",
-          "إبراهيم عادل",
-          "يوسف محمود",
-          "خالد سامي",
+          "حسين",
+          "عماد",
+          "أشرف",
+          "جمال",
+          "صلاح",
+          "ياسر",
+          "عاطف",
+          "فتحي",
+          "رضا",
         ],
       },
       drivers: {
         // السواقين - drivers
         label: "سواقين", // اسم المجموعة - group name
-        total: 7, // الإجمالي المسجل في القسم - total registered in department
+        total: 10, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "سامي يوسف",
-          "طارق إبراهيم",
+          "سيد",
+          "عبده",
+          "منصور",
+          "شعبان",
+          "ربيع",
+          "حمدي",
+          "فارس",
+          "ناصر",
         ],
       },
     },
@@ -188,6 +200,15 @@ export const dashboardConfig = {
       borderRadius: 16, // تقويس حواف البطاقة - card border radius
     },
 
+    // عرض كروت الصف العلوي (نسب من عرض الصف) - top row card widths (fr ratios)
+    // مجموعهم لازم يفضل 4 عشان الأفران تفضل بنفس العرض - keep the sum at 4 so the kilns card keeps its width
+    topRowColumns: {
+      treasury: 0.75, // رصيد الخزنة (أضيق) - treasury (narrower)
+      management: 0.75, // حضور الإدارة (أضيق) - management attendance (narrower)
+      workers: 1.5, // حضور عمال (أعرض) - workers attendance (wider)
+      kilns: 1, // الأفران (نفس العرض) - kilns (same width)
+    },
+
     // الخزنة - بطاقة رصيد الخزنة
     // Treasury - treasury balance card
     treasury: {
@@ -207,9 +228,9 @@ export const dashboardConfig = {
     // Floor Workers - floor workers card
     floorWorkers: {
       groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
-      groupNumberFontSize: 32, // حجم رقم الحاضرين في كل قسم - present count font size per group
+      groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
       nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
-      maxVisibleNames: 3, // أقصى عدد أسماء بيظهر في كل قسم والباقي بيبان "+N" - max names shown per group, rest shown as "+N"
+      maxVisibleNames: 12, // أقصى عدد أسماء بيظهر في كل قسم والباقي بيبان "+N" - max names shown per group, rest shown as "+N"
     },
 
     // الأفران - بطاقة الأفران

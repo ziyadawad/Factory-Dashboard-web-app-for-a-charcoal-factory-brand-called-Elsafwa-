@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [flashSection, setFlashSection] = useState<string | null>(null);
   const prevDataRef = useRef<DashboardData | null>(null);
   const sizes = dashboardConfig.sizes.cards;
+  const cols = dashboardConfig.sizes.topRowColumns;
 
   useEffect(() => {
     if (data && prevDataRef.current) {
@@ -75,8 +76,9 @@ export default function Dashboard() {
       <main className="flex-1 min-h-0 p-4 overflow-hidden">
         {data ? (
           <div
-            className="grid grid-cols-4 gap-4 h-full"
+            className="grid gap-4 h-full"
             style={{
+              gridTemplateColumns: `minmax(0,${cols.treasury}fr) minmax(0,${cols.management}fr) minmax(0,${cols.workers}fr) minmax(0,${cols.kilns}fr)`,
               gridTemplateRows: `[minmax(0,${sizes.topRowHeight})_minmax(0,${sizes.warehouseHeight})]`,
             }}
           >

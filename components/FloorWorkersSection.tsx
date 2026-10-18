@@ -54,27 +54,28 @@ function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
 
   return (
     <div className="bg-background rounded-xl p-2 min-w-0 min-h-0 flex flex-col overflow-hidden">
-      <div className="flex items-center gap-1.5 shrink-0">
-        <Icon className="w-4 h-4 text-brandOrange shrink-0" />
-        <p
-          className="font-bold text-white truncate"
-          style={{ fontSize: `${sizes.groupTitleFontSize}px` }}
-        >
-          {group.label}
+      <div className="flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon className="w-4 h-4 text-brandOrange shrink-0" />
+          <p
+            className="font-bold text-white truncate"
+            style={{ fontSize: `${sizes.groupTitleFontSize}px` }}
+          >
+            {group.label}
+          </p>
+        </div>
+        <p className="shrink-0 leading-tight whitespace-nowrap">
+          <span
+            className="font-bold text-brandOrange tabular-nums"
+            style={{ fontSize: `${sizes.groupNumberFontSize}px` }}
+          >
+            {formatNumber(present)}
+          </span>
+          <span className="text-gray-400 text-sm tabular-nums"> / {formatNumber(group.total)}</span>
         </p>
       </div>
 
-      <p className="shrink-0 leading-tight">
-        <span
-          className="font-bold text-brandOrange tabular-nums"
-          style={{ fontSize: `${sizes.groupNumberFontSize}px` }}
-        >
-          {formatNumber(present)}
-        </span>
-        <span className="text-gray-400 text-sm tabular-nums"> / {formatNumber(group.total)}</span>
-      </p>
-
-      <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden shrink-0 mt-1 mb-2">
+      <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden shrink-0 mt-1.5 mb-2">
         <div
           className="absolute top-0 right-0 h-full bg-gradient-to-r from-brandYellow to-brandOrange rounded-full transition-all duration-500"
           style={{ width: `${percentage}%` }}
@@ -90,7 +91,7 @@ function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
           {visibleNames.map((name, index) => (
             <span
               key={index}
-              className="bg-brandOrange/15 text-white rounded-md px-1.5 py-0.5 max-w-full truncate"
+              className="bg-brandOrange/15 text-white rounded-md px-2 py-0.5 max-w-full break-words leading-tight"
               style={{ fontSize: `${sizes.nameChipFontSize}px` }}
             >
               {toEnglishDigits(name)}
