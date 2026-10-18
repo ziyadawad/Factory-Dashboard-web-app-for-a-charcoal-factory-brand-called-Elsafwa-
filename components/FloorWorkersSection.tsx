@@ -16,7 +16,7 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
-      <h2 className="text-xl font-bold text-white mb-2 shrink-0">عمال الأرضية</h2>
+      <h2 className="text-xl font-bold text-white mb-2 shrink-0">حضور عمال</h2>
 
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
         <p
