@@ -93,9 +93,9 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
   };
 
   return (
-    <header className="shrink-0 bg-card border-b border-cardBorder px-6 py-4 flex items-center justify-between">
+    <header className="shrink-0 bg-card border-b border-cardBorder px-6 py-5 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <img src="/logo.png" alt="الصفوة" className="w-20 h-20" />
+        <img src="/logo.png" alt="الصفوة" className="w-24 h-24" />
         <div>
           <h1 className="text-4xl font-extrabold text-white">لوحة متابعة المصنع</h1>
           <p className="text-brandOrange text-lg font-semibold">الصفوة</p>

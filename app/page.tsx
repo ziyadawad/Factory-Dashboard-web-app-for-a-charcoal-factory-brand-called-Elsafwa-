@@ -72,7 +72,7 @@ export default function Dashboard() {
 
       <main className="flex-1 min-h-0 p-4 overflow-hidden">
         {data ? (
-          <div className="grid grid-cols-4 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 h-full">
+          <div className="grid grid-cols-4 grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-4 h-full">
             {/* Top row */}
             <div className={flashClass("treasury")}>
               <TreasurySection data={data.treasury} />
