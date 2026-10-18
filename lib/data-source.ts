@@ -58,17 +58,14 @@ export async function getDashboardData(): Promise<DashboardData> {
         minimumThreshold: product.minimum,
         image: product.image,
       })),
-      sacks: (["orange", "mango", "casuarina"] as const).map((id, index) => {
-        const sack = config.stock.sacks[id];
-        return {
-          id,
-          name: sack.name,
-          unit: sack.unit,
-          fine: { quantity: sack.fine.quantity, minimumThreshold: sack.fine.minimum },
-          coarse: { quantity: sack.coarse.quantity, minimumThreshold: sack.coarse.minimum },
-          icon: ["�", "🥭", "🌲"][index],
-        };
-      }),
+      sacks: config.stock.sacks.map((sack, index) => ({
+        id: ["orange", "mango", "casuarina"][index] ?? `sack-${index + 1}`,
+        name: sack.name,
+        unit: sack.unit,
+        fine: { quantity: sack.fine.quantity, minimumThreshold: sack.fine.minimum },
+        coarse: { quantity: sack.coarse.quantity, minimumThreshold: sack.coarse.minimum },
+        icon: ["🍊", "🥭", "🌲"][index],
+      })),
     },
     kilns: {
       working: workingCount,

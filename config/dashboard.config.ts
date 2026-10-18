@@ -150,29 +150,26 @@ export const dashboardConfig = {
       // الشكاير - sacks
       // كل نوع شكاير متقسم نصين: ناعم (fine) وخشن (coarse)، ولكل نص كمية وحد أدنى
       // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
-      sacks: {
-        // شكاير برتقال - orange sacks
-        orange: {
-          name: "شكاير برتقال", // اسم النوع - type name
-          unit: "شكارة", // وحدة القياس - unit of measurement
-          fine: { quantity: 80, minimum: 50 }, // الناعم: الكمية الحالية والحد الأدنى - fine: current quantity and minimum
-          coarse: { quantity: 70, minimum: 50 }, // الخشن: الكمية الحالية والحد الأدنى - coarse: current quantity and minimum
+      sacks: [
+        {
+          name: "شكاير برتقال", // اسم النوع
+          unit: "شكارة", // وحدة القياس
+          fine: { quantity: 75, minimum: 0 }, // ناعم: الكمية والحد الأدنى
+          coarse: { quantity: 75, minimum: 0 }, // خشن: الكمية والحد الأدنى
         },
-        // شكاير مانجو - mango sacks
-        mango: {
+        {
           name: "شكاير مانجو",
           unit: "شكارة",
-          fine: { quantity: 75, minimum: 50 }, // الناعم - fine
-          coarse: { quantity: 75, minimum: 50 }, // الخشن - coarse
+          fine: { quantity: 75, minimum: 0 },
+          coarse: { quantity: 75, minimum: 0 },
         },
-        // شكاير كازوارينا - casuarina sacks
-        casuarina: {
+        {
           name: "شكاير كازوارينا",
           unit: "شكارة",
-          fine: { quantity: 90, minimum: 150 }, // الناعم - fine
-          coarse: { quantity: 70, minimum: 150 }, // الخشن - coarse
+          fine: { quantity: 80, minimum: 0 },
+          coarse: { quantity: 80, minimum: 0 },
         },
-      },
+      ],
     },
   },
 

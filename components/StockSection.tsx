@@ -134,10 +134,15 @@ function StockCard({ item }: { item: StockItem }) {
   );
 }
 
+// النص بيبقى منخفض بس لو فيه حد أدنى متحدد - a half is low only when a minimum is set
+function isSackLevelLow(level: SackLevel) {
+  return level.minimumThreshold > 0 && level.quantity <= level.minimumThreshold;
+}
+
 // نص كارت الشكاير (ناعم أو خشن) - one half of a sack card (fine or coarse)
 function SackHalf({ label, level, unit }: { label: string; level: SackLevel; unit: string }) {
   const { count } = useCountUp(level.quantity, 500);
-  const isLow = level.quantity <= level.minimumThreshold;
+  const isLow = isSackLevelLow(level);
   const progressPercentage =
     level.minimumThreshold > 0
       ? Math.min((level.quantity / (level.minimumThreshold * 2)) * 100, 100)
@@ -182,9 +187,7 @@ function SackHalf({ label, level, unit }: { label: string; level: SackLevel; uni
 
 // كارت الشكاير متقسم نصين: ناعم (يمين) وخشن (شمال) - sack card split into fine (right) and coarse (left)
 function SackCard({ item }: { item: SackItem }) {
-  const isLowStock =
-    item.fine.quantity <= item.fine.minimumThreshold ||
-    item.coarse.quantity <= item.coarse.minimumThreshold;
+  const isLowStock = isSackLevelLow(item.fine) || isSackLevelLow(item.coarse);
   const sizes = dashboardConfig.sizes.products;
   const nameRef = useRef<HTMLHeadingElement>(null);
   const [nameFontSize, setNameFontSize] = useState(sizes.nameFontSize);
