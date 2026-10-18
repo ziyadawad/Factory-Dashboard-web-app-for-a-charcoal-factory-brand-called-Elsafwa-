@@ -112,35 +112,35 @@ export const dashboardConfig = {
       products: [
         {
           name: "ربع كيلو", // اسم المنتج - product name
-          quantity: 1500, // الكمية الحالية - current quantity
+          quantity: 2007, // الكمية الحالية - current quantity
           unit: "باكت", // وحدة القياس - unit of measurement
           minimum: 0, // الحد الأدنى - minimum threshold
           image: "/products/quarter.png", // مسار الصورة - image path
         },
         {
           name: "نص كيلو",
-          quantity: 1200,
+          quantity: 2474,
           unit: "باكت",
           minimum: 0,
           image: "/products/half.png",
         },
         {
           name: "كيلو",
-          quantity: 800,
+          quantity: 716,
           unit: "باكت",
           minimum: 0,
           image: "/products/kilo.png",
         },
         {
           name: "2 كيلو", // اسم المنتج - product name
-          quantity: 600, // الكمية الحالية - current quantity
+          quantity: 677, // الكمية الحالية - current quantity
           unit: "باكت", // وحدة القياس - unit of measurement
           minimum: 0, // الحد الأدنى - minimum threshold
           image: "/products/2kg.png", // مسار الصورة (لو مش موجودة بتظهر أيقونة مكانها) - image path (icon shown if missing)
         },
         {
           name: "3 كيلو",
-          quantity: 450,
+          quantity: 573,
           unit: "باكت",
           minimum: 0,
           image: "/products/3kg.png",
