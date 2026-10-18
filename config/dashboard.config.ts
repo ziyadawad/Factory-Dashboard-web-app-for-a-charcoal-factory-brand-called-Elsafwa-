@@ -34,70 +34,59 @@ export const dashboardConfig = {
       production: {
         // عمال الإنتاج - production workers
         label: "عمال إنتاج", // اسم المجموعة - group name
-        total: 20, // الإجمالي المسجل في القسم - total registered in department
+        total: 9, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "محمد",
-          "أحمد",
-          "محمود",
-          "خالد",
-          "يوسف",
-          "طارق",
-          "سامي",
-          "عمر",
-          "إبراهيم",
-          "عادل",
+          "الطيب",
+          "شعبان",
+          "محمود عابدين",
+          "عبدالظاهر",
+          "عبدالناصر",
+          "محمد حسين",
+          "محمد الطيب",
+          " حسن فضيل",
         ],
       },
       packing: {
         // عمال التعبئة - packing workers
         label: "عمال تعبئة", // اسم المجموعة - group name
-        total: 15, // الإجمالي المسجل في القسم - total registered in department
+        total: 9, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "مصطفى",
-          "علي",
-          "حسن",
-          "كريم",
-          "سعيد",
-          "كمال",
-          "وليد",
-          "هاني",
-          "شريف",
-          "رامي",
+          "طارق",
+          "رضا",
+          "زهراء",
+          "دنيا",
+          "زينب",
+          "هويدا",
+          "ملك",
+          "جيهان",
+          "جومانه",
         ],
       },
       saw: {
         // عمال المنشار - saw workers
         label: "عمال منشار", // اسم المجموعة - group name
-        total: 12, // الإجمالي المسجل في القسم - total registered in department
+        total: 2, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "حسين",
-          "عماد",
-          "أشرف",
-          "جمال",
-          "صلاح",
-          "ياسر",
-          "عاطف",
-          "فتحي",
-          "رضا",
+          "محمد حسن",
+          "احمد حمدى ابراهيم",
         ],
       },
       drivers: {
         // السواقين - drivers
         label: "سواقين", // اسم المجموعة - group name
-        total: 10, // الإجمالي المسجل في القسم - total registered in department
+        total: 7, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-          "سيد",
-          "عبده",
-          "منصور",
-          "شعبان",
-          "ربيع",
-          "حمدي",
-          "فارس",
-          "ناصر",
+          "محمود القرش",
+          "حماده فهمى",
+          "عبدالمقصود",
+          "كريم",
+          "اسلام",
+          "اليمنى",
+          "ابراهيم وصفى",
         ],
       },
     },
