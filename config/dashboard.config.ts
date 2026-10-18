@@ -150,25 +150,11 @@ export const dashboardConfig = {
       // الشكاير - sacks
       // كل نوع شكاير متقسم نصين: ناعم (fine) وخشن (coarse)، ولكل نص كمية وحد أدنى
       // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
+      // fine = ناعم ، coarse = خشن ، quantity = الكمية ، minimum = الحد الأدنى
       sacks: [
-        {
-          name: "شكاير برتقال", // اسم النوع
-          unit: "شكارة", // وحدة القياس
-          fine: { quantity: 75, minimum: 0 }, // ناعم: الكمية والحد الأدنى
-          coarse: { quantity: 75, minimum: 0 }, // خشن: الكمية والحد الأدنى
-        },
-        {
-          name: "شكاير مانجو",
-          unit: "شكارة",
-          fine: { quantity: 75, minimum: 0 },
-          coarse: { quantity: 75, minimum: 0 },
-        },
-        {
-          name: "شكاير كازوارينا",
-          unit: "شكارة",
-          fine: { quantity: 80, minimum: 0 },
-          coarse: { quantity: 80, minimum: 0 },
-        },
+        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 75, minimum: 0 }, coarse: { quantity: 75, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
+        { name: "شكاير مانجو",    unit: "شكارة", fine: { quantity: 75, minimum: 0 }, coarse: { quantity: 75, minimum: 0 } },
+        { name: "شكاير كازوارينا", unit: "شكارة", fine: { quantity: 80, minimum: 0 }, coarse: { quantity: 80, minimum: 0 } },
       ],
     },
   },
@@ -246,7 +232,7 @@ export const dashboardConfig = {
       imageHeight: 48, // ارتفاع صورة المنتج - product image height
       nameFontSize: 18, // حجم اسم المنتج - product name font size
       numberFontSize: 36, // حجم رقم الكمية - quantity number font size
-      sackNumberFontSize: 30, // حجم رقم الكمية في نصين كارت الشكاير (ناعم/خشن) - quantity font size in sack card halves (fine/coarse)
+      sackNumberFontSize: 28, // حجم أرقام الناعم والخشن في كروت الشكاير
       unitFontSize: 14, // حجم وحدة القياس (باكت/شكارة) - unit font size
       sectionTitleFontSize: 18, // حجم عناوين الأقسام ("المنتجات المعبأة" و "الشكاير") - section title font size
     },
