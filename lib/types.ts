@@ -36,9 +36,17 @@ export interface Kilns {
   kilns: Kiln[];
 }
 
-export interface FloorWorkers {
-  present: number;
+export interface WorkerGroup {
+  label: string;
   total: number;
+  presentNames: string[];
+}
+
+export interface FloorWorkers {
+  production: WorkerGroup;
+  packing: WorkerGroup;
+  saw: WorkerGroup;
+  drivers: WorkerGroup;
 }
 
 export interface Treasury {

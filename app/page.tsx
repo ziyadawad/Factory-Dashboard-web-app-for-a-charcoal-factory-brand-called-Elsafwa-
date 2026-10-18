@@ -45,7 +45,7 @@ export default function Dashboard() {
       }
 
       // Check for changes in floor workers
-      if (data.floorWorkers.present !== prev.floorWorkers.present) {
+      if (JSON.stringify(data.floorWorkers) !== JSON.stringify(prev.floorWorkers)) {
         setFlashSection("floorWorkers");
         setTimeout(() => setFlashSection(null), 500);
       }

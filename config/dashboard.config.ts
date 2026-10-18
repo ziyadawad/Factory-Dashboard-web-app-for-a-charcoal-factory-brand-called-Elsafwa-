@@ -26,11 +26,68 @@ export const dashboardConfig = {
       ],
     },
 
-    // عمال الأرضية - العمال على الأرض
-    // Floor workers - workers on the floor
-    floorWorkers: {
-      presentToday: 25, // عدد الحاضرين اليوم - number present today
-      totalRegistered: 50, // الإجمالي المسجل - total registered workers
+    // عمال الأرضية - العمال على الأرض مقسمين حسب القسم
+    // Floor workers - workers on the floor divided by department
+    // عدد الحاضرين في كل قسم = عدد الأسماء في presentNames (بيتحسب لوحده، متكتبوش بإيدك)
+    // Present count of each group = presentNames.length (calculated automatically)
+    workers: {
+      production: {
+        // عمال الإنتاج - production workers
+        label: "عمال إنتاج", // اسم المجموعة - group name
+        total: 20, // الإجمالي المسجل في القسم - total registered in department
+        presentNames: [
+          // أسماء العمال الحاضرين - names of present workers
+          "أحمد محمد",
+          "محمود علي",
+          "خالد حسن",
+          "يوسف إبراهيم",
+          "طارق كمال",
+          "سامي عادل",
+          "عمر يوسف",
+          "إبراهيم سعيد",
+          "عادل محمود",
+        ],
+      },
+      packing: {
+        // عمال التعبئة - packing workers
+        label: "عمال تعبئة", // اسم المجموعة - group name
+        total: 15, // الإجمالي المسجل في القسم - total registered in department
+        presentNames: [
+          // أسماء العمال الحاضرين - names of present workers
+          "محمود حسن",
+          "علي محمود",
+          "حسن يوسف",
+          "إبراهيم كمال",
+          "سعيد طارق",
+          "كمال سامي",
+          "عادل عمر",
+          "يوسف خالد",
+        ],
+      },
+      saw: {
+        // عمال المنشار - saw workers
+        label: "عمال منشار", // اسم المجموعة - group name
+        total: 8, // الإجمالي المسجل في القسم - total registered in department
+        presentNames: [
+          // أسماء العمال الحاضرين - names of present workers
+          "محمود طارق",
+          "علي سعيد",
+          "حسن كمال",
+          "إبراهيم عادل",
+          "يوسف محمود",
+          "خالد سامي",
+        ],
+      },
+      drivers: {
+        // السواقين - drivers
+        label: "سواقين", // اسم المجموعة - group name
+        total: 7, // الإجمالي المسجل في القسم - total registered in department
+        presentNames: [
+          // أسماء العمال الحاضرين - names of present workers
+          "سامي يوسف",
+          "طارق إبراهيم",
+        ],
+      },
     },
 
     // الأفران - حالة كل فرن
@@ -149,7 +206,10 @@ export const dashboardConfig = {
     // عمال الأرضية - بطاقة عمال الأرضية
     // Floor Workers - floor workers card
     floorWorkers: {
-      numberFontSize: 80, // حجم الرقم الكبير لعدد العمال - big number font size for worker count
+      groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
+      groupNumberFontSize: 32, // حجم رقم الحاضرين في كل قسم - present count font size per group
+      nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
+      maxVisibleNames: 3, // أقصى عدد أسماء بيظهر في كل قسم والباقي بيبان "+N" - max names shown per group, rest shown as "+N"
     },
 
     // الأفران - بطاقة الأفران

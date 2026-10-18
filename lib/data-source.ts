@@ -4,6 +4,8 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // Replace this function with the real factory system call
 // If FACTORY_API_URL is set in environment variables, fetch from the real system
 // Otherwise, return data from config file
+// The API must return floorWorkers as { production, packing, saw, drivers },
+// each { label, total, presentNames } - present count is presentNames.length
 export async function getDashboardData(): Promise<DashboardData> {
   const factoryApiUrl = process.env.FACTORY_API_URL;
   const factoryApiKey = process.env.FACTORY_API_KEY;
@@ -74,8 +76,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       })),
     },
     floorWorkers: {
-      present: config.floorWorkers.presentToday,
-      total: config.floorWorkers.totalRegistered,
+      production: { ...config.workers.production },
+      packing: { ...config.workers.packing },
+      saw: { ...config.workers.saw },
+      drivers: { ...config.workers.drivers },
     },
     treasury: {
       balance: config.treasury.balance,
