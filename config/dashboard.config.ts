@@ -215,7 +215,6 @@ export const dashboardConfig = {
       groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
       nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
       minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
-      maxVisibleNames: 12, // أقصى عدد أسماء بيظهر في كل قسم والباقي بيبان "+N" - max names shown per group, rest shown as "+N"
     },
 
     // الأفران - بطاقة الأفران

@@ -98,14 +98,6 @@ interface GroupBoxProps {
 function GroupBox({ group, icon: Icon, sizes, chipFontSize, round, onOverflow, onResize }: GroupBoxProps) {
   const present = group.presentNames.length;
   const percentage = group.total > 0 ? Math.min(100, (present / group.total) * 100) : 0;
-  const initialVisible = Math.min(present, sizes.maxVisibleNames);
-
-  // الترتيب: كل الأسماء بالحجم العادي، بعدين نصغر الخط، وآخر حاجة نخبي أسماء ونعرض "+N"
-  // Order: all names at the normal size, then a smaller font, and only at the minimum font hide names behind "+N".
-  // عدد الأسماء المخفية تابع للـ round، فأي قياس جديد بيرجع يعرض كل الأسماء
-  // Hidden names belong to a round, so each new measurement starts with every name shown again
-  const [hide, setHide] = useState({ round, visible: initialVisible });
-  const visible = hide.round === round ? Math.min(hide.visible, initialVisible) : initialVisible;
   const sectionRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
@@ -125,20 +117,14 @@ function GroupBox({ group, icon: Icon, sizes, chipFontSize, round, onOverflow, o
     return () => observer.disconnect();
   }, [onResize]);
 
-  // بنقيس بعد الرسم: لو الأسماء أطول من المساحة نصغر الخط، ولو وصلنا لأصغر حجم نخبي اسم
-  // Measure after layout: on overflow shrink the shared font, and only at the minimum hide one more name
+  // بنقيس بعد الرسم: لو الأسماء أطول من المساحة نصغر الخط بس، ومفيش أي اسم بيتخبى
+  // Measure after layout: on overflow only shrink the shared font - every name is always shown
   useIsomorphicLayoutEffect(() => {
     const el = chipsRef.current;
     if (!el || el.scrollHeight <= el.clientHeight) return;
-    if (chipFontSize > sizes.minNameChipFontSize) {
-      onOverflow(chipFontSize, round);
-    } else if (visible > 0) {
-      setHide({ round, visible: visible - 1 });
-    }
+    if (chipFontSize > sizes.minNameChipFontSize) onOverflow(chipFontSize, round);
   });
 
-  const visibleNames = group.presentNames.slice(0, visible);
-  const hiddenCount = present - visibleNames.length;
   const chipStyle = { fontSize: `${chipFontSize}px`, padding: "1px 7px", lineHeight: 1.4 };
 
   return (
@@ -180,7 +166,7 @@ function GroupBox({ group, icon: Icon, sizes, chipFontSize, round, onOverflow, o
           ref={chipsRef}
           className="flex-1 min-h-0 flex flex-wrap content-start gap-1 min-w-0 overflow-hidden"
         >
-          {visibleNames.map((name, index) => (
+          {group.presentNames.map((name, index) => (
             <span
               key={index}
               className="bg-brandOrange/15 text-white rounded-md max-w-full break-words"
@@ -189,11 +175,6 @@ function GroupBox({ group, icon: Icon, sizes, chipFontSize, round, onOverflow, o
               {toEnglishDigits(name)}
             </span>
           ))}
-          {hiddenCount > 0 && (
-            <span className="text-gray-400" style={chipStyle}>
-              +{formatNumber(hiddenCount)}
-            </span>
-          )}
         </div>
       )}
     </div>
