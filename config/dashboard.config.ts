@@ -44,7 +44,7 @@ export const dashboardConfig = {
       { name: "فرن 3", status: "maintenance" as const },
       { name: "فرن 4", status: "maintenance" as const },
       { name: "فرن 5", status: "working" as const },
-      { name: "فرن 6", status: "stoping" as const },
+      { name: "فرن 6", status: "stopped" as const },
     ],
 
     // المخزون - المنتجات والشكاير
