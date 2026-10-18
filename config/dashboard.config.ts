@@ -58,7 +58,10 @@ export const dashboardConfig = {
           "علي محمود",
           "حسن يوسف",
           "إبراهيم كمال",
-         // "سعيد طارق",
+          "سعيد طارق",
+          "كمال سامي",
+          "عادل عمر",
+          "يوسف خالد",
         ],
       },
       saw: {
@@ -67,7 +70,12 @@ export const dashboardConfig = {
         total: 8, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-         // "محمود طارق",
+          "محمود طارق",
+          "علي سعيد",
+          "حسن كمال",
+          "إبراهيم عادل",
+          "يوسف محمود",
+          "خالد سامي",
         ],
       },
       drivers: {
@@ -76,8 +84,8 @@ export const dashboardConfig = {
         total: 7, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
-         // "سامي يوسف",
-  
+          "سامي يوسف",
+          "طارق إبراهيم",
         ],
       },
     },
