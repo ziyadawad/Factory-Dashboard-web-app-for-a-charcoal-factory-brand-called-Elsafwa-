@@ -25,9 +25,9 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
   const presentPercentage =
     data.total > 0 ? ((data.present / data.total) * 100).toFixed(0) : "0";
 
-  // Fixed donut dimensions
+  // Fixed donut dimensions with 2px margin to prevent clipping
   const donutSize = sizes.donutSize;
-  const outerRadius = donutSize / 2;
+  const outerRadius = donutSize / 2 - 2;
   const innerRadius = outerRadius - sizes.donutThickness;
 
   return (
@@ -36,14 +36,14 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
 
       <div className="flex-1 min-h-0 flex items-center justify-center">
         <div
-          className="relative"
+          className="relative overflow-visible flex-shrink-0 mb-2"
           style={{ width: `${donutSize}px`, height: `${donutSize}px` }}
         >
           <PieChart width={donutSize} height={donutSize}>
             <Pie
               data={chartData}
-              cx={donutSize / 2}
-              cy={donutSize / 2}
+              cx="50%"
+              cy="50%"
               innerRadius={innerRadius}
               outerRadius={outerRadius}
               paddingAngle={5}
@@ -73,7 +73,7 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mt-2 shrink-0">
+      <div className="grid grid-cols-2 gap-2 shrink-0">
         <div className="bg-background rounded-xl py-2 text-center">
           <p
             className="font-bold text-statusGreen tabular-nums"
