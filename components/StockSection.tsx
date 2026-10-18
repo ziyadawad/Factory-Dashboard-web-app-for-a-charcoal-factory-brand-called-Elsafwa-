@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SackItem, SackLevel, Stock, StockItem } from "@/lib/types";
 import { AlertTriangle, Package } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
@@ -12,6 +12,9 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 // أصغر حجم لاسم المنتج لو مش واخد المساحة - smallest product name font size when it doesn't fit
 const MIN_NAME_FONT_SIZE = 12;
+
+// أصغر حجم لأرقام الناعم والخشن - smallest sack number font size when it doesn't fit
+const MIN_SACK_NUMBER_FONT_SIZE = 16;
 
 // المسافة بين القسمين وبين الكروت (gap-4 / gap-3) - gaps between sections and between cards
 const SECTION_GAP = 16;
@@ -140,17 +143,36 @@ function isSackLevelLow(level: SackLevel) {
 }
 
 // نص كارت الشكاير (ناعم أو خشن) - one half of a sack card (fine or coarse)
-function SackHalf({ label, level, unit }: { label: string; level: SackLevel; unit: string }) {
+function SackHalf({
+  label,
+  level,
+  unit,
+  numberFontSize,
+  onOverflow,
+}: {
+  label: string;
+  level: SackLevel;
+  unit: string;
+  numberFontSize: number;
+  onOverflow: (fontSize: number) => void;
+}) {
   const { count } = useCountUp(level.quantity, 500);
   const isLow = isSackLevelLow(level);
   const progressPercentage =
     level.minimumThreshold > 0
       ? Math.min((level.quantity / (level.minimumThreshold * 2)) * 100, 100)
       : 100;
-  const sizes = dashboardConfig.sizes.products;
+  const numberRef = useRef<HTMLDivElement>(null);
+
+  // لو الرقم أعرض من النص نبلغ الكارت يصغر الخط - report overflow so the card shrinks the shared font
+  useIsomorphicLayoutEffect(() => {
+    const el = numberRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (numberFontSize > MIN_SACK_NUMBER_FONT_SIZE) onOverflow(numberFontSize);
+  });
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+    <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-between gap-1">
       <div className="flex items-center justify-between gap-1">
         <span className="text-gray-400" style={{ fontSize: "13px" }}>
           {label}
@@ -158,13 +180,16 @@ function SackHalf({ label, level, unit }: { label: string; level: SackLevel; uni
         {isLow && <span className="text-statusRed font-bold text-xs">منخفض</span>}
       </div>
 
-      <div className="flex flex-wrap items-baseline gap-x-1">
-        <span
-          className={`font-bold tabular-nums leading-none ${isLow ? "text-statusRed" : "text-white"}`}
-          style={{ fontSize: `${sizes.numberFontSize}px` }}
+      <div>
+        <div
+          ref={numberRef}
+          className={`font-bold tabular-nums leading-none whitespace-nowrap overflow-hidden ${
+            isLow ? "text-statusRed" : "text-white"
+          }`}
+          style={{ fontSize: `${numberFontSize}px` }}
         >
           {formatNumber(count)}
-        </span>
+        </div>
         <span className="text-gray-400 text-xs">{unit}</span>
       </div>
 
@@ -213,6 +238,38 @@ function SackCard({ item }: { item: SackItem }) {
     if (nameFontSize > MIN_NAME_FONT_SIZE) setNameFontSize(nameFontSize - 1);
   }, [nameFontSize, item.name]);
 
+  // نفس حجم الرقم للنصين (الأصغر فيهم) - both halves share one number size (the smaller fit)
+  const halvesRef = useRef<HTMLDivElement>(null);
+  const [numberFontSize, setNumberFontSize] = useState(sizes.sackNumberFontSize);
+  const shrinkNumber = useCallback(
+    (fontSize: number) =>
+      setNumberFontSize((current) => Math.min(current, Math.max(fontSize - 1, MIN_SACK_NUMBER_FONT_SIZE))),
+    []
+  );
+
+  // لما الكمية تتغير نرجع الحجم الأصلي ونقيس تاني - on quantity change, reset and re-measure
+  const quantitiesKey = `${item.fine.quantity}|${item.coarse.quantity}`;
+  const prevQuantitiesKey = useRef(quantitiesKey);
+  useIsomorphicLayoutEffect(() => {
+    if (prevQuantitiesKey.current === quantitiesKey) return;
+    prevQuantitiesKey.current = quantitiesKey;
+    setNumberFontSize(sizes.sackNumberFontSize);
+  }, [quantitiesKey, sizes.sackNumberFontSize]);
+
+  // لما الكارت يتغير مقاسه نرجع الحجم الأصلي ونقيس تاني - on resize, reset and re-measure
+  useEffect(() => {
+    const el = halvesRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      setNumberFontSize(sizes.sackNumberFontSize);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sizes.sackNumberFontSize]);
+
   return (
     <div
       className={`bg-background border-2 rounded-2xl p-3 h-full min-h-0 flex flex-col gap-2 overflow-hidden ${
@@ -235,10 +292,22 @@ function SackCard({ item }: { item: SackItem }) {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 flex gap-2">
-        <SackHalf label="ناعم" level={item.fine} unit={item.unit} />
+      <div ref={halvesRef} className="flex-1 min-h-0 flex gap-2">
+        <SackHalf
+          label="ناعم"
+          level={item.fine}
+          unit={item.unit}
+          numberFontSize={numberFontSize}
+          onOverflow={shrinkNumber}
+        />
         <div className="w-px bg-cardBorder shrink-0" />
-        <SackHalf label="خشن" level={item.coarse} unit={item.unit} />
+        <SackHalf
+          label="خشن"
+          level={item.coarse}
+          unit={item.unit}
+          numberFontSize={numberFontSize}
+          onOverflow={shrinkNumber}
+        />
       </div>
     </div>
   );
