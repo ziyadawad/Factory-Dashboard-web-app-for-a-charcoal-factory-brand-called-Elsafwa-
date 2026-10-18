@@ -1,9 +1,13 @@
 "use client";
 
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Factory, Package, Axe, Truck, LucideIcon } from "lucide-react";
 import { FloorWorkers, WorkerGroup } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+
+// useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 interface FloorWorkersSectionProps {
   data: FloorWorkers;
@@ -25,11 +29,13 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
-      <h2 className="text-xl font-bold text-white mb-1 shrink-0">حضور عمال</h2>
-      <p className="text-gray-400 text-sm mb-2 shrink-0">
-        الإجمالي: <span className="text-white font-bold tabular-nums">{formatNumber(totalPresent)}</span> حاضر من{" "}
-        <span className="text-white font-bold tabular-nums">{formatNumber(totalRegistered)}</span>
-      </p>
+      <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
+        <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور عمال</h2>
+        <p className="text-gray-400 text-sm whitespace-nowrap">
+          الإجمالي: <span className="text-white font-bold tabular-nums">{formatNumber(totalPresent)}</span> حاضر من{" "}
+          <span className="text-white font-bold tabular-nums">{formatNumber(totalRegistered)}</span>
+        </p>
+      </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-2">
         {groups.map(({ group, icon, key }) => (
@@ -49,11 +55,49 @@ interface GroupBoxProps {
 function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
   const present = group.presentNames.length;
   const percentage = group.total > 0 ? Math.min(100, (present / group.total) * 100) : 0;
-  const visibleNames = group.presentNames.slice(0, sizes.maxVisibleNames);
+  const initialVisible = Math.min(present, sizes.maxVisibleNames);
+  const namesKey = group.presentNames.join("|");
+
+  // بنصغر الخط خطوة خطوة لحد ما الأسماء تكفي، وبعدها بنخبي أسماء ونعرض "+N"
+  // Shrink the font step by step until the chips fit, then hide names behind "+N"
+  const [fit, setFit] = useState({ fontSize: sizes.nameChipFontSize, visible: initialVisible });
+  const chipsRef = useRef<HTMLDivElement>(null);
+
+  // نرجع للبداية لما الأسماء أو مساحة القسم تتغير - restart when names or box size change
+  useIsomorphicLayoutEffect(() => {
+    const reset = () => setFit({ fontSize: sizes.nameChipFontSize, visible: initialVisible });
+    reset();
+
+    const el = chipsRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    let height = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width && el.clientHeight === height) return;
+      width = el.clientWidth;
+      height = el.clientHeight;
+      reset();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [namesKey, initialVisible, sizes.nameChipFontSize]);
+
+  useIsomorphicLayoutEffect(() => {
+    const el = chipsRef.current;
+    if (!el || el.scrollHeight <= el.clientHeight) return;
+    setFit((f) => {
+      if (f.fontSize > sizes.minNameChipFontSize) return { ...f, fontSize: f.fontSize - 1 };
+      if (f.visible > 0) return { ...f, visible: f.visible - 1 };
+      return f;
+    });
+  }, [fit, sizes.minNameChipFontSize]);
+
+  const visibleNames = group.presentNames.slice(0, fit.visible);
   const hiddenCount = present - visibleNames.length;
+  const chipStyle = { fontSize: `${fit.fontSize}px`, padding: "1px 7px", lineHeight: 1.4 };
 
   return (
-    <div className="bg-background rounded-xl p-2 min-w-0 min-h-0 flex flex-col overflow-hidden">
+    <div className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <Icon className="w-4 h-4 text-brandOrange shrink-0" />
@@ -75,7 +119,7 @@ function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
         </p>
       </div>
 
-      <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden shrink-0 mt-1.5 mb-2">
+      <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden shrink-0 mt-1.5 mb-1.5">
         <div
           className="absolute top-0 right-0 h-full bg-gradient-to-r from-brandYellow to-brandOrange rounded-full transition-all duration-500"
           style={{ width: `${percentage}%` }}
@@ -87,21 +131,21 @@ function GroupBox({ group, icon: Icon, sizes }: GroupBoxProps) {
           لا يوجد
         </p>
       ) : (
-        <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+        <div
+          ref={chipsRef}
+          className="flex-1 min-h-0 flex flex-wrap content-start gap-1 min-w-0 overflow-hidden"
+        >
           {visibleNames.map((name, index) => (
             <span
               key={index}
-              className="bg-brandOrange/15 text-white rounded-md px-2 py-0.5 max-w-full break-words leading-tight"
-              style={{ fontSize: `${sizes.nameChipFontSize}px` }}
+              className="bg-brandOrange/15 text-white rounded-md max-w-full break-words"
+              style={chipStyle}
             >
               {toEnglishDigits(name)}
             </span>
           ))}
           {hiddenCount > 0 && (
-            <span
-              className="text-gray-400 px-1 py-0.5"
-              style={{ fontSize: `${sizes.nameChipFontSize}px` }}
-            >
+            <span className="text-gray-400" style={chipStyle}>
               +{formatNumber(hiddenCount)}
             </span>
           )}
