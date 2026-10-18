@@ -1,36 +1,140 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# لوحة متابعة المصنع - الصفوة
 
-## Getting Started
+لوحة متابعة في الوقت الفعلي لمصنع الفحم "الصفوة"، مصممة للعرض على شاشة التلفزيون في مكتب المدير التنفيذي.
 
-First, run the development server:
+## المميزات
 
+- تحديث تلقائي كل 30 ثانية
+- واجهة عربية كاملة (RTL)
+- تصميم مظلم مناسب للشاشات الكبيرة
+- حماية بكلمة مرور
+- عرض بيانات المخزون، الأفران، الحضور، والخزنة
+- إشعارات بصرية عند تغير البيانات
+
+## التقنيات المستخدمة
+
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- SWR لجلب البيانات
+- Recharts للرسوم البيانية
+- Lucide React للأيقونات
+
+## التشغيل محلياً
+
+1. تثبيت المكتبات:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. إنشاء ملف `.env.local` وإضافة المتغيرات:
+```bash
+cp .env.example .env.local
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. تعديل كلمة المرور في `.env.local`:
+```
+DASHBOARD_PASSWORD=your_password_here
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. تشغيل المشروع:
+```bash
+npm run dev
+```
 
-## Learn More
+5. فتح المتصفح على: `http://localhost:3000`
 
-To learn more about Next.js, take a look at the following resources:
+## النشر على Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. رفع المشروع على GitHub
+2. ربط المستودع بـ Vercel
+3. إضافة متغيرات البيئة في إعدادات Vercel:
+   - `DASHBOARD_PASSWORD`: كلمة مرور للوصول
+   - `FACTORY_API_URL`: (اختياري) رابط API المصنع الحقيقي
+   - `FACTORY_API_KEY`: (اختياري) مفتاح API إذا لزم الأمر
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. النقر على "Deploy"
 
-## Deploy on Vercel
+## ربط البيانات الحقيقية
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+لربط اللوحة بنظام المصنع الحقيقي:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. افتح الملف `lib/data-source.ts`
+2. ابحث عن الدالة `getDashboardData()`
+3. إذا تم تعيين `FACTORY_API_URL` في متغيرات البيئة، سيقوم النظام بجلب البيانات من هذا الرابط تلقائياً
+4. تأكد من أن API يعيد البيانات بنفس الصيغة المحددة في `lib/types.ts`
+
+### صيغة البيانات المطلوبة
+
+يجب أن يعيد API كائن JSON بالصيغة التالية:
+
+```typescript
+{
+  attendance: {
+    present: number,
+    absent: number,
+    total: number,
+    absentNames: string[]
+  },
+  stock: {
+    products: [{
+      id: string,
+      name: string,
+      quantity: number,
+      unit: string,
+      minimumThreshold: number,
+      image?: string
+    }],
+    sacks: [{
+      id: string,
+      name: string,
+      quantity: number,
+      unit: string,
+      minimumThreshold: number,
+      icon?: string
+    }]
+  },
+  kilns: {
+    working: number,
+    maintenance: number,
+    stopped: number,
+    total: number,
+    kilns: [{
+      id: string,
+      name: string,
+      status: "working" | "maintenance" | "stopped"
+    }]
+  },
+  floorWorkers: {
+    present: number,
+    total: number
+  },
+  treasury: {
+    balance: number,
+    todayChange?: number
+  },
+  updatedAt: string (ISO 8601)
+}
+```
+
+## إضافة صور المنتجات
+
+ضع صور المنتجات في مجلد `public/products/`:
+- `quarter.png` - ربع كيلو
+- `half.png` - نص كيلو
+- `kilo.png` - كيلو
+- `3kg.png` - 3 كيلو
+
+ضع شعار الشركة في `public/logo.png`
+
+## الأقسام
+
+1. **حضور الإدارة**: يعرض عدد الحاضرين والغائبين مع رسم بياني دائري
+2. **رصيد المخزن**: يعرض المنتجات المعبأة والشكاير مع الحد الأدنى لكل منتج
+3. **الأفران**: يعرض حالة الأفران (شغالة/صيانة/متوقفة)
+4. **عمال الأرضية**: يعرض عدد العمال الحاضرين اليوم
+5. **رصيد الخزنة**: يعرض الرصيد الحالي بالجنيه المصري مع التغير اليومي
+
+## الترخيص
+
+مشروع خاص بشركة الصفوة
