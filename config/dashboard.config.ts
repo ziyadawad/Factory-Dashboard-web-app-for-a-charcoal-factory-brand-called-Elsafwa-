@@ -359,17 +359,22 @@ export const dashboardConfig = {
     // Treasury - treasury balance card
     // المحتوى بيتوزع بالتساوي على طول الكارت - content is spread evenly over the card height
     treasury: {
-      numberFontSize: 84, // حجم رقم الرصيد الكبير - big balance number font size
+      // الأرقام بتصغر لوحدها لو الكارت ضيق: الحجم = أصغر قيمة بين الـ Max والـ Scale% من عرض الكارت
+      // Numbers shrink automatically on narrow cards: size = min(MaxSize px, Scale% of the card width)
+      balanceMaxSize: 84, // أكبر حجم لرقم الرصيد الكبير بالبكسل - max balance number size (px)
+      balanceScale: 17, // رقم الرصيد = 17% من عرض الكارت لو أصغر من الـ Max - balance size as % of card width
       currencyFontSize: 28, // حجم "ج.م" اللي تحت الرصيد - "ج.م" under the balance
-      changeFontSize: 26, // حجم رقم تغيير اليوم (+144,429 ج.م) وأيقونته - today's change badge text + icon
+      changeMaxSize: 26, // أكبر حجم لرقم تغيير اليوم (+144,429 ج.م) وأيقونته - max today's change badge size (px)
+      changeScale: 7, // شارة التغيير = 7% من عرض الكارت لو أصغر من الـ Max - change badge size as % of card width
       changePaddingX: 20, // المسافة يمين وشمال جوه شارة التغيير - change badge horizontal padding
       changePaddingY: 10, // المسافة فوق وتحت جوه شارة التغيير - change badge vertical padding
-      flowLabelFontSize: 20, // حجم كلمة "وارد اليوم" و "منصرف اليوم" - incoming / outgoing label font size
+      flowLabelMaxSize: 20, // أكبر حجم لكلمة "وارد اليوم" و "منصرف اليوم" - max incoming / outgoing label size (px)
+      flowLabelScale: 12, // الكلمة = 12% من عرض المربع لو أصغر من الـ Max - label size as % of box width
       flowIconSize: 22, // حجم السهم اللي جنب "وارد اليوم" و "منصرف اليوم" - incoming / outgoing arrow icon size
-      flowNumberFontSize: 38, // حجم رقم الوارد والمنصرف - incoming / outgoing number font size
+      flowMaxSize: 38, // أكبر حجم لرقم الوارد والمنصرف بالبكسل - max incoming / outgoing number size (px)
+      flowScale: 21, // رقم الوارد/المنصرف = 21% من عرض المربع لو أصغر من الـ Max - number size as % of box width
       flowCurrencyFontSize: 16, // حجم "ج.م" تحت رقم الوارد والمنصرف - "ج.م" under incoming / outgoing
-      flowPaddingX: 6, // المسافة يمين وشمال جوه مربع الوارد/المنصرف - incoming / outgoing box horizontal padding
-      flowPaddingY: 18, // المسافة فوق وتحت جوه مربع الوارد/المنصرف (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
+      flowPadding: 10, // المسافة جوه مربع الوارد/المنصرف من كل ناحية - incoming / outgoing box padding (all sides)
       footerFontSize: 18, // حجم "رصيد الخزنة الحالي" اللي تحت - "رصيد الخزنة الحالي" footer
     },
 

@@ -18,16 +18,20 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
   const todayChange = data.incomingToday - data.outgoingToday;
 
   return (
-    <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
+    <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col">
       <h2 className="text-xl font-bold text-white mb-2 shrink-0">رصيد الخزنة</h2>
 
       {/* المحتوى متوزع بالتساوي على طول الكارت - content spread evenly over the card height */}
-      <div className="flex-1 min-h-0 flex flex-col items-center justify-evenly">
+      {/* container عشان الأرقام تصغر مع عرض الكارت - container so numbers scale with the card width */}
+      <div
+        className="flex-1 min-h-0 flex flex-col items-center justify-evenly"
+        style={{ containerType: "inline-size" }}
+      >
         <div className="flex flex-col items-center">
           <p
             dir="ltr"
             className="font-numbers font-extrabold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent tabular-nums whitespace-nowrap leading-tight"
-            style={{ fontSize: `${sizes.numberFontSize}px` }}
+            style={{ fontSize: `min(${sizes.balanceMaxSize}px, ${sizes.balanceScale}cqi)` }}
           >
             {formattedBalance}
           </p>
@@ -37,13 +41,13 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
         </div>
 
         <div
-          className={`flex items-center gap-2 rounded-xl ${
+          className={`flex items-center gap-2 rounded-xl whitespace-nowrap ${
             todayChange >= 0
               ? "bg-statusGreen/20 text-statusGreen"
               : "bg-statusRed/20 text-statusRed"
           }`}
           style={{
-            fontSize: `${sizes.changeFontSize}px`,
+            fontSize: `min(${sizes.changeMaxSize}px, ${sizes.changeScale}cqi)`,
             padding: `${sizes.changePaddingY}px ${sizes.changePaddingX}px`,
           }}
         >
@@ -108,18 +112,18 @@ function FlowBox({
   return (
     <div
       className={`border rounded-xl text-center min-w-0 ${boxClass}`}
-      style={{ padding: `${sizes.flowPaddingY}px ${sizes.flowPaddingX}px` }}
+      style={{ padding: `${sizes.flowPadding}px`, containerType: "inline-size" }}
     >
       <div className={`flex items-center justify-center gap-1 ${colorClass}`}>
         <Icon className="shrink-0" size={sizes.flowIconSize} />
-        <span className="whitespace-nowrap" style={{ fontSize: `${sizes.flowLabelFontSize}px` }}>
+        <span className="whitespace-nowrap" style={{ fontSize: `min(${sizes.flowLabelMaxSize}px, ${sizes.flowLabelScale}cqi)` }}>
           {label}
         </span>
       </div>
       <p
         dir="ltr"
-        className={`font-numbers font-bold tabular-nums leading-tight mt-1 truncate ${colorClass}`}
-        style={{ fontSize: `${sizes.flowNumberFontSize}px` }}
+        className={`font-numbers font-bold tabular-nums leading-tight mt-1 whitespace-nowrap ${colorClass}`}
+        style={{ fontSize: `min(${sizes.flowMaxSize}px, ${sizes.flowScale}cqi)` }}
       >
         {formatNumber(count)}
       </p>
