@@ -397,8 +397,8 @@ export const dashboardConfig = {
       },
       // ارتفاع الأخشاب ومواد التعبئة جوه قسم المواد الخام - wood vs packaging height inside raw materials
       rawMaterialsRows: {
-        wood: 1.35, // الأخشاب - wood
-        packaging: 0.85, // مواد التعبئة (كروتها فيها رقم واحد بس) - packaging materials (one number per card)
+        wood: 1.5, // الأخشاب - wood
+        packaging: 0.7, // مواد التعبئة (كروتها فيها رقم واحد بس) - packaging materials (one number per card)
       },
       subGroupTitleFontSize: 17, // حجم عناوين "الأخشاب" و"مواد التعبئة" جوه المواد الخام - sub-group title font size
       sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
@@ -407,14 +407,16 @@ export const dashboardConfig = {
       nameFontSize: 18, // حجم اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name font size
       variantLabelFontSize: 13, // حجم اسم النوع (عادي، كامل، ناعم، خشن...) - type label font size
       minVariantLabelFontSize: 11, // أصغر حجم لاسم النوع لو مش واخد مكانه (بدل ما يتقص) - smallest type label size (instead of cutting it)
-      numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد المساحة) - quantity font size (auto-shrinks to fit)
-      minNumberFontSize: 16, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
-      unitFontSize: 12, // حجم وحدة القياس جنب رقم مواد التعبئة (كجم/رول/كيس) - unit next to packaging numbers
+      numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد العرض) - quantity font size (auto-shrinks to fit the width)
+      singleNumberFontSize: 34, // حجم الرقم الكبير في الكروت اللي فيها رقم واحد (مواد التعبئة والخشب العادي) - big number in one-number cards
+      subTypeNumberFontSize: 26, // حجم أرقام أنواع البلدي (كازوارينا/توت/زيتون) - بلدي sub-type numbers
+      minNumberFontSize: 18, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
+      unitFontSize: 14, // حجم الوحدة الصغيرة جنب الرقم الكبير (كجم/رول/كيس/طن) - small unit next to the big number
     },
 
     // صف "الإجمالي" في كروت الصفحة 2 - the "الإجمالي" (total) rows on page 2
     page2: {
-      totalFontSize: 26, // حجم رقم "الإجمالي" تحت كل كارت - card total number font size
+      totalFontSize: 30, // حجم رقم "الإجمالي" تحت كل كارت - card total number font size
       minTotalFontSize: 18, // أصغر حجم لرقم الإجمالي لو مش واخد مكانه - smallest total number size when it doesn't fit
       totalLabelFontSize: 16, // حجم كلمة "الإجمالي" - "الإجمالي" label font size
       totalUnitFontSize: 14, // حجم وحدة القياس جنب الإجمالي (باكت/طن/شكارة) - unit next to the total

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
 import { AlertTriangle, Box, Cylinder, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
@@ -13,6 +13,10 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 // ارتفاع سطر الكلام العريض (bold) - خط Cairo العريض محتاج سطر أطول عشان ميتقصش من فوق أو تحت
 // Line height for bold text - bold Cairo needs a taller line so it isn't clipped at the top/bottom
 const BOLD_LINE_HEIGHT = 1.75;
+
+// ارتفاع سطر الأرقام - الأرقام بتستخدم font-numbers (نفس خط Cairo بس مقاساته الرأسية مظبوطة على 1.1)
+// Line height for quantities - they use font-numbers (same Cairo font, vertical metrics tuned for 1.1)
+const NUMBER_LINE_HEIGHT = 1.1;
 
 // أصغر حجم لاسم الكارت لو مش واخد المساحة - smallest card name font size when it doesn't fit
 const MIN_NAME_FONT_SIZE = 12;
@@ -95,41 +99,93 @@ function packagingVariants(item: PackagingItem): StockVariant[] {
   return [{ label: "", quantity: item.quantity, minimumThreshold: item.minimumThreshold }];
 }
 
-// نوع واحد جوه الكارت (عادي، كامل، ناعم، خشن...) - one type inside a card
-// الوحدة بتظهر في صف الإجمالي بس؛ inlineUnit للكروت اللي مالهاش صف إجمالي (مواد التعبئة)
-// The unit shows in the total row only; inlineUnit is for cards without a total row (packaging)
-function VariantCell({
-  variant,
-  inlineUnit,
-  numberFontSize,
-  onOverflow,
+// رقم كمية: سطره ثابت (1.1) ومش بيتقص أبداً - بيصغر في العرض بس - a quantity: fixed 1.1 line height, never clipped; only its width is fitted
+function QuantityNumber({
+  value,
+  unit,
+  fontSize,
+  low,
+  numberRef,
 }: {
-  variant: StockVariant;
-  inlineUnit?: string;
-  numberFontSize: number;
-  onOverflow: (fontSize: number) => void;
+  value: number;
+  unit?: string;
+  fontSize: number;
+  low: boolean;
+  numberRef: RefObject<HTMLDivElement>;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
-  const { count } = useCountUp(variant.quantity, 500);
+  const { count } = useCountUp(value, 500);
+
+  return (
+    <div
+      ref={numberRef}
+      className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : "text-white"}`}
+      style={{ fontSize: `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
+    >
+      {formatNumber(count)}
+      {unit && (
+        <span className="font-normal text-gray-400" style={{ fontSize: `${sizes.unitFontSize}px`, lineHeight: 1.6 }}>
+          {" "}
+          {unit}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// شريط التقدم وتحته "الحد الأدنى" (لو متحدد) - progress bar with "الحد الأدنى" under it (when set)
+function ProgressBar({ variant }: { variant: StockVariant }) {
   const low = isLow(variant);
   const showMinimum = variant.minimumThreshold > 0 || dashboardConfig.page2.showZeroMinimum;
   const progressPercentage =
     variant.minimumThreshold > 0
       ? Math.min((variant.quantity / (variant.minimumThreshold * 2)) * 100, 100)
       : 100;
-  const numberRef = useRef<HTMLDivElement>(null);
-  const [labelRef, labelFontSize] = useFitFontSize<HTMLSpanElement>(
-    sizes.variantLabelFontSize,
-    sizes.minVariantLabelFontSize,
-    variant.label
-  );
   const [minimumRef, minimumFontSize] = useFitFontSize<HTMLParagraphElement>(
     MINIMUM_LABEL_FONT_SIZE,
     MIN_MINIMUM_LABEL_FONT_SIZE,
     String(variant.minimumThreshold)
   );
 
-  // لو الرقم أعرض من مكانه نبلغ الكارت يصغر الخط - report overflow so the card shrinks the shared font
+  return (
+    <div>
+      <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden">
+        <div
+          className={`absolute top-0 right-0 h-full rounded-full transition-all duration-500 ${
+            low ? "bg-statusRed" : "bg-gradient-to-r from-brandYellow to-brandOrange"
+          }`}
+          style={{ width: `${progressPercentage}%` }}
+        />
+      </div>
+      {showMinimum && (
+        <p ref={minimumRef} className="text-gray-500 mt-1 whitespace-nowrap" style={{ fontSize: `${minimumFontSize}px` }}>
+          الحد الأدنى: {formatNumber(variant.minimumThreshold)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// عمود نوع واحد (عادي، كامل، ناعم، كازوارينا...): اسم / رقم / شريط - one type column: label / number / bar
+function VariantColumn({
+  variant,
+  numberFontSize,
+  onOverflow,
+}: {
+  variant: StockVariant;
+  numberFontSize: number;
+  onOverflow: (fontSize: number) => void;
+}) {
+  const sizes = dashboardConfig.sizes.stockPage;
+  const low = isLow(variant);
+  const numberRef = useRef<HTMLDivElement>(null);
+  const [labelRef, labelFontSize] = useFitFontSize<HTMLSpanElement>(
+    sizes.variantLabelFontSize,
+    sizes.minVariantLabelFontSize,
+    variant.label
+  );
+
+  // لو الرقم أعرض من مكانه نبلغ الكارت يصغر الخط (العرض بس) - width-only: report overflow so the card shrinks the shared font
   useIsomorphicLayoutEffect(() => {
     const el = numberRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
@@ -137,53 +193,19 @@ function VariantCell({
   });
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
-      <div className="flex items-center justify-between gap-1">
+    <div className="min-w-0 grid gap-1 px-2 first:pr-0 last:pl-0" style={{ gridTemplateRows: "auto auto auto" }}>
+      <div className="flex items-center justify-between gap-1 min-w-0">
         <span
           ref={labelRef}
-          className="text-gray-400 flex-1 min-w-0 whitespace-nowrap overflow-hidden"
+          className="text-gray-400 flex-1 min-w-0 whitespace-nowrap"
           style={{ fontSize: `${labelFontSize}px` }}
         >
           {toEnglishDigits(variant.label)}
         </span>
         {low && <span className="text-statusRed font-bold text-xs shrink-0">منخفض</span>}
       </div>
-
-      <div
-        ref={numberRef}
-        className={`font-bold tabular-nums whitespace-nowrap overflow-hidden ${
-          low ? "text-statusRed" : "text-white"
-        }`}
-        style={{ fontSize: `${numberFontSize}px`, lineHeight: BOLD_LINE_HEIGHT }}
-      >
-        {formatNumber(count)}
-        {inlineUnit && (
-          <span className="text-gray-400 font-normal" style={{ fontSize: `${sizes.unitFontSize}px` }}>
-            {" "}
-            {inlineUnit}
-          </span>
-        )}
-      </div>
-
-      <div>
-        <div className="relative h-1.5 bg-cardBorder rounded-full overflow-hidden">
-          <div
-            className={`absolute top-0 right-0 h-full rounded-full transition-all duration-500 ${
-              low ? "bg-statusRed" : "bg-gradient-to-r from-brandYellow to-brandOrange"
-            }`}
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-        {showMinimum && (
-          <p
-            ref={minimumRef}
-            className="text-gray-500 mt-1 whitespace-nowrap overflow-hidden"
-            style={{ fontSize: `${minimumFontSize}px` }}
-          >
-            الحد الأدنى: {formatNumber(variant.minimumThreshold)}
-          </p>
-        )}
-      </div>
+      <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} />
+      <ProgressBar variant={variant} />
     </div>
   );
 }
@@ -220,7 +242,10 @@ function CardIcon({ image, icon, name }: { image?: string; icon?: ReactNode; nam
   );
 }
 
-// كارت فيه أنواع جنب بعض وتحتهم الإجمالي - card with its types side by side and a total row
+// الكارت: صفوف ثابتة (العنوان / الأرقام / الإجمالي) وكل صف واخد ارتفاعه الطبيعي
+// The card: explicit rows (header / numbers / total) and every row keeps its natural height
+// نوع واحد من غير إجمالي = رقم كبير والوحدة جنبه (مواد التعبئة والخشب العادي)
+// One type without a total = one big number with its unit next to it (packaging, single wood types)
 function VariantsCard({
   name,
   unit,
@@ -228,7 +253,9 @@ function VariantsCard({
   image,
   icon,
   accent,
+  numberFontSize: maxNumberFontSize,
   showTotal = true,
+  showTotalUnit = false,
 }: {
   name: string;
   unit: string;
@@ -236,47 +263,29 @@ function VariantsCard({
   image?: string;
   icon?: ReactNode;
   accent: string;
+  numberFontSize?: number;
   showTotal?: boolean;
+  showTotalUnit?: boolean;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const totalSizes = dashboardConfig.sizes.page2;
+  const single = variants.length === 1 && !showTotal;
+  const baseNumberFontSize = maxNumberFontSize ?? (single ? sizes.singleNumberFontSize : sizes.numberFontSize);
   const anyLow = variants.some(isLow);
   const total = sumQuantities(variants);
   const { count: totalCount } = useCountUp(total, 500);
-  // رقم الإجمالي بيصغر لو مش واخد مكانه عشان الوحدة متتقصش - the total number shrinks so the unit is never cut
+  // رقم الإجمالي بيصغر لو مش واخد مكانه (العرض بس) - the total number shrinks to fit (width only)
   const [totalRef, totalFontSize] = useFitFontSize<HTMLParagraphElement>(
     totalSizes.totalFontSize,
     totalSizes.minTotalFontSize,
     `${total}|${unit}`
   );
-
-  const nameRef = useRef<HTMLHeadingElement>(null);
-  const [nameFontSize, setNameFontSize] = useState(sizes.nameFontSize);
-
-  // لما الشاشة تتغير نرجع الحجم الأصلي ونقيس تاني - on resize, reset and re-measure
-  useEffect(() => {
-    const el = nameRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    let width = el.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (el.clientWidth === width) return;
-      width = el.clientWidth;
-      setNameFontSize(sizes.nameFontSize);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [sizes.nameFontSize]);
-
-  // لو الاسم أطول من المساحة نصغر الخط شوية - shrink the name font until it fits
-  useIsomorphicLayoutEffect(() => {
-    const el = nameRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    if (nameFontSize > MIN_NAME_FONT_SIZE) setNameFontSize(nameFontSize - 1);
-  }, [nameFontSize, name]);
+  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, name);
 
   // نفس حجم الرقم لكل الأنواع (الأصغر فيهم) - every type shares one number size (the smallest fit)
   const variantsRef = useRef<HTMLDivElement>(null);
-  const [numberFontSize, setNumberFontSize] = useState(sizes.numberFontSize);
+  const singleNumberRef = useRef<HTMLDivElement>(null);
+  const [numberFontSize, setNumberFontSize] = useState(baseNumberFontSize);
   const shrinkNumber = useCallback(
     (fontSize: number) =>
       setNumberFontSize((current) => Math.min(current, Math.max(fontSize - 1, sizes.minNumberFontSize))),
@@ -289,10 +298,10 @@ function VariantsCard({
   useIsomorphicLayoutEffect(() => {
     if (prevQuantitiesKey.current === quantitiesKey) return;
     prevQuantitiesKey.current = quantitiesKey;
-    setNumberFontSize(sizes.numberFontSize);
-  }, [quantitiesKey, sizes.numberFontSize]);
+    setNumberFontSize(baseNumberFontSize);
+  }, [quantitiesKey, baseNumberFontSize]);
 
-  // لما الكارت يتغير مقاسه نرجع الحجم الأصلي ونقيس تاني - on resize, reset and re-measure
+  // لما الكارت يتغير عرضه نرجع الحجم الأصلي ونقيس تاني - on width change, reset and re-measure
   useEffect(() => {
     const el = variantsRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -300,20 +309,28 @@ function VariantsCard({
     const observer = new ResizeObserver(() => {
       if (el.clientWidth === width) return;
       width = el.clientWidth;
-      setNumberFontSize(sizes.numberFontSize);
+      setNumberFontSize(baseNumberFontSize);
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [sizes.numberFontSize]);
+  }, [baseNumberFontSize]);
+
+  // الرقم الكبير الواحد بيصغر لو أعرض من مكانه (العرض بس) - the single big number shrinks when too wide (width only)
+  useIsomorphicLayoutEffect(() => {
+    const el = singleNumberRef.current;
+    if (!single || !el || el.scrollWidth <= el.clientWidth) return;
+    if (numberFontSize > sizes.minNumberFontSize) shrinkNumber(numberFontSize);
+  });
 
   return (
     <div
-      className={`bg-background border-2 rounded-2xl p-3 h-full min-h-0 min-w-0 flex flex-col gap-2 overflow-hidden ${
-        anyLow ? "border-statusRed" : ""
-      }`}
-      style={anyLow ? undefined : { borderColor: withAlpha(accent, 0.3) }}
+      className={`bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${anyLow ? "border-statusRed" : ""}`}
+      style={{
+        gridTemplateRows: showTotal ? "auto 1fr auto" : "auto 1fr",
+        ...(anyLow ? {} : { borderColor: withAlpha(accent, 0.3) }),
+      }}
     >
-      <div className="flex items-center justify-between gap-2 shrink-0">
+      <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <CardIcon image={image} icon={icon} name={name} />
           <h3
@@ -327,39 +344,51 @@ function VariantsCard({
         {anyLow && <AlertTriangle className="w-5 h-5 text-statusRed shrink-0" />}
       </div>
 
-      <div ref={variantsRef} className="flex-1 min-h-0 flex gap-2">
-        {variants.map((variant, index) => (
-          <div key={index} className="contents">
-            {index > 0 && <div className="w-px bg-cardBorder shrink-0" />}
-            <VariantCell
-              variant={variant}
-              inlineUnit={showTotal ? undefined : unit}
-              numberFontSize={numberFontSize}
-              onOverflow={shrinkNumber}
+      <div ref={variantsRef} className="min-w-0 flex items-center">
+        {single ? (
+          <div className="w-full min-w-0 grid gap-1.5" style={{ gridTemplateRows: "auto auto" }}>
+            <QuantityNumber
+              value={variants[0].quantity}
+              unit={unit}
+              fontSize={numberFontSize}
+              low={isLow(variants[0])}
+              numberRef={singleNumberRef}
             />
+            <ProgressBar variant={variants[0]} />
           </div>
-        ))}
+        ) : (
+          <div
+            className="w-full min-w-0 grid divide-x divide-x-reverse divide-cardBorder"
+            style={{ gridTemplateColumns: `repeat(${variants.length}, minmax(0, 1fr))` }}
+          >
+            {variants.map((variant, index) => (
+              <VariantColumn key={index} variant={variant} numberFontSize={numberFontSize} onOverflow={shrinkNumber} />
+            ))}
+          </div>
+        )}
       </div>
 
       {showTotal && (
-        <div className="flex items-baseline justify-between gap-2 border-t border-cardBorder pt-1 shrink-0">
+        <div className="flex items-center justify-between gap-2 border-t border-cardBorder pt-1 min-w-0">
           <span
             className="font-semibold text-gray-300 shrink-0 whitespace-nowrap"
             style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}
           >
             الإجمالي
           </span>
-          <p ref={totalRef} className="min-w-0 whitespace-nowrap overflow-hidden text-left">
+          <p ref={totalRef} className="min-w-0 whitespace-nowrap text-left">
             <span
-              className="font-extrabold tabular-nums"
-              style={{ fontSize: `${totalFontSize}px`, color: accent }}
+              className="font-numbers font-extrabold tabular-nums"
+              style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: accent }}
             >
               {formatNumber(totalCount)}
             </span>
-            <span className="text-gray-400" style={{ fontSize: `${totalSizes.totalUnitFontSize}px` }}>
-              {" "}
-              {unit}
-            </span>
+            {showTotalUnit && (
+              <span className="text-gray-400" style={{ fontSize: `${totalSizes.totalUnitFontSize}px` }}>
+                {" "}
+                {unit}
+              </span>
+            )}
           </p>
         </div>
       )}
@@ -371,7 +400,7 @@ function VariantsCard({
 function CardsGrid({ columns, children }: { columns: number; children: ReactNode }) {
   return (
     <div
-      className="flex-1 min-h-0 grid gap-3"
+      className="flex-1 grid gap-2.5"
       style={{ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }}
     >
       {children}
@@ -382,6 +411,7 @@ function CardsGrid({ columns, children }: { columns: number; children: ReactNode
 // قسم كبير بعنوان وكروت جنب بعض - big titled section with cards side by side
 // كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
 // من غير columns المحتوى بيترص فوق بعض (زي المواد الخام) - without columns, children are stacked (raw materials)
+// مفيش overflow-hidden عشان مفيش رقم يتقص - no overflow-hidden, so no number can ever be clipped
 function SectionCard({
   title,
   icon: Icon,
@@ -401,11 +431,14 @@ function SectionCard({
 
   return (
     <div
-      className="relative bg-card border border-cardBorder rounded-2xl p-4 min-h-0 flex flex-col overflow-hidden"
+      className="relative bg-card border border-cardBorder rounded-2xl p-3 flex flex-col"
       style={{ backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)` }}
     >
-      <div className="absolute top-0 bottom-0 right-0 w-1" style={{ backgroundColor: accent }} />
-      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+      <div
+        className="absolute top-0 bottom-0 right-0 w-1"
+        style={{ backgroundColor: accent, borderTopRightRadius: 15, borderBottomRightRadius: 15 }}
+      />
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2">
           <Icon className="shrink-0" style={{ color: accent }} size={sizes.sectionTitleFontSize + 2} />
           <h2
@@ -418,7 +451,7 @@ function SectionCard({
         {extra}
       </div>
       {columns === undefined ? (
-        <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+        <div className="flex-1 flex flex-col">{children}</div>
       ) : (
         <CardsGrid columns={columns}>{children}</CardsGrid>
       )}
@@ -445,8 +478,9 @@ function SubGroup({
   const sizes = dashboardConfig.sizes.stockPage;
 
   return (
-    <div className="min-h-0 flex flex-col" style={{ flex: `${grow} 1 0` }}>
-      <div className="flex items-center justify-between gap-2 mb-1.5 shrink-0">
+    // flex-basis auto: المجموعة عمرها ما تصغر عن محتواها - the group never shrinks below its content
+    <div className="flex flex-col" style={{ flex: `${grow} 1 auto` }}>
+      <div className="flex items-center justify-between gap-2 mb-1">
         <h3
           className="font-bold whitespace-nowrap"
           style={{ fontSize: `${sizes.subGroupTitleFontSize}px`, color: accent, lineHeight: BOLD_LINE_HEIGHT }}
@@ -472,21 +506,19 @@ export default function StockSection({ data, className }: StockSectionProps) {
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
 
   return (
-    // ارتفاع السطر 1.6 عشان خط Cairo ميتقصش من فوق أو تحت - line height 1.6 so the Cairo font is never clipped
+    // الصفوف عمرها ما تصغر عن محتواها (min-content) والمساحة الزيادة بتتوزع بالنسب
+    // Rows never shrink below their content (min-content); extra space is shared by the ratios
     <div
-      className={`grid gap-4 ${className ?? ""}`}
+      className={`grid gap-3 ${className ?? ""}`}
       style={{
-        gridTemplateRows: `minmax(0,${rows.finished}fr) minmax(0,${rows.rawMaterials}fr)`,
+        gridTemplateRows: `minmax(min-content,${rows.finished}fr) minmax(min-content,${rows.rawMaterials}fr)`,
         lineHeight: 1.6,
       }}
     >
       {/* فوق: المنتجات المعبأة (يمين) والشكاير (شمال) - top: packaged products (right) + sacks (left) */}
       <div
-        className="min-h-0 grid gap-4"
-        style={{
-          gridTemplateColumns: `minmax(0,${top.packaged}fr) minmax(0,${top.sacks}fr)`,
-          gridTemplateRows: "minmax(0,1fr)",
-        }}
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `minmax(0,${top.packaged}fr) minmax(0,${top.sacks}fr)` }}
       >
         <SectionCard title="المنتجات المعبأة" icon={Package} accent={colors.packaged} columns={data.packaged.length}>
           {data.packaged.map((product) => (
@@ -530,8 +562,12 @@ export default function StockSection({ data, className }: StockSectionProps) {
             >
               إجمالي الخشب:{" "}
               <span
-                className="font-extrabold tabular-nums"
-                style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.rawMaterials }}
+                className="font-numbers font-extrabold tabular-nums"
+                style={{
+                  fontSize: `${totalSizes.sectionTotalFontSize}px`,
+                  lineHeight: NUMBER_LINE_HEIGHT,
+                  color: colors.rawMaterials,
+                }}
               >
                 {formatNumber(woodTotalCount)}
               </span>{" "}
@@ -539,6 +575,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
             </p>
           }
         >
+          {/* الخشب العادي رقم واحد كبير، والبلدي أنواعه جنب بعض وتحتهم الإجمالي - single types: one big number; بلدي: sub-types + total */}
           {wood.types.map((type) => (
             <VariantsCard
               key={type.id}
@@ -547,11 +584,14 @@ export default function StockSection({ data, className }: StockSectionProps) {
               icon={<Trees className="w-8 h-8 text-brandOrange" />}
               variants={woodVariants(type)}
               accent={colors.rawMaterials}
+              showTotal={!!type.subTypes}
+              showTotalUnit
+              numberFontSize={type.subTypes ? sizes.subTypeNumberFontSize : undefined}
             />
           ))}
         </SubGroup>
 
-        <div className="h-px bg-cardBorder shrink-0 my-2.5" />
+        <div className="h-px bg-cardBorder my-2" />
 
         <SubGroup title="مواد التعبئة" accent={colors.rawMaterials} columns={packaging.length} grow={rawRows.packaging}>
           {packaging.map((item) => {

@@ -8,6 +8,24 @@
   --font-cairo: 'Cairo Variable';
 }
 
+/* نفس خط Cairo للأرقام بس مقاساته الرأسية مظبوطة على سطر 1.1 عشان الأرقام متتقصش
+   Same Cairo font for digits, with vertical metrics tuned to a 1.1 line height so numbers are never clipped */
+@font-face {
+  font-family: 'Cairo Numbers';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('../node_modules/@fontsource-variable/cairo/files/cairo-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0020, U+0025, U+002C-002E, U+0030-0039;
+  ascent-override: 88%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
+.font-numbers {
+  font-family: 'Cairo Numbers', var(--font-cairo), Arial, sans-serif;
+}
+
 html,
 body {
   height: 100%;
