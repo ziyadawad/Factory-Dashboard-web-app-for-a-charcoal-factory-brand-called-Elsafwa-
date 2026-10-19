@@ -162,9 +162,9 @@ export const dashboardConfig = {
       list: [
         // kiln = اسم الفرن (لازم يبقى زي اسمه في الأفران عشان لون الحالة)، type = نوع الخشب، weight = الوزن، time = الوقت (24 ساعة)
         // kiln = kiln name (must match the kilns list for the status color), type = wood type, weight, time (24h "HH:MM")
-        { kiln: "فرن 1", type: "برتقال", weight: 2.5, time: "08:30" },
-        { kiln: "فرن 2", type: "مانجو", weight: 1.8, time: "10:15" },
-        { kiln: "فرن 5", type: "برتقال", weight: 2.2, time: "11:00" },
+        //{ kiln: "فرن 1", type: "برتقال", weight: 2.5, time: "08:30" },
+       // { kiln: "فرن 2", type: "مانجو", weight: 1.8, time: "10:15" },
+      //  { kiln: "فرن 5", type: "برتقال", weight: 2.2, time: "11:00" },
       //  { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
        // { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
        // { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
