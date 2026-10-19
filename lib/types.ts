@@ -7,35 +7,56 @@ export interface Attendance {
   absentNames: string[];
 }
 
-export interface StockItem {
+// نوع واحد جوه الكارت (عادي/كامل، ناعم/خشن/مكمورة...) - one type inside a stock card
+// low when minimumThreshold > 0 and quantity <= minimumThreshold
+export interface StockVariant {
+  label: string;
+  quantity: number;
+  minimumThreshold: number;
+}
+
+// منتج معبأ - packaged product; its total = sum of variants (calculated in the UI)
+export interface PackagedProduct {
   id: string;
   name: string;
-  quantity: number;
   unit: string;
-  minimumThreshold: number;
   image?: string;
-  icon?: string;
+  variants: StockVariant[];
 }
 
-// One half of a sack card (fine / coarse)
-export interface SackLevel {
+export interface WoodSubType {
+  name: string;
   quantity: number;
   minimumThreshold: number;
 }
 
+// نوع خشب: رقم واحد أو أنواع فرعية - a wood type has either one quantity or subTypes
+// (with subTypes, its quantity = their sum, calculated in the UI)
+export interface WoodType {
+  id: string;
+  name: string;
+  quantity?: number;
+  minimumThreshold?: number;
+  subTypes?: WoodSubType[];
+}
+
+export interface Wood {
+  unit: string;
+  types: WoodType[];
+}
+
+// الشكاير - sack card; its total = sum of variants (calculated in the UI)
 export interface SackItem {
   id: string;
   name: string;
   unit: string;
   icon?: string;
-  fine: SackLevel; // ناعم
-  coarse: SackLevel; // خشن
+  variants: StockVariant[];
 }
 
 export interface Stock {
-  // quarter, half, kilo, 2kg, 3kg - in display order
-  products: StockItem[];
-  // orange, mango, casuarina - in display order
+  packaged: PackagedProduct[];
+  wood: Wood;
   sacks: SackItem[];
 }
 

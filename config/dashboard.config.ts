@@ -166,56 +166,115 @@ export const dashboardConfig = {
       ],
     },
 
-    // المخزون - المنتجات والشكاير
-    // Stock - products and sacks
+    // ============================================================
+    // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والخشب والشكاير
+    // Stock (page 2) - packaged products, wood and sacks
+    // كل الإجماليات بتتحسب لوحدها - every total is calculated automatically
+    // minimum = الحد الأدنى: لو أكبر من 0 والكمية وصلته أو أقل، الرقم بيقلب أحمر ويكتب "منخفض" والكارت بيبقى إطاره أحمر
+    // minimum: if > 0 and quantity <= minimum, the number turns red ("منخفض") and the card gets a red border
+    // ============================================================
     stock: {
-      // المنتجات المعبأة - packaged products
-      products: [
+      // المنتجات المعبأة - كل منتج متقسم أنواع (variants)، تقدر تزود نوع جديد بسطر جديد
+      // Packaged products - each product has types (variants); add a type by adding a line
+      packaged: [
         {
           name: "ربع كيلو", // اسم المنتج - product name
-          quantity: 2007, // الكمية الحالية - current quantity
-          unit: "باكت", // وحدة القياس - unit of measurement
-          minimum: 0, // الحد الأدنى - minimum threshold
-          image: "/products/quarter.png", // مسار الصورة - image path
+          unit: "باكت", // وحدة القياس - unit
+          image: "/products/quarter.png", // مسار الصورة (لو مش موجودة بتظهر أيقونة) - image path (icon shown if missing)
+          variants: [
+            // label = اسم النوع، quantity = الكمية، minimum = الحد الأدنى - type name, quantity, minimum
+            { label: "عادي", quantity: 2007, minimum: 0 },
+            { label: "كامل", quantity: 500, minimum: 0 },
+          ],
         },
         {
           name: "نص كيلو",
-          quantity: 2474,
           unit: "باكت",
-          minimum: 0,
           image: "/products/half.png",
+          variants: [
+            { label: "عادي", quantity: 2474, minimum: 0 },
+            { label: "كامل", quantity: 600, minimum: 0 },
+          ],
         },
         {
           name: "كيلو",
-          quantity: 716,
           unit: "باكت",
-          minimum: 0,
           image: "/products/kilo.png",
+          variants: [
+            { label: "عادي", quantity: 716, minimum: 0 },
+            { label: "كامل", quantity: 200, minimum: 0 },
+          ],
         },
         {
-          name: "2 كيلو", // اسم المنتج - product name
-          quantity: 677, // الكمية الحالية - current quantity
-          unit: "باكت", // وحدة القياس - unit of measurement
-          minimum: 0, // الحد الأدنى - minimum threshold
-          image: "/products/2kg.png", // مسار الصورة (لو مش موجودة بتظهر أيقونة مكانها) - image path (icon shown if missing)
+          name: "2 كيلو",
+          unit: "باكت",
+          image: "/products/2kg.png",
+          variants: [
+            { label: "عادي", quantity: 677, minimum: 0 },
+            { label: "كامل", quantity: 150, minimum: 0 },
+          ],
         },
         {
           name: "3 كيلو",
-          quantity: 573,
           unit: "باكت",
-          minimum: 0,
           image: "/products/3kg.png",
+          variants: [
+            // نوع واحد بس - one type only
+            { label: "عادي", quantity: 573, minimum: 0 },
+          ],
         },
       ],
 
-      // الشكاير - sacks
-      // كل نوع شكاير متقسم نصين: ناعم (fine) وخشن (coarse)، ولكل نص كمية وحد أدنى
-      // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
-      // fine = ناعم ، coarse = خشن ، quantity = الكمية ، minimum = الحد الأدنى
+      // أرصدة الخشب - كل نوع ليه رقم واحد، أو متقسم أنواع فرعية (subTypes) وإجماليه = مجموعهم
+      // Wood balances - each type has one number, or is split into subTypes (its total = their sum)
+      wood: {
+        unit: "طن", // وحدة القياس - unit
+        types: [
+          { name: "برتقال", quantity: 120, minimum: 0 }, // name = النوع، quantity = الكمية، minimum = الحد الأدنى
+          { name: "مانجو", quantity: 80, minimum: 0 },
+          { name: "جوافة", quantity: 45, minimum: 0 },
+          {
+            name: "بلدي",
+            // الأنواع الفرعية للبلدي - بلدي sub-types (بلدي total = their sum)
+            subTypes: [
+              { name: "كازوارينا", quantity: 60, minimum: 0 },
+              { name: "توت", quantity: 30, minimum: 0 },
+              { name: "زيتون", quantity: 25, minimum: 0 },
+            ],
+          },
+          { name: "بيت نار", quantity: 40, minimum: 0 },
+        ],
+      },
+
+      // الشكاير - كل نوع شكاير متقسم أنواع (ناعم، خشن، مكمورة...) وتقدر تزود أو تشيل
+      // Sacks - each sack type has variants (fine, coarse, ...); add or remove lines freely
       sacks: [
-        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 814, minimum: 0 }, coarse: { quantity: 490, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
-        { name: "شكاير مانجو",    unit: "شكارة", fine: { quantity: 66, minimum: 0 }, coarse: { quantity: 101, minimum: 0 } },
-        { name: "شكاير كازوارينا", unit: "شكارة", fine: { quantity: 1058, minimum: 0 }, coarse: { quantity: 82, minimum: 0 } },
+        {
+          name: "شكاير برتقال", // اسم الشكاير - sack name
+          unit: "شكارة", // وحدة القياس - unit
+          variants: [
+            { label: "ناعم", quantity: 814, minimum: 0 }, // label = النوع، quantity = الكمية، minimum = الحد الأدنى
+            { label: "خشن", quantity: 490, minimum: 0 },
+            { label: "مكمورة", quantity: 150, minimum: 0 },
+          ],
+        },
+        {
+          name: "شكاير مانجو",
+          unit: "شكارة",
+          variants: [
+            { label: "ناعم", quantity: 66, minimum: 0 },
+            { label: "خشن", quantity: 101, minimum: 0 },
+          ],
+        },
+        {
+          name: "شكاير كازوارينا",
+          unit: "شكارة",
+          variants: [
+            { label: "ناعم", quantity: 1058, minimum: 0 },
+            { label: "خشن", quantity: 82, minimum: 0 },
+            { label: "مكمورة", quantity: 120, minimum: 0 },
+          ],
+        },
       ],
     },
   },
@@ -304,16 +363,24 @@ export const dashboardConfig = {
       rowHeight: 34, // ارتفاع كل صف في الجدول (بالبكسل) - height of each table row (px)
     },
 
-    // المنتجات - بطاقات المنتجات في المخزن
-    // Products - product cards in warehouse
-    products: {
-      imageWidth: 48, // عرض صورة المنتج - product image width
-      imageHeight: 48, // ارتفاع صورة المنتج - product image height
-      nameFontSize: 18, // حجم اسم المنتج - product name font size
-      numberFontSize: 36, // حجم رقم الكمية - quantity number font size
-      sackNumberFontSize: 28, // حجم أرقام الناعم والخشن في كروت الشكاير
-      unitFontSize: 14, // حجم وحدة القياس (باكت/شكارة) - unit font size
-      sectionTitleFontSize: 18, // حجم عناوين الأقسام ("المنتجات المعبأة" و "الشكاير") - section title font size
+    // رصيد المخازن (الصفحة 2) - stock page (page 2)
+    stockPage: {
+      // ارتفاع كل قسم بالنسبة للتانيين - each section's height relative to the others
+      rowHeights: {
+        packaged: 1.1, // المنتجات المعبأة - packaged products
+        wood: 1, // أرصدة الخشب - wood balances
+        sacks: 1, // الشكاير - sacks
+      },
+      sectionTitleFontSize: 20, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
+      sectionTotalFontSize: 20, // حجم رقم "إجمالي الخشب" - wood grand total font size
+      imageWidth: 44, // عرض صورة المنتج - product image width
+      imageHeight: 44, // ارتفاع صورة المنتج - product image height
+      nameFontSize: 18, // حجم اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name font size
+      variantLabelFontSize: 13, // حجم اسم النوع (عادي، كامل، ناعم، خشن...) - type label font size
+      numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد المساحة) - quantity font size (auto-shrinks to fit)
+      minNumberFontSize: 16, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
+      unitFontSize: 12, // حجم وحدة القياس (باكت/طن/شكارة) - unit font size
+      totalFontSize: 16, // حجم رقم "الإجمالي" تحت كل كارت - card total row font size
     },
   },
 };
