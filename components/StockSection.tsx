@@ -113,18 +113,19 @@ function QuantityNumber({
   fontSize: number;
   low: boolean;
   numberRef: RefObject<HTMLDivElement>;
-  // جوه عمود: الحجم ده هو الأقصى والرقم بيصغر مع عرض العمود (36cqi = رقم زي "2,474" بياخد حوالي 94% من العمود)
-  // Inside a column: fontSize is the max and it shrinks with the column width (36cqi = "2,474" takes ~94% of the column)
+  // جوه عمود: الحجم من الكونفج (variantNumberMaxSize / variantNumberScale) وبيصغر مع عرض العمود
+  // Inside a column: size comes from config (variantNumberMaxSize / variantNumberScale) and shrinks with the column width
   fitColumn?: boolean;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
+  const { variantNumberMaxSize, variantNumberScale } = dashboardConfig.sizes.page2;
   const { count } = useCountUp(value, 500);
 
   return (
     <div
       ref={numberRef}
       className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : "text-white"}`}
-      style={{ fontSize: fitColumn ? `min(${fontSize}px, 36cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
+      style={{ fontSize: fitColumn ? `min(${variantNumberMaxSize}px, ${variantNumberScale}cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
     >
       {formatNumber(count)}
       {unit && (
@@ -198,7 +199,7 @@ function VariantColumn({
 
   return (
     <div
-      className="min-w-0 overflow-hidden grid gap-1 px-2 first:pr-0 last:pl-0"
+      className="min-w-0 overflow-hidden grid gap-1 px-1 first:pr-0 last:pl-0"
       style={{ gridTemplateRows: "auto auto auto", containerType: "inline-size" }}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
