@@ -18,7 +18,7 @@ export const dashboardConfig = {
     // حضور الإدارة - العمال في الإدارة
     // Management attendance - office workers
     attendance: {
-      present: 8, // عدد الحاضرين - number of present workers
+      present: 9, // عدد الحاضرين - number of present workers
       absent: 1, // عدد الغائبين - number of absent workers
       absentNames: [
         // أسماء الغائبين - names of absent workers
