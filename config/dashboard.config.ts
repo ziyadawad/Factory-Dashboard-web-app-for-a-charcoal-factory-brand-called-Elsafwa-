@@ -1,6 +1,18 @@
 // ملف إعدادات الداشبورد - غير الأرقام هنا عشان تغير المظهر
 // Dashboard settings file - edit the numbers here to change the dashboard appearance
 
+import type {
+  Batch,
+  ConfigKiln,
+  ConfigPackagedProduct,
+  ConfigPackagingItem,
+  ConfigPage,
+  ConfigSack,
+  ConfigVariant,
+  ConfigWoodSubType,
+  ConfigWoodType,
+} from "@/lib/types";
+
 export const dashboardConfig = {
   // ============================================================
   // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
@@ -15,7 +27,7 @@ export const dashboardConfig = {
     list: [
       { id: "main", title: "الرئيسية" }, // الصفحة 1: الخزنة والحضور والأفران - page 1
       { id: "stock", title: "أرصدة المخازن" }, // الصفحة 2: المخازن - page 2
-    ],
+    ] as ConfigPage[],
   },
 
   // ============================================================
@@ -41,7 +53,7 @@ export const dashboardConfig = {
       absentNames: [
         // أسماء الغائبين - names of absent workers
         "فاطمه طلال ",
-      ],
+      ] as string[],
     },
 
     // عمال الأرضية - العمال على الأرض مقسمين حسب القسم
@@ -66,7 +78,7 @@ export const dashboardConfig = {
               "فايز زكى",
               "عبدالناصر",
 
-            ],
+            ] as string[],
           },
           workshop: {
             // الورشة - workshop workers
@@ -77,7 +89,7 @@ export const dashboardConfig = {
               "عم عيد",
               "محمد عصام",
               " احمد حمدى ",
-            ],
+            ] as string[],
           },
           operators: {
             // الأوبريتر - machine operators
@@ -89,7 +101,7 @@ export const dashboardConfig = {
               "محمد حسين",
               "محمد الطيب",
               " حسن فضيل",
-            ],
+            ] as string[],
           },
         },
       },
@@ -109,7 +121,7 @@ export const dashboardConfig = {
           "جيهان",
           "جومانه",
           "سماح",
-        ],
+        ] as string[],
       },
       saw: {
         // عمال المنشار - saw workers
@@ -119,7 +131,7 @@ export const dashboardConfig = {
           // أسماء العمال الحاضرين - names of present workers
           "محمد حسن",
           "عبدالظاهر",
-        ],
+        ] as string[],
       },
       drivers: {
         // السواقين - drivers
@@ -135,7 +147,7 @@ export const dashboardConfig = {
           "اليمنى",
           "محمود عز",
           " ابراهيم وصفى",
-        ],
+        ] as string[],
       },
     },
 
@@ -151,7 +163,7 @@ export const dashboardConfig = {
       { name: "فرن 4", status: "maintenance" as const },
       { name: "فرن 5", status: "working" as const },
       { name: "فرن 6", status: "stopped" as const },
-    ],
+    ] as ConfigKiln[],
 
     // الطرحات اليوم - كل طرحة طلعت من فرن النهارده (بتظهر تحت الأفران في الصفحة الرئيسية)
     // Today's batches - every batch out of a kiln today (shown under the kilns card)
@@ -168,7 +180,7 @@ export const dashboardConfig = {
       //  { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
        // { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
        // { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
-      ],
+      ] as Batch[],
     },
 
     // ============================================================
@@ -190,7 +202,7 @@ export const dashboardConfig = {
             // label = اسم النوع، quantity = الكمية، minimum = الحد الأدنى - type name, quantity, minimum
             { label: "عادي", quantity: 2007, minimum: 0 },
             { label: "كامل", quantity: 500, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "نص كيلو",
@@ -199,7 +211,7 @@ export const dashboardConfig = {
           variants: [
             { label: "عادي", quantity: 2474, minimum: 0 },
             { label: "كامل", quantity: 600, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "كيلو",
@@ -208,7 +220,7 @@ export const dashboardConfig = {
           variants: [
             { label: "عادي", quantity: 716, minimum: 0 },
             { label: "كامل", quantity: 200, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "2 كيلو",
@@ -217,7 +229,7 @@ export const dashboardConfig = {
           variants: [
             { label: "عادي", quantity: 677, minimum: 0 },
             { label: "كامل", quantity: 150, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "3 كيلو",
@@ -226,9 +238,9 @@ export const dashboardConfig = {
           variants: [
             // نوع واحد بس - one type only
             { label: "عادي", quantity: 573, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
-      ],
+      ] as ConfigPackagedProduct[],
 
       // المواد الخام - الأخشاب ومواد التعبئة (بيظهروا بنفس اللون البني عشان يبانوا مجموعة واحدة)
       // Raw materials - wood and packaging materials (shown in the same brown color as one group)
@@ -248,10 +260,10 @@ export const dashboardConfig = {
                 { name: "كازوارينا", quantity: 60, minimum: 0 },
                 { name: "توت", quantity: 30, minimum: 0 },
                 { name: "زيتون", quantity: 25, minimum: 0 },
-              ],
+              ] as ConfigWoodSubType[],
             },
             { name: "بيت نار", quantity: 40, minimum: 0 },
-          ],
+          ] as ConfigWoodType[],
         },
 
         // مواد التعبئة - كل مادة ليها رقم واحد، تقدر تزود مادة جديدة بسطر جديد
@@ -266,7 +278,7 @@ export const dashboardConfig = {
           { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0, icon: "bag" },
           { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0, icon: "bag" },
           { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0, icon: "bag" },
-        ],
+        ] as ConfigPackagingItem[],
       },
 
       // الشكاير - كل نوع شكاير متقسم أنواع (ناعم، خشن، مكمورة...) وتقدر تزود أو تشيل
@@ -279,7 +291,7 @@ export const dashboardConfig = {
             { label: "ناعم", quantity: 766, minimum: 0 }, // label = النوع، quantity = الكمية، minimum = الحد الأدنى
             { label: "خشن", quantity: 520, minimum: 0 },
             { label: "مكمورة", quantity: 0, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "شكاير مانجو",
@@ -287,7 +299,7 @@ export const dashboardConfig = {
           variants: [
             { label: "ناعم", quantity: 80, minimum: 0 },
             { label: "خشن", quantity: 204, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
         {
           name: "شكاير كازوارينا",
@@ -296,9 +308,9 @@ export const dashboardConfig = {
             { label: "ناعم", quantity: 1058, minimum: 0 },
             { label: "خشن", quantity: 82, minimum: 0 },
             { label: "مكمورة", quantity: 330, minimum: 0 },
-          ],
+          ] as ConfigVariant[],
         },
-      ],
+      ] as ConfigSack[],
     },
   },
 

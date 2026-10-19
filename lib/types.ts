@@ -142,3 +142,60 @@ export interface DashboardData {
   batches: Batches;
   updatedAt: string;
 }
+
+// ============================================================
+// أشكال الكونفج - config/dashboard.config.ts shapes
+// كل ليستة في الكونفج متعرفة بنوعها عشان لو فضيتها الـ build ميقعش
+// Every config list is typed so leaving it empty never breaks the build
+// ============================================================
+
+export interface ConfigPage {
+  id: string;
+  title: string;
+}
+
+export interface ConfigKiln {
+  name: string;
+  status: KilnStatus;
+}
+
+// minimum بدل minimumThreshold - config uses minimum instead of minimumThreshold
+export interface ConfigVariant {
+  label: string;
+  quantity: number;
+  minimum: number;
+}
+
+export interface ConfigPackagedProduct {
+  name: string;
+  unit: string;
+  image?: string;
+  variants: ConfigVariant[];
+}
+
+export interface ConfigSack {
+  name: string;
+  unit: string;
+  variants: ConfigVariant[];
+}
+
+export interface ConfigWoodSubType {
+  name: string;
+  quantity: number;
+  minimum: number;
+}
+
+export interface ConfigWoodType {
+  name: string;
+  quantity?: number;
+  minimum?: number;
+  subTypes?: ConfigWoodSubType[];
+}
+
+export interface ConfigPackagingItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  minimum: number;
+  icon?: string; // "plastic" | "roll" | "bag"
+}

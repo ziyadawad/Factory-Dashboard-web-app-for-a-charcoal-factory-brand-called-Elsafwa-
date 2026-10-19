@@ -1,4 +1,16 @@
-import { DashboardData, Stock, Wood } from "./types";
+import {
+  Batch,
+  ConfigKiln,
+  ConfigPackagedProduct,
+  ConfigPackagingItem,
+  ConfigSack,
+  ConfigVariant,
+  ConfigWoodSubType,
+  ConfigWoodType,
+  DashboardData,
+  Stock,
+  Wood,
+} from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 // Replace this function with the real factory system call
@@ -17,7 +29,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 //   - packaging: [{ id, name, unit, quantity, minimumThreshold, icon?: "plastic" | "roll" | "bag" }]
 // The old shape with stock.wood (and no rawMaterials) is still accepted - see normalizeStock
 // { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
-function toVariant(variant: { label: string; quantity: number; minimum: number }) {
+function toVariant(variant: ConfigVariant) {
   return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
 }
 
@@ -59,9 +71,9 @@ export async function getDashboardData(): Promise<DashboardData> {
   const rawMaterials = config.stock.rawMaterials;
 
   // Calculate kiln counts from the list
-  const workingCount = config.kilns.filter((k) => k.status === "working").length;
-  const maintenanceCount = config.kilns.filter((k) => k.status === "maintenance").length;
-  const stoppedCount = config.kilns.filter((k) => k.status === "stopped").length;
+  const workingCount = config.kilns.filter((k: ConfigKiln) => k.status === "working").length;
+  const maintenanceCount = config.kilns.filter((k: ConfigKiln) => k.status === "maintenance").length;
+  const stoppedCount = config.kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
     attendance: {
@@ -71,14 +83,14 @@ export async function getDashboardData(): Promise<DashboardData> {
       absentNames: config.attendance.absentNames,
     },
     stock: {
-      packaged: config.stock.packaged.map((product, index) => ({
+      packaged: config.stock.packaged.map((product: ConfigPackagedProduct, index: number) => ({
         id: ["quarter", "half", "kilo", "2kg", "3kg"][index] ?? `product-${index + 1}`,
         name: product.name,
         unit: product.unit,
         image: product.image,
         variants: product.variants.map(toVariant),
       })),
-      sacks: config.stock.sacks.map((sack, index) => ({
+      sacks: config.stock.sacks.map((sack: ConfigSack, index: number) => ({
         id: ["orange", "mango", "casuarina"][index] ?? `sack-${index + 1}`,
         name: sack.name,
         unit: sack.unit,
@@ -88,12 +100,12 @@ export async function getDashboardData(): Promise<DashboardData> {
       rawMaterials: {
         wood: {
           unit: rawMaterials.wood.unit,
-          types: rawMaterials.wood.types.map((type, index) => ({
+          types: rawMaterials.wood.types.map((type: ConfigWoodType, index: number) => ({
             id: `wood-${index + 1}`,
             name: type.name,
             ...(type.subTypes
               ? {
-                  subTypes: type.subTypes.map((sub) => ({
+                  subTypes: type.subTypes.map((sub: ConfigWoodSubType) => ({
                     name: sub.name,
                     quantity: sub.quantity,
                     minimumThreshold: sub.minimum,
@@ -102,7 +114,7 @@ export async function getDashboardData(): Promise<DashboardData> {
               : { quantity: type.quantity, minimumThreshold: type.minimum }),
           })),
         },
-        packaging: rawMaterials.packaging.map((item, index) => ({
+        packaging: rawMaterials.packaging.map((item: ConfigPackagingItem, index: number) => ({
           id: `packaging-${index + 1}`,
           name: item.name,
           unit: item.unit,
@@ -117,7 +129,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       maintenance: maintenanceCount,
       stopped: stoppedCount,
       total: config.kilns.length,
-      kilns: config.kilns.map((kiln, index) => ({
+      kilns: config.kilns.map((kiln: ConfigKiln, index: number) => ({
         id: `kiln-${index + 1}`,
         name: kiln.name,
         status: kiln.status,
@@ -143,7 +155,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     batches: {
       unit: config.batches.unit,
-      list: config.batches.list.map((batch) => ({ ...batch })),
+      list: config.batches.list.map((batch: Batch) => ({ ...batch })),
     },
     updatedAt: new Date().toISOString(),
   };
