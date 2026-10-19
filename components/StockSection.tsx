@@ -2,7 +2,7 @@
 
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
-import { AlertTriangle, Box, Boxes, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
+import { AlertTriangle, Box, Cylinder, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -12,6 +12,10 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 // أصغر حجم لاسم الكارت لو مش واخد المساحة - smallest card name font size when it doesn't fit
 const MIN_NAME_FONT_SIZE = 12;
+
+// حجم "الحد الأدنى" وأصغر حجم ليه لو الكارت ضيق - "الحد الأدنى" font size and its smallest size in narrow cards
+const MINIMUM_LABEL_FONT_SIZE = 12;
+const MIN_MINIMUM_LABEL_FONT_SIZE = 9;
 
 // لون "#RRGGBB" بشفافية (0 لـ 1) - "#RRGGBB" color with an opacity (0 to 1)
 function withAlpha(hex: string, alpha: number) {
@@ -45,6 +49,13 @@ function woodVariants(type: WoodType): StockVariant[] {
   return [{ label: "الرصيد", quantity: type.quantity ?? 0, minimumThreshold: type.minimumThreshold ?? 0 }];
 }
 
+// أيقونة كل مادة تعبئة حسب الـ icon في الكونفج - packaging icon by its config "icon" value
+const PACKAGING_ICONS: Record<string, LucideIcon> = {
+  plastic: Layers, // بلاستيك
+  roll: Cylinder, // رولات
+  bag: ShoppingBag, // أكياس
+};
+
 // مادة التعبئة كنوع واحد من غير اسم (الاسم فوق في الكارت) - packaging item as one unnamed type
 function packagingVariants(item: PackagingItem): StockVariant[] {
   return [{ label: "", quantity: item.quantity, minimumThreshold: item.minimumThreshold }];
@@ -70,6 +81,15 @@ function VariantCell({
       ? Math.min((variant.quantity / (variant.minimumThreshold * 2)) * 100, 100)
       : 100;
   const numberRef = useRef<HTMLDivElement>(null);
+  const minimumRef = useRef<HTMLParagraphElement>(null);
+  const [minimumFontSize, setMinimumFontSize] = useState(MINIMUM_LABEL_FONT_SIZE);
+
+  // لو "الحد الأدنى" أعرض من مكانه نصغر الخط - shrink the "الحد الأدنى" label until it fits
+  useIsomorphicLayoutEffect(() => {
+    const el = minimumRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (minimumFontSize > MIN_MINIMUM_LABEL_FONT_SIZE) setMinimumFontSize(minimumFontSize - 1);
+  }, [minimumFontSize]);
 
   // لو الرقم أعرض من مكانه نبلغ الكارت يصغر الخط - report overflow so the card shrinks the shared font
   useIsomorphicLayoutEffect(() => {
@@ -111,7 +131,11 @@ function VariantCell({
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
-        <p className="text-gray-500 text-xs mt-1 whitespace-nowrap overflow-hidden">
+        <p
+          ref={minimumRef}
+          className="text-gray-500 mt-1 whitespace-nowrap overflow-hidden"
+          style={{ fontSize: `${minimumFontSize}px` }}
+        >
           الحد الأدنى: {formatNumber(variant.minimumThreshold)}
         </p>
       </div>
@@ -284,11 +308,23 @@ function VariantsCard({
   );
 }
 
+// كروت جنب بعض في صف واحد - cards side by side in one row
+function CardsGrid({ columns, children }: { columns: number; children: ReactNode }) {
+  return (
+    <div
+      className="flex-1 min-h-0 grid gap-3"
+      style={{ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // قسم كبير بعنوان وكروت جنب بعض - big titled section with cards side by side
 // كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
+// من غير columns المحتوى بيترص فوق بعض (زي المواد الخام) - without columns, children are stacked (raw materials)
 function SectionCard({
   title,
-  group,
   icon: Icon,
   accent,
   extra,
@@ -296,12 +332,10 @@ function SectionCard({
   children,
 }: {
   title: string;
-  // اسم المجموعة قبل العنوان (زي "المواد الخام") - optional group label shown before the title
-  group?: string;
   icon: LucideIcon;
   accent: string;
   extra?: ReactNode;
-  columns: number;
+  columns?: number;
   children: ReactNode;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
@@ -315,19 +349,6 @@ function SectionCard({
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
         <div className="flex items-center gap-2">
           <Icon className="shrink-0" style={{ color: accent }} size={sizes.sectionTitleFontSize + 2} />
-          {group && (
-            <>
-              <span
-                className="font-semibold whitespace-nowrap"
-                style={{ fontSize: `${sizes.sectionGroupFontSize}px`, color: accent }}
-              >
-                {group}
-              </span>
-              <span className="text-gray-500" style={{ fontSize: `${sizes.sectionGroupFontSize}px` }}>
-                ·
-              </span>
-            </>
-          )}
           <h2
             className="font-bold text-white whitespace-nowrap leading-tight"
             style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}
@@ -337,12 +358,45 @@ function SectionCard({
         </div>
         {extra}
       </div>
-      <div
-        className="flex-1 min-h-0 grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }}
-      >
-        {children}
+      {columns === undefined ? (
+        <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+      ) : (
+        <CardsGrid columns={columns}>{children}</CardsGrid>
+      )}
+    </div>
+  );
+}
+
+// مجموعة فرعية جوه قسم (الأخشاب، مواد التعبئة) - sub-group inside a section (wood, packaging)
+function SubGroup({
+  title,
+  accent,
+  extra,
+  columns,
+  grow,
+  children,
+}: {
+  title: string;
+  accent: string;
+  extra?: ReactNode;
+  columns: number;
+  grow: number;
+  children: ReactNode;
+}) {
+  const sizes = dashboardConfig.sizes.stockPage;
+
+  return (
+    <div className="min-h-0 flex flex-col" style={{ flex: `${grow} 1 0` }}>
+      <div className="flex items-center justify-between gap-2 mb-1.5 shrink-0">
+        <h3
+          className="font-bold whitespace-nowrap leading-tight"
+          style={{ fontSize: `${sizes.subGroupTitleFontSize}px`, color: accent }}
+        >
+          {title}
+        </h3>
+        {extra}
       </div>
+      <CardsGrid columns={columns}>{children}</CardsGrid>
     </div>
   );
 }
@@ -352,7 +406,8 @@ export default function StockSection({ data, className }: StockSectionProps) {
   const totalSizes = dashboardConfig.sizes.page2;
   const colors = dashboardConfig.page2.colors;
   const rows = sizes.rowHeights;
-  const middle = sizes.middleColumns;
+  const top = sizes.topColumns;
+  const rawRows = sizes.rawMaterialsRows;
   const { wood, packaging } = data.rawMaterials;
   const woodTotal = wood.types.reduce((sum, type) => sum + sumQuantities(woodVariants(type)), 0);
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
@@ -361,32 +416,31 @@ export default function StockSection({ data, className }: StockSectionProps) {
     <div
       className={`grid gap-4 ${className ?? ""}`}
       style={{
-        gridTemplateRows: `minmax(0,${rows.packaged}fr) minmax(0,${rows.middle}fr) minmax(0,${rows.wood}fr)`,
+        gridTemplateRows: `minmax(0,${rows.finished}fr) minmax(0,${rows.rawMaterials}fr)`,
       }}
     >
-      {/* الصف الأول: المنتجات المعبأة - row 1: packaged products */}
-      <SectionCard title="المنتجات المعبأة" icon={Package} accent={colors.packaged} columns={data.packaged.length}>
-        {data.packaged.map((product) => (
-          <VariantsCard
-            key={product.id}
-            name={product.name}
-            unit={product.unit}
-            image={product.image}
-            icon={<Package className="w-8 h-8 text-gray-500" />}
-            variants={product.variants}
-            accent={colors.packaged}
-          />
-        ))}
-      </SectionCard>
-
-      {/* الصف التاني: الشكاير (يمين) ومواد التعبئة (شمال) - row 2: sacks (right) + packaging (left) */}
+      {/* فوق: المنتجات المعبأة (يمين) والشكاير (شمال) - top: packaged products (right) + sacks (left) */}
       <div
         className="min-h-0 grid gap-4"
         style={{
-          gridTemplateColumns: `minmax(0,${middle.sacks}fr) minmax(0,${middle.packaging}fr)`,
+          gridTemplateColumns: `minmax(0,${top.packaged}fr) minmax(0,${top.sacks}fr)`,
           gridTemplateRows: "minmax(0,1fr)",
         }}
       >
+        <SectionCard title="المنتجات المعبأة" icon={Package} accent={colors.packaged} columns={data.packaged.length}>
+          {data.packaged.map((product) => (
+            <VariantsCard
+              key={product.id}
+              name={product.name}
+              unit={product.unit}
+              image={product.image}
+              icon={<Package className="w-8 h-8 text-gray-500" />}
+              variants={product.variants}
+              accent={colors.packaged}
+            />
+          ))}
+        </SectionCard>
+
         <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={data.sacks.length}>
           {data.sacks.map((sack) => (
             <VariantsCard
@@ -399,59 +453,62 @@ export default function StockSection({ data, className }: StockSectionProps) {
             />
           ))}
         </SectionCard>
-
-        <SectionCard
-          title="مواد التعبئة"
-          group="المواد الخام"
-          icon={Boxes}
-          accent={colors.rawMaterials}
-          columns={packaging.length}
-        >
-          {packaging.map((item) => (
-            <VariantsCard
-              key={item.id}
-              name={item.name}
-              unit={item.unit}
-              icon={<Box className="w-7 h-7" style={{ color: colors.rawMaterials }} />}
-              variants={packagingVariants(item)}
-              accent={colors.rawMaterials}
-              showTotal={false}
-            />
-          ))}
-        </SectionCard>
       </div>
 
-      {/* الصف التالت: الأخشاب - row 3: wood */}
-      <SectionCard
-        title="الأخشاب"
-        group="المواد الخام"
-        icon={TreePine}
-        accent={colors.rawMaterials}
-        columns={wood.types.length}
-        extra={
-          <p className="text-gray-300 font-semibold whitespace-nowrap leading-none" style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}>
-            إجمالي الخشب:{" "}
-            <span
-              className="font-extrabold tabular-nums"
-              style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.rawMaterials }}
+      {/* تحت: المواد الخام كلها في قسم واحد - bottom: all raw materials in one section */}
+      <SectionCard title="المواد الخام" icon={TreePine} accent={colors.rawMaterials}>
+        <SubGroup
+          title="الأخشاب"
+          accent={colors.rawMaterials}
+          columns={wood.types.length}
+          grow={rawRows.wood}
+          extra={
+            <p
+              className="text-gray-300 font-semibold whitespace-nowrap leading-none"
+              style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}
             >
-              {formatNumber(woodTotalCount)}
-            </span>{" "}
-            {wood.unit}
-          </p>
-        }
-      >
-        {wood.types.map((type) => (
-          <VariantsCard
-            key={type.id}
-            name={type.name}
-            unit={wood.unit}
-            icon={<Trees className="w-8 h-8 text-brandOrange" />}
-            variants={woodVariants(type)}
-            accent={colors.rawMaterials}
-            showTotal={!!type.subTypes}
-          />
-        ))}
+              إجمالي الخشب:{" "}
+              <span
+                className="font-extrabold tabular-nums"
+                style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.rawMaterials }}
+              >
+                {formatNumber(woodTotalCount)}
+              </span>{" "}
+              {wood.unit}
+            </p>
+          }
+        >
+          {wood.types.map((type) => (
+            <VariantsCard
+              key={type.id}
+              name={type.name}
+              unit={wood.unit}
+              icon={<Trees className="w-8 h-8 text-brandOrange" />}
+              variants={woodVariants(type)}
+              accent={colors.rawMaterials}
+              showTotal={!!type.subTypes}
+            />
+          ))}
+        </SubGroup>
+
+        <div className="h-px bg-cardBorder shrink-0 my-2.5" />
+
+        <SubGroup title="مواد التعبئة" accent={colors.rawMaterials} columns={packaging.length} grow={rawRows.packaging}>
+          {packaging.map((item) => {
+            const Icon = (item.icon && PACKAGING_ICONS[item.icon]) || Box;
+            return (
+              <VariantsCard
+                key={item.id}
+                name={item.name}
+                unit={item.unit}
+                icon={<Icon className="w-7 h-7" style={{ color: colors.rawMaterials }} />}
+                variants={packagingVariants(item)}
+                accent={colors.rawMaterials}
+                showTotal={false}
+              />
+            );
+          })}
+        </SubGroup>
       </SectionCard>
     </div>
   );

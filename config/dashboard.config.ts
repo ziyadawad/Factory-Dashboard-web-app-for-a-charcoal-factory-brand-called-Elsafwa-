@@ -253,13 +253,15 @@ export const dashboardConfig = {
         // مواد التعبئة - كل مادة ليها رقم واحد، تقدر تزود مادة جديدة بسطر جديد
         // Packaging materials - one number each; add a material by adding a line
         // name = اسم المادة، quantity = الكمية، unit = وحدة القياس، minimum = الحد الأدنى
+        // icon = شكل الأيقونة: "plastic" (بلاستيك)، "roll" (رول)، "bag" (كيس)
+        // icon = icon shape: "plastic", "roll" or "bag"
         packaging: [
-          { name: "بلاستيك", quantity: 850, unit: "كجم", minimum: 0 },
-          { name: "رولات ربع", quantity: 40, unit: "رول", minimum: 0 },
-          { name: "رولات نص", quantity: 35, unit: "رول", minimum: 0 },
-          { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0 },
-          { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0 },
-          { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0 },
+          { name: "بلاستيك", quantity: 850, unit: "كجم", minimum: 0, icon: "plastic" },
+          { name: "رولات ربع", quantity: 40, unit: "رول", minimum: 0, icon: "roll" },
+          { name: "رولات نص", quantity: 35, unit: "رول", minimum: 0, icon: "roll" },
+          { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0, icon: "bag" },
+          { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0, icon: "bag" },
+          { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0, icon: "bag" },
         ],
       },
 
@@ -317,8 +319,6 @@ export const dashboardConfig = {
     // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)
     pageNav: {
       iconSize: 18, // حجم سهم التالي/السابق - next/previous arrow size
-      titleFontSize: 12, // حجم اسم الصفحة الحالية - current page name font size
-      dotSize: 7, // حجم النقط اللي بتوضح الصفحة الحالية - page indicator dot size
       fadeMs: 500, // مدة الاختفاء/الظهور بين الصفحات بالملي ثانية - fade duration between pages (ms)
     },
 
@@ -387,16 +387,20 @@ export const dashboardConfig = {
     stockPage: {
       // ارتفاع كل قسم بالنسبة للتانيين - each section's height relative to the others
       rowHeights: {
-        packaged: 1.1, // الصف الأول: المنتجات المعبأة - row 1: packaged products
-        middle: 1, // الصف التاني: الشكاير ومواد التعبئة - row 2: sacks + packaging materials
-        wood: 1, // الصف التالت: الأخشاب - row 3: wood
+        finished: 1, // فوق: المنتجات المعبأة والشكاير - top: packaged products + sacks
+        rawMaterials: 1.45, // تحت: قسم المواد الخام كله - bottom: the whole raw materials block
       },
-      // عرض الشكاير ومواد التعبئة في الصف التاني (نسب من عرض الصف) - row 2 widths (ratios)
-      middleColumns: {
-        sacks: 45, // الشكاير (على اليمين) - sacks (right)
-        packaging: 55, // مواد التعبئة (على الشمال) - packaging materials (left)
+      // عرض المنتجات المعبأة والشكاير في الصف اللي فوق (نسب من عرض الصف) - top row widths (ratios)
+      topColumns: {
+        packaged: 60, // المنتجات المعبأة (على اليمين) - packaged products (right)
+        sacks: 40, // الشكاير (على الشمال) - sacks (left)
       },
-      sectionGroupFontSize: 16, // حجم كلمة "المواد الخام" جنب عنوان القسم - "المواد الخام" group label font size
+      // ارتفاع الأخشاب ومواد التعبئة جوه قسم المواد الخام - wood vs packaging height inside raw materials
+      rawMaterialsRows: {
+        wood: 1.15, // الأخشاب - wood
+        packaging: 1, // مواد التعبئة - packaging materials
+      },
+      subGroupTitleFontSize: 17, // حجم عناوين "الأخشاب" و"مواد التعبئة" جوه المواد الخام - sub-group title font size
       sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
       imageWidth: 44, // عرض صورة المنتج - product image width
       imageHeight: 44, // ارتفاع صورة المنتج - product image height

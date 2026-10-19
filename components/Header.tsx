@@ -6,7 +6,7 @@ import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 interface HeaderProps {
-  lastUpdate: string | null;
+  // false بس لو جلب البيانات فشل - false only when the data fetch failed
   isConnected: boolean;
   // أزرار التنقل بين الصفحات (بتظهر في أقصى الشمال) - page navigation, shown at the far left
   nav?: ReactNode;
@@ -23,7 +23,7 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
   stock: Warehouse,
 };
 
-export default function Header({ lastUpdate, isConnected, nav, page, pageNumber, pageCount }: HeaderProps) {
+export default function Header({ isConnected, nav, page, pageNumber, pageCount }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -97,16 +97,6 @@ export default function Header({ lastUpdate, isConnected, nav, page, pageNumber,
     }
   };
 
-  const formatLastUpdate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString(DATE_LOCALE, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-  };
-
   const PageIcon = page ? PAGE_ICONS[page.id] : undefined;
 
   return (
@@ -164,18 +154,13 @@ export default function Header({ lastUpdate, isConnected, nav, page, pageNumber,
           <p className="text-gray-400 text-sm">{currentDate}</p>
         </div>
 
-        <div className="flex items-center gap-3 bg-background px-4 py-2 rounded-xl border border-cardBorder">
-          <div
-            className={`w-3 h-3 rounded-full ${
-              isConnected ? "bg-statusGreen animate-pulse-dot" : "bg-statusRed"
-            }`}
-          />
-          <span className="text-gray-300 text-sm">
-            {isConnected && lastUpdate
-              ? `آخر تحديث: ${formatLastUpdate(lastUpdate)}`
-              : "غير متصل"}
-          </span>
-        </div>
+        {/* بيظهر بس لو البيانات فشلت تتجاب - shown only when the data fetch fails */}
+        {!isConnected && (
+          <div className="flex items-center gap-2 bg-statusRed/10 px-3 py-1.5 rounded-xl border border-statusRed/50">
+            <div className="w-2.5 h-2.5 rounded-full bg-statusRed" />
+            <span className="text-statusRed text-sm font-semibold">غير متصل</span>
+          </div>
+        )}
 
         {!isFullscreen && (
           <button

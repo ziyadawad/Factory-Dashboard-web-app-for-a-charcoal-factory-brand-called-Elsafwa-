@@ -61,6 +61,7 @@ export interface PackagingItem {
   unit: string;
   quantity: number;
   minimumThreshold: number;
+  icon?: string; // "plastic" | "roll" | "bag"
 }
 
 // المواد الخام: الأخشاب ومواد التعبئة - raw materials: wood + packaging materials

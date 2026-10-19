@@ -14,7 +14,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // - sacks: [{ id, name, unit, icon?, variants: [{ label, quantity, minimumThreshold }] }]
 // - rawMaterials: { wood, packaging }
 //   - wood: { unit, types: [{ id, name, quantity, minimumThreshold } or { id, name, subTypes: [{ name, quantity, minimumThreshold }] }] }
-//   - packaging: [{ id, name, unit, quantity, minimumThreshold }]
+//   - packaging: [{ id, name, unit, quantity, minimumThreshold, icon?: "plastic" | "roll" | "bag" }]
 // The old shape with stock.wood (and no rawMaterials) is still accepted - see normalizeStock
 // { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
 function toVariant(variant: { label: string; quantity: number; minimum: number }) {
@@ -108,6 +108,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           unit: item.unit,
           quantity: item.quantity,
           minimumThreshold: item.minimum,
+          icon: item.icon,
         })),
       },
     },

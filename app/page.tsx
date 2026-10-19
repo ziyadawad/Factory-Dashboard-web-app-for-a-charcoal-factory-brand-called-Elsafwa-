@@ -28,7 +28,7 @@ function pageFromUrl(): number {
 }
 
 export default function Dashboard() {
-  const { data, error, isLoading } = useSWR<DashboardData>(
+  const { data, error } = useSWR<DashboardData>(
     "/api/dashboard",
     fetcher,
     {
@@ -114,8 +114,8 @@ export default function Dashboard() {
     }
   }, [data]);
 
-  const isConnected = !error && !isLoading;
-  const lastUpdate = data?.updatedAt || null;
+  // "غير متصل" بيظهر بس لو الجلب فشل (مش وقت التحميل) - offline only when the fetch failed, not while loading
+  const isConnected = !error;
 
   const flashClass = (section: string) =>
     `min-h-0 ${flashSection === section ? "animate-flash" : ""}`;
@@ -161,7 +161,6 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       <Header
-        lastUpdate={lastUpdate}
         isConnected={isConnected}
         page={PAGES[pageIndex]}
         pageNumber={pageIndex + 1}
