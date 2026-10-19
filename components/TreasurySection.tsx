@@ -1,7 +1,7 @@
 "use client";
 
 import { Treasury } from "@/lib/types";
-import { TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, type LucideIcon } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -21,30 +21,39 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <h2 className="text-xl font-bold text-white mb-2 shrink-0">رصيد الخزنة</h2>
 
-      <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
-        <p
-          dir="ltr"
-          className="font-bold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent mb-1 tabular-nums"
-          style={{ fontSize: `${sizes.numberFontSize}px` }}
-        >
-          {formattedBalance}
-        </p>
-        <p className="text-gray-400 text-lg mb-3">ج.م</p>
+      {/* المحتوى متوزع بالتساوي على طول الكارت - content spread evenly over the card height */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-evenly">
+        <div className="flex flex-col items-center">
+          <p
+            dir="ltr"
+            className="font-numbers font-extrabold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent tabular-nums whitespace-nowrap leading-tight"
+            style={{ fontSize: `${sizes.numberFontSize}px` }}
+          >
+            {formattedBalance}
+          </p>
+          <p className="text-gray-400 leading-normal" style={{ fontSize: `${sizes.currencyFontSize}px` }}>
+            ج.م
+          </p>
+        </div>
 
         <div
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl ${
+          className={`flex items-center gap-2 rounded-xl ${
             todayChange >= 0
               ? "bg-statusGreen/20 text-statusGreen"
               : "bg-statusRed/20 text-statusRed"
           }`}
+          style={{
+            fontSize: `${sizes.changeFontSize}px`,
+            padding: `${sizes.changePaddingY}px ${sizes.changePaddingX}px`,
+          }}
         >
           {todayChange >= 0 ? (
-            <TrendingUp className="w-5 h-5" />
+            <TrendingUp className="shrink-0" style={{ width: "1em", height: "1em" }} />
           ) : (
-            <TrendingDown className="w-5 h-5" />
+            <TrendingDown className="shrink-0" style={{ width: "1em", height: "1em" }} />
           )}
-          <span className="font-bold tabular-nums">
-            <span dir="ltr">
+          <span className="font-bold tabular-nums whitespace-nowrap">
+            <span dir="ltr" className="font-numbers">
               {todayChange >= 0 ? "+" : ""}
               {formatNumber(todayChange)}
             </span>{" "}
@@ -52,18 +61,18 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 w-full mt-4">
+        <div className="grid grid-cols-2 gap-2 w-full">
           <FlowBox
             label="وارد اليوم"
             value={data.incomingToday}
-            icon={<ArrowDownLeft className="w-4 h-4 shrink-0" />}
+            icon={ArrowDownLeft}
             colorClass="text-statusGreen"
             boxClass="bg-statusGreen/10 border-statusGreen/30"
           />
           <FlowBox
             label="منصرف اليوم"
             value={data.outgoingToday}
-            icon={<ArrowUpRight className="w-4 h-4 shrink-0" />}
+            icon={ArrowUpRight}
             colorClass="text-statusRed"
             boxClass="bg-statusRed/10 border-statusRed/30"
           />
@@ -71,7 +80,9 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
       </div>
 
       <div className="mt-2 text-center shrink-0">
-        <p className="text-gray-400 text-sm">رصيد الخزنة الحالي</p>
+        <p className="text-gray-400" style={{ fontSize: `${sizes.footerFontSize}px` }}>
+          رصيد الخزنة الحالي
+        </p>
       </div>
     </div>
   );
@@ -81,13 +92,13 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
 function FlowBox({
   label,
   value,
-  icon,
+  icon: Icon,
   colorClass,
   boxClass,
 }: {
   label: string;
   value: number;
-  icon: React.ReactNode;
+  icon: LucideIcon;
   colorClass: string;
   boxClass: string;
 }) {
@@ -95,21 +106,26 @@ function FlowBox({
   const sizes = dashboardConfig.sizes.treasury;
 
   return (
-    <div className={`border rounded-xl px-2 py-2 text-center min-w-0 ${boxClass}`}>
+    <div
+      className={`border rounded-xl text-center min-w-0 ${boxClass}`}
+      style={{ padding: `${sizes.flowPaddingY}px ${sizes.flowPaddingX}px` }}
+    >
       <div className={`flex items-center justify-center gap-1 ${colorClass}`}>
-        {icon}
+        <Icon className="shrink-0" size={sizes.flowIconSize} />
         <span className="whitespace-nowrap" style={{ fontSize: `${sizes.flowLabelFontSize}px` }}>
           {label}
         </span>
       </div>
       <p
         dir="ltr"
-        className={`font-bold tabular-nums leading-tight mt-1 truncate ${colorClass}`}
+        className={`font-numbers font-bold tabular-nums leading-tight mt-1 truncate ${colorClass}`}
         style={{ fontSize: `${sizes.flowNumberFontSize}px` }}
       >
         {formatNumber(count)}
       </p>
-      <p className="text-gray-400 text-xs">ج.م</p>
+      <p className="text-gray-400" style={{ fontSize: `${sizes.flowCurrencyFontSize}px` }}>
+        ج.م
+      </p>
     </div>
   );
 }

@@ -357,19 +357,37 @@ export const dashboardConfig = {
 
     // الخزنة - بطاقة رصيد الخزنة
     // Treasury - treasury balance card
+    // المحتوى بيتوزع بالتساوي على طول الكارت - content is spread evenly over the card height
     treasury: {
-      numberFontSize: 48, // حجم الرقم الكبير اللي بي الباقي - big number font size
-      flowNumberFontSize: 20, // حجم رقم الوارد والمنصرف - incoming / outgoing number font size
-      flowLabelFontSize: 13, // حجم كلمة "وارد اليوم" و "منصرف اليوم" - incoming / outgoing label font size
+      numberFontSize: 84, // حجم رقم الرصيد الكبير - big balance number font size
+      currencyFontSize: 28, // حجم "ج.م" اللي تحت الرصيد - "ج.م" under the balance
+      changeFontSize: 26, // حجم رقم تغيير اليوم (+144,429 ج.م) وأيقونته - today's change badge text + icon
+      changePaddingX: 20, // المسافة يمين وشمال جوه شارة التغيير - change badge horizontal padding
+      changePaddingY: 10, // المسافة فوق وتحت جوه شارة التغيير - change badge vertical padding
+      flowLabelFontSize: 20, // حجم كلمة "وارد اليوم" و "منصرف اليوم" - incoming / outgoing label font size
+      flowIconSize: 22, // حجم السهم اللي جنب "وارد اليوم" و "منصرف اليوم" - incoming / outgoing arrow icon size
+      flowNumberFontSize: 38, // حجم رقم الوارد والمنصرف - incoming / outgoing number font size
+      flowCurrencyFontSize: 16, // حجم "ج.م" تحت رقم الوارد والمنصرف - "ج.م" under incoming / outgoing
+      flowPaddingX: 6, // المسافة يمين وشمال جوه مربع الوارد/المنصرف - incoming / outgoing box horizontal padding
+      flowPaddingY: 18, // المسافة فوق وتحت جوه مربع الوارد/المنصرف (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
+      footerFontSize: 18, // حجم "رصيد الخزنة الحالي" اللي تحت - "رصيد الخزنة الحالي" footer
     },
 
     // الحضور - بطاقة حضور الإدارة مع الدونت
     // Attendance - management attendance card with donut chart
+    // المحتوى بيتوزع بالتساوي على طول الكارت - content is spread evenly over the card height
     attendance: {
-      donutSize: 128, // حجم الدونت الثابت بالبكسل - fixed donut size in pixels (128px x 128px)
-      donutThickness: 13, // سماكة الدونت بالبكسل - donut thickness in pixels (ring thickness)
-      percentFontSize: 28, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
-      labelFontSize: 12, // حجم كلمات "حاضر" و "غائب" - font size for "present" and "absent" labels
+      donutSize: 230, // حجم الدونت بالبكسل (عرض وطول) - donut size in pixels (width = height)
+      donutThickness: 22, // سماكة حلقة الدونت بالبكسل - donut ring thickness in pixels
+      percentFontSize: 52, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
+      centerLabelFontSize: 18, // حجم "نسبة الحضور" اللي تحت النسبة - "نسبة الحضور" under the percentage
+      countFontSize: 44, // حجم رقم الحاضر (أخضر) والغائب (أحمر) - present / absent number font size
+      countLabelFontSize: 18, // حجم كلمة "حاضر" و "غائب" - "حاضر" / "غائب" label font size
+      countPaddingY: 14, // المسافة فوق وتحت جوه مربع حاضر/غائب (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
+      absentLabelFontSize: 18, // حجم كلمة "الغائبون:" - "الغائبون:" label font size
+      nameFontSize: 18, // حجم أسماء الغايبين - absent name chips font size
+      namePaddingX: 12, // المسافة يمين وشمال جوه اسم الغايب - name chip horizontal padding
+      namePaddingY: 4, // المسافة فوق وتحت جوه اسم الغايب - name chip vertical padding
     },
 
     // عمال الأرضية - بطاقة عمال الأرضية
