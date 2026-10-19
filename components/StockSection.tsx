@@ -106,12 +106,16 @@ function QuantityNumber({
   fontSize,
   low,
   numberRef,
+  fitColumn = false,
 }: {
   value: number;
   unit?: string;
   fontSize: number;
   low: boolean;
   numberRef: RefObject<HTMLDivElement>;
+  // جوه عمود: الحجم ده هو الأقصى والرقم بيصغر مع عرض العمود (36cqi = رقم زي "2,474" بياخد حوالي 94% من العمود)
+  // Inside a column: fontSize is the max and it shrinks with the column width (36cqi = "2,474" takes ~94% of the column)
+  fitColumn?: boolean;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const { count } = useCountUp(value, 500);
@@ -120,7 +124,7 @@ function QuantityNumber({
     <div
       ref={numberRef}
       className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : "text-white"}`}
-      style={{ fontSize: `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
+      style={{ fontSize: fitColumn ? `min(${fontSize}px, 36cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
     >
       {formatNumber(count)}
       {unit && (
@@ -193,7 +197,10 @@ function VariantColumn({
   });
 
   return (
-    <div className="min-w-0 grid gap-1 px-2 first:pr-0 last:pl-0" style={{ gridTemplateRows: "auto auto auto" }}>
+    <div
+      className="min-w-0 overflow-hidden grid gap-1 px-2 first:pr-0 last:pl-0"
+      style={{ gridTemplateRows: "auto auto auto", containerType: "inline-size" }}
+    >
       <div className="flex items-center justify-between gap-1 min-w-0">
         <span
           ref={labelRef}
@@ -204,7 +211,7 @@ function VariantColumn({
         </span>
         {low && <span className="text-statusRed font-bold text-xs shrink-0">منخفض</span>}
       </div>
-      <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} />
+      <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} fitColumn />
       <ProgressBar variant={variant} />
     </div>
   );
