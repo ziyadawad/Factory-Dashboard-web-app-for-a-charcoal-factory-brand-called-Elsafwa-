@@ -18,11 +18,12 @@ export const dashboardConfig = {
     // حضور الإدارة - العمال في الإدارة
     // Management attendance - office workers
     attendance: {
-      present: 9, // عدد الحاضرين - number of present workers
-      absent: 1, // عدد الغائبين - number of absent workers
+      present: 8, // عدد الحاضرين - number of present workers
+      absent: 2, // عدد الغائبين - number of absent workers
       absentNames: [
         // أسماء الغائبين - names of absent workers
         " ايناس اشرف",
+        "فاطمه طلال ",
       ],
     },
 
@@ -40,8 +41,10 @@ export const dashboardConfig = {
           "الطيب",
           "شعبان",
           "محمود عابدين",
+          "فايز زكى",
           "عبدالظاهر",
           "عبدالناصر",
+          " احمد حمدى ",
           "محمد حسين",
           "محمد الطيب",
           " حسن فضيل",
@@ -50,7 +53,7 @@ export const dashboardConfig = {
       packing: {
         // عمال التعبئة - packing workers
         label: "عمال تعبئة", // اسم المجموعة - group name
-        total: 9, // الإجمالي المسجل في القسم - total registered in department
+        total: 10, // الإجمالي المسجل في القسم - total registered in department
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
           "طارق",
@@ -62,6 +65,7 @@ export const dashboardConfig = {
           "ملك",
           "جيهان",
           "جومانه",
+          "سماح",
         ],
       },
       saw: {
@@ -71,7 +75,7 @@ export const dashboardConfig = {
         presentNames: [
           // أسماء العمال الحاضرين - names of present workers
           "محمد حسن",
-          "احمد حمدى ابراهيم",
+          "عبدالظاهر",
         ],
       },
       drivers: {
@@ -83,10 +87,6 @@ export const dashboardConfig = {
           "محمود القرش",
           "حماده فهمى",
           "عبدالمقصود",
-          "كريم",
-          "اسلام",
-          "اليمنى",
-          "ابراهيم وصفى",
         ],
       },
     },
@@ -152,7 +152,7 @@ export const dashboardConfig = {
       // Each sack type is split into 2 halves: fine (ناعم) and coarse (خشن), each with its own quantity and minimum
       // fine = ناعم ، coarse = خشن ، quantity = الكمية ، minimum = الحد الأدنى
       sacks: [
-        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 828, minimum: 0 }, coarse: { quantity: 490, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
+        { name: "شكاير برتقال",   unit: "شكارة", fine: { quantity: 814, minimum: 0 }, coarse: { quantity: 490, minimum: 0 } }, // ناعم: الكمية والحد الأدنى - خشن: الكمية والحد الأدنى
         { name: "شكاير مانجو",    unit: "شكارة", fine: { quantity: 66, minimum: 0 }, coarse: { quantity: 101, minimum: 0 } },
         { name: "شكاير كازوارينا", unit: "شكارة", fine: { quantity: 1058, minimum: 0 }, coarse: { quantity: 82, minimum: 0 } },
       ],
