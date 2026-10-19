@@ -392,13 +392,13 @@ export const dashboardConfig = {
       },
       // عرض المنتجات المعبأة والشكاير في الصف اللي فوق (نسب من عرض الصف) - top row widths (ratios)
       topColumns: {
-        packaged: 60, // المنتجات المعبأة (على اليمين) - packaged products (right)
-        sacks: 40, // الشكاير (على الشمال) - sacks (left)
+        packaged: 56, // المنتجات المعبأة (على اليمين) - packaged products (right)
+        sacks: 44, // الشكاير (على الشمال) - sacks (left)
       },
       // ارتفاع الأخشاب ومواد التعبئة جوه قسم المواد الخام - wood vs packaging height inside raw materials
       rawMaterialsRows: {
-        wood: 1.15, // الأخشاب - wood
-        packaging: 1, // مواد التعبئة - packaging materials
+        wood: 1.35, // الأخشاب - wood
+        packaging: 0.85, // مواد التعبئة (كروتها فيها رقم واحد بس) - packaging materials (one number per card)
       },
       subGroupTitleFontSize: 17, // حجم عناوين "الأخشاب" و"مواد التعبئة" جوه المواد الخام - sub-group title font size
       sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
@@ -406,14 +406,16 @@ export const dashboardConfig = {
       imageHeight: 44, // ارتفاع صورة المنتج - product image height
       nameFontSize: 18, // حجم اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name font size
       variantLabelFontSize: 13, // حجم اسم النوع (عادي، كامل، ناعم، خشن...) - type label font size
+      minVariantLabelFontSize: 11, // أصغر حجم لاسم النوع لو مش واخد مكانه (بدل ما يتقص) - smallest type label size (instead of cutting it)
       numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد المساحة) - quantity font size (auto-shrinks to fit)
       minNumberFontSize: 16, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
-      unitFontSize: 12, // حجم وحدة القياس (باكت/طن/شكارة) - unit font size
+      unitFontSize: 12, // حجم وحدة القياس جنب رقم مواد التعبئة (كجم/رول/كيس) - unit next to packaging numbers
     },
 
     // صف "الإجمالي" في كروت الصفحة 2 - the "الإجمالي" (total) rows on page 2
     page2: {
       totalFontSize: 26, // حجم رقم "الإجمالي" تحت كل كارت - card total number font size
+      minTotalFontSize: 18, // أصغر حجم لرقم الإجمالي لو مش واخد مكانه - smallest total number size when it doesn't fit
       totalLabelFontSize: 16, // حجم كلمة "الإجمالي" - "الإجمالي" label font size
       totalUnitFontSize: 14, // حجم وحدة القياس جنب الإجمالي (باكت/طن/شكارة) - unit next to the total
       sectionTotalFontSize: 24, // حجم رقم "إجمالي الخشب" فوق قسم الخشب - wood grand total font size
@@ -426,6 +428,10 @@ export const dashboardConfig = {
   // ============================================================
 
   page2: {
+    // إظهار سطر "الحد الأدنى" لما يكون 0 (false = يظهر بس لو فيه حد أدنى متحدد)
+    // Show the "الحد الأدنى" line when the minimum is 0 (false = only when a real minimum is set)
+    showZeroMinimum: false,
+
     // لون كل قسم: الخط الجانبي والأيقونة والخلفية الخفيفة وإطار الكروت ورقم الإجمالي
     // Each section's accent color: side bar, icon, faint background, card borders and total numbers
     // اكتب اللون بالشكل ده "#RRGGBB" - use the "#RRGGBB" format
