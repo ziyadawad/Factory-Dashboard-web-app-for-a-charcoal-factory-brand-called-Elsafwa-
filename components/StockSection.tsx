@@ -1,8 +1,8 @@
 "use client";
 
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Stock, StockVariant, WoodType } from "@/lib/types";
-import { AlertTriangle, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
+import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
+import { AlertTriangle, Box, Boxes, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -43,6 +43,11 @@ function woodVariants(type: WoodType): StockVariant[] {
     }));
   }
   return [{ label: "الرصيد", quantity: type.quantity ?? 0, minimumThreshold: type.minimumThreshold ?? 0 }];
+}
+
+// مادة التعبئة كنوع واحد من غير اسم (الاسم فوق في الكارت) - packaging item as one unnamed type
+function packagingVariants(item: PackagingItem): StockVariant[] {
+  return [{ label: "", quantity: item.quantity, minimumThreshold: item.minimumThreshold }];
 }
 
 // نوع واحد جوه الكارت (عادي، كامل، ناعم، خشن...) - one type inside a card
@@ -283,6 +288,7 @@ function VariantsCard({
 // كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
 function SectionCard({
   title,
+  group,
   icon: Icon,
   accent,
   extra,
@@ -290,6 +296,8 @@ function SectionCard({
   children,
 }: {
   title: string;
+  // اسم المجموعة قبل العنوان (زي "المواد الخام") - optional group label shown before the title
+  group?: string;
   icon: LucideIcon;
   accent: string;
   extra?: ReactNode;
@@ -307,6 +315,19 @@ function SectionCard({
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
         <div className="flex items-center gap-2">
           <Icon className="shrink-0" style={{ color: accent }} size={sizes.sectionTitleFontSize + 2} />
+          {group && (
+            <>
+              <span
+                className="font-semibold whitespace-nowrap"
+                style={{ fontSize: `${sizes.sectionGroupFontSize}px`, color: accent }}
+              >
+                {group}
+              </span>
+              <span className="text-gray-500" style={{ fontSize: `${sizes.sectionGroupFontSize}px` }}>
+                ·
+              </span>
+            </>
+          )}
           <h2
             className="font-bold text-white whitespace-nowrap leading-tight"
             style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}
@@ -331,16 +352,19 @@ export default function StockSection({ data, className }: StockSectionProps) {
   const totalSizes = dashboardConfig.sizes.page2;
   const colors = dashboardConfig.page2.colors;
   const rows = sizes.rowHeights;
-  const woodTotal = data.wood.types.reduce((sum, type) => sum + sumQuantities(woodVariants(type)), 0);
+  const middle = sizes.middleColumns;
+  const { wood, packaging } = data.rawMaterials;
+  const woodTotal = wood.types.reduce((sum, type) => sum + sumQuantities(woodVariants(type)), 0);
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
 
   return (
     <div
       className={`grid gap-4 ${className ?? ""}`}
       style={{
-        gridTemplateRows: `minmax(0,${rows.packaged}fr) minmax(0,${rows.wood}fr) minmax(0,${rows.sacks}fr)`,
+        gridTemplateRows: `minmax(0,${rows.packaged}fr) minmax(0,${rows.middle}fr) minmax(0,${rows.wood}fr)`,
       }}
     >
+      {/* الصف الأول: المنتجات المعبأة - row 1: packaged products */}
       <SectionCard title="المنتجات المعبأة" icon={Package} accent={colors.packaged} columns={data.packaged.length}>
         {data.packaged.map((product) => (
           <VariantsCard
@@ -355,46 +379,77 @@ export default function StockSection({ data, className }: StockSectionProps) {
         ))}
       </SectionCard>
 
+      {/* الصف التاني: الشكاير (يمين) ومواد التعبئة (شمال) - row 2: sacks (right) + packaging (left) */}
+      <div
+        className="min-h-0 grid gap-4"
+        style={{
+          gridTemplateColumns: `minmax(0,${middle.sacks}fr) minmax(0,${middle.packaging}fr)`,
+          gridTemplateRows: "minmax(0,1fr)",
+        }}
+      >
+        <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={data.sacks.length}>
+          {data.sacks.map((sack) => (
+            <VariantsCard
+              key={sack.id}
+              name={sack.name}
+              unit={sack.unit}
+              icon={sack.icon}
+              variants={sack.variants}
+              accent={colors.sacks}
+            />
+          ))}
+        </SectionCard>
+
+        <SectionCard
+          title="مواد التعبئة"
+          group="المواد الخام"
+          icon={Boxes}
+          accent={colors.rawMaterials}
+          columns={packaging.length}
+        >
+          {packaging.map((item) => (
+            <VariantsCard
+              key={item.id}
+              name={item.name}
+              unit={item.unit}
+              icon={<Box className="w-7 h-7" style={{ color: colors.rawMaterials }} />}
+              variants={packagingVariants(item)}
+              accent={colors.rawMaterials}
+              showTotal={false}
+            />
+          ))}
+        </SectionCard>
+      </div>
+
+      {/* الصف التالت: الأخشاب - row 3: wood */}
       <SectionCard
-        title="أرصدة الخشب"
+        title="الأخشاب"
+        group="المواد الخام"
         icon={TreePine}
-        accent={colors.wood}
-        columns={data.wood.types.length}
+        accent={colors.rawMaterials}
+        columns={wood.types.length}
         extra={
           <p className="text-gray-300 font-semibold whitespace-nowrap leading-none" style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}>
             إجمالي الخشب:{" "}
             <span
               className="font-extrabold tabular-nums"
-              style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.wood }}
+              style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.rawMaterials }}
             >
               {formatNumber(woodTotalCount)}
             </span>{" "}
-            {data.wood.unit}
+            {wood.unit}
           </p>
         }
       >
-        {data.wood.types.map((type) => (
+        {wood.types.map((type) => (
           <VariantsCard
             key={type.id}
             name={type.name}
-            unit={data.wood.unit}
+            unit={wood.unit}
             icon={<Trees className="w-8 h-8 text-brandOrange" />}
             variants={woodVariants(type)}
-            accent={colors.wood}
+            accent={colors.rawMaterials}
             showTotal={!!type.subTypes}
-          />
-        ))}
-      </SectionCard>
-
-      <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={data.sacks.length}>
-        {data.sacks.map((sack) => (
-          <VariantsCard
-            key={sack.id}
-            name={sack.name}
-            unit={sack.unit}
-            icon={sack.icon}
-            variants={sack.variants}
-            accent={colors.sacks}
           />
         ))}
       </SectionCard>

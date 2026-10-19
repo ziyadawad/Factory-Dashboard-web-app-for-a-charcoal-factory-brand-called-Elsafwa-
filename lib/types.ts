@@ -54,10 +54,25 @@ export interface SackItem {
   variants: StockVariant[];
 }
 
+// مادة تعبئة (بلاستيك، رولات، أكياس...) - packaging material, one quantity each
+export interface PackagingItem {
+  id: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  minimumThreshold: number;
+}
+
+// المواد الخام: الأخشاب ومواد التعبئة - raw materials: wood + packaging materials
+export interface RawMaterials {
+  wood: Wood;
+  packaging: PackagingItem[];
+}
+
 export interface Stock {
   packaged: PackagedProduct[];
-  wood: Wood;
   sacks: SackItem[];
+  rawMaterials: RawMaterials;
 }
 
 export interface Kiln {

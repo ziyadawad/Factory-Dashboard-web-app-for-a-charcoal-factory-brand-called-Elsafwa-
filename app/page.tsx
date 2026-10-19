@@ -164,6 +164,8 @@ export default function Dashboard() {
         lastUpdate={lastUpdate}
         isConnected={isConnected}
         page={PAGES[pageIndex]}
+        pageNumber={pageIndex + 1}
+        pageCount={PAGES.length}
         nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} />}
       />
 

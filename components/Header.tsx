@@ -12,6 +12,9 @@ interface HeaderProps {
   nav?: ReactNode;
   // الصفحة الحالية (اسمها بيظهر في نص الهيدر) - current page, its title is shown in the header center
   page?: { id: string; title: string };
+  // رقم الصفحة الحالية (من 1) وعدد الصفحات - current page number (1-based) and page count
+  pageNumber?: number;
+  pageCount?: number;
 }
 
 // أيقونة كل صفحة حسب الـ id بتاعها - icon for each page id
@@ -20,7 +23,7 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
   stock: Warehouse,
 };
 
-export default function Header({ lastUpdate, isConnected, nav, page }: HeaderProps) {
+export default function Header({ lastUpdate, isConnected, nav, page, pageNumber, pageCount }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -110,16 +113,21 @@ export default function Header({ lastUpdate, isConnected, nav, page }: HeaderPro
     <header className="relative shrink-0 bg-card border-b border-cardBorder px-6 py-3 flex items-center justify-between">
       {/* اسم الصفحة الحالية في النص (مش بيزود ارتفاع الهيدر) - current page title, centered without adding height */}
       {page && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 bg-background border border-cardBorder rounded-full px-4 py-1.5 pointer-events-none">
-          {PageIcon && (
-            <PageIcon className="text-brandOrange shrink-0" size={sizes.pageTitleFontSize + 2} />
-          )}
-          <span
-            className="font-semibold text-white whitespace-nowrap leading-none"
-            style={{ fontSize: `${sizes.pageTitleFontSize}px` }}
-          >
-            {page.title}
-          </span>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3 bg-background border border-brandOrange/50 shadow-[0_0_14px_rgba(255,122,0,0.35)] rounded-full px-6 py-1 pointer-events-none">
+          {PageIcon && <PageIcon className="text-brandOrange shrink-0" size={sizes.pageTitleIconSize} />}
+          <div className="flex flex-col items-center">
+            <span
+              className="font-extrabold whitespace-nowrap leading-tight bg-gradient-to-l from-brandYellow to-brandOrange bg-clip-text text-transparent"
+              style={{ fontSize: `${sizes.pageTitleFontSize}px` }}
+            >
+              {page.title}
+            </span>
+            {pageNumber && pageCount && (
+              <span className="text-gray-400 whitespace-nowrap leading-none" style={{ fontSize: `${sizes.pageCounterFontSize}px` }}>
+                صفحة {pageNumber} من {pageCount}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

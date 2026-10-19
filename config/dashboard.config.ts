@@ -168,8 +168,8 @@ export const dashboardConfig = {
     },
 
     // ============================================================
-    // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والخشب والشكاير
-    // Stock (page 2) - packaged products, wood and sacks
+    // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)
+    // Stock (page 2) - packaged products, sacks and raw materials (wood + packaging)
     // كل الإجماليات بتتحسب لوحدها - every total is calculated automatically
     // minimum = الحد الأدنى: لو أكبر من 0 والكمية وصلته أو أقل، الرقم بيقلب أحمر ويكتب "منخفض" والكارت بيبقى إطاره أحمر
     // minimum: if > 0 and quantity <= minimum, the number turns red ("منخفض") and the card gets a red border
@@ -226,24 +226,40 @@ export const dashboardConfig = {
         },
       ],
 
-      // أرصدة الخشب - كل نوع ليه رقم واحد، أو متقسم أنواع فرعية (subTypes) وإجماليه = مجموعهم
-      // Wood balances - each type has one number, or is split into subTypes (its total = their sum)
-      wood: {
-        unit: "طن", // وحدة القياس - unit
-        types: [
-          { name: "برتقال", quantity: 120, minimum: 0 }, // name = النوع، quantity = الكمية، minimum = الحد الأدنى
-          { name: "مانجو", quantity: 80, minimum: 0 },
-          { name: "جوافة", quantity: 45, minimum: 0 },
-          {
-            name: "بلدي",
-            // الأنواع الفرعية للبلدي - بلدي sub-types (بلدي total = their sum)
-            subTypes: [
-              { name: "كازوارينا", quantity: 60, minimum: 0 },
-              { name: "توت", quantity: 30, minimum: 0 },
-              { name: "زيتون", quantity: 25, minimum: 0 },
-            ],
-          },
-          { name: "بيت نار", quantity: 40, minimum: 0 },
+      // المواد الخام - الأخشاب ومواد التعبئة (بيظهروا بنفس اللون البني عشان يبانوا مجموعة واحدة)
+      // Raw materials - wood and packaging materials (shown in the same brown color as one group)
+      rawMaterials: {
+        // أرصدة الخشب - كل نوع ليه رقم واحد، أو متقسم أنواع فرعية (subTypes) وإجماليه = مجموعهم
+        // Wood balances - each type has one number, or is split into subTypes (its total = their sum)
+        wood: {
+          unit: "طن", // وحدة القياس - unit
+          types: [
+            { name: "برتقال", quantity: 120, minimum: 0 }, // name = النوع، quantity = الكمية، minimum = الحد الأدنى
+            { name: "مانجو", quantity: 80, minimum: 0 },
+            { name: "جوافة", quantity: 45, minimum: 0 },
+            {
+              name: "بلدي",
+              // الأنواع الفرعية للبلدي - بلدي sub-types (بلدي total = their sum)
+              subTypes: [
+                { name: "كازوارينا", quantity: 60, minimum: 0 },
+                { name: "توت", quantity: 30, minimum: 0 },
+                { name: "زيتون", quantity: 25, minimum: 0 },
+              ],
+            },
+            { name: "بيت نار", quantity: 40, minimum: 0 },
+          ],
+        },
+
+        // مواد التعبئة - كل مادة ليها رقم واحد، تقدر تزود مادة جديدة بسطر جديد
+        // Packaging materials - one number each; add a material by adding a line
+        // name = اسم المادة، quantity = الكمية، unit = وحدة القياس، minimum = الحد الأدنى
+        packaging: [
+          { name: "بلاستيك", quantity: 850, unit: "كجم", minimum: 0 },
+          { name: "رولات ربع", quantity: 40, unit: "رول", minimum: 0 },
+          { name: "رولات نص", quantity: 35, unit: "رول", minimum: 0 },
+          { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0 },
+          { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0 },
+          { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0 },
         ],
       },
 
@@ -293,7 +309,9 @@ export const dashboardConfig = {
       titleFontSize: 24, // حجم عنوان "لوحة متابعة المصنع" - title font size
       subtitleFontSize: 14, // حجم كلمة "الصفوة" - subtitle font size
       clockFontSize: 30, // حجم الساعة - clock font size
-      pageTitleFontSize: 16, // حجم اسم الصفحة الحالية في نص الهيدر - current page title (header center) font size
+      pageTitleFontSize: 28, // حجم اسم الصفحة الحالية في نص الهيدر - current page title (header center) font size
+      pageTitleIconSize: 28, // حجم أيقونة اسم الصفحة - current page title icon size
+      pageCounterFontSize: 11, // حجم "صفحة 1 من 2" تحت اسم الصفحة - "page X of Y" font size under the title
     },
 
     // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)
@@ -369,10 +387,16 @@ export const dashboardConfig = {
     stockPage: {
       // ارتفاع كل قسم بالنسبة للتانيين - each section's height relative to the others
       rowHeights: {
-        packaged: 1.1, // المنتجات المعبأة - packaged products
-        wood: 1, // أرصدة الخشب - wood balances
-        sacks: 1, // الشكاير - sacks
+        packaged: 1.1, // الصف الأول: المنتجات المعبأة - row 1: packaged products
+        middle: 1, // الصف التاني: الشكاير ومواد التعبئة - row 2: sacks + packaging materials
+        wood: 1, // الصف التالت: الأخشاب - row 3: wood
       },
+      // عرض الشكاير ومواد التعبئة في الصف التاني (نسب من عرض الصف) - row 2 widths (ratios)
+      middleColumns: {
+        sacks: 45, // الشكاير (على اليمين) - sacks (right)
+        packaging: 55, // مواد التعبئة (على الشمال) - packaging materials (left)
+      },
+      sectionGroupFontSize: 16, // حجم كلمة "المواد الخام" جنب عنوان القسم - "المواد الخام" group label font size
       sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
       imageWidth: 44, // عرض صورة المنتج - product image width
       imageHeight: 44, // ارتفاع صورة المنتج - product image height
@@ -403,8 +427,8 @@ export const dashboardConfig = {
     // اكتب اللون بالشكل ده "#RRGGBB" - use the "#RRGGBB" format
     colors: {
       packaged: "#FF7A00", // المنتجات المعبأة (برتقالي) - packaged products (orange)
-      wood: "#C8873A", // أرصدة الخشب (بني خشبي) - wood balances (wood brown)
-      sacks: "#2F80ED", // الشكاير (أزرق) - sacks (blue)
+      sacks: "#10B981", // الشكاير (أخضر زمردي) - sacks (emerald green)
+      rawMaterials: "#C8873A", // المواد الخام: الأخشاب ومواد التعبئة (بني خشبي) - raw materials: wood + packaging (wood brown)
     },
   },
 };

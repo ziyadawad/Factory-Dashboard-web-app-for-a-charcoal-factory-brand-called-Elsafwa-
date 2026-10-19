@@ -1,4 +1,4 @@
-import { DashboardData } from "./types";
+import { DashboardData, Stock, Wood } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 // Replace this function with the real factory system call
@@ -9,13 +9,23 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // group is { label, total, presentNames } - present count is presentNames.length
 // treasury is { balance, incomingToday, outgoingToday } - today's change is calculated in the UI
 // batches is { unit, list: [{ kiln, type, weight, time: "HH:MM" }] } - totals are calculated in the UI
-// stock is { packaged, wood, sacks } in display order (every total is calculated in the UI):
+// stock is { packaged, sacks, rawMaterials } (every total is calculated in the UI):
 // - packaged: [{ id, name, unit, image?, variants: [{ label, quantity, minimumThreshold }] }]
-// - wood: { unit, types: [{ id, name, quantity, minimumThreshold } or { id, name, subTypes: [{ name, quantity, minimumThreshold }] }] }
 // - sacks: [{ id, name, unit, icon?, variants: [{ label, quantity, minimumThreshold }] }]
+// - rawMaterials: { wood, packaging }
+//   - wood: { unit, types: [{ id, name, quantity, minimumThreshold } or { id, name, subTypes: [{ name, quantity, minimumThreshold }] }] }
+//   - packaging: [{ id, name, unit, quantity, minimumThreshold }]
+// The old shape with stock.wood (and no rawMaterials) is still accepted - see normalizeStock
 // { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
 function toVariant(variant: { label: string; quantity: number; minimum: number }) {
   return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
+}
+
+// الشكل القديم كان فيه stock.wood بدل rawMaterials - the old API shape had stock.wood instead of rawMaterials
+function normalizeStock(stock: Stock & { wood?: Wood }): Stock {
+  if (stock.rawMaterials) return stock;
+  const { wood, ...rest } = stock;
+  return { ...rest, rawMaterials: { wood: wood ?? { unit: "", types: [] }, packaging: [] } };
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -36,7 +46,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         throw new Error(`API request failed: ${response.statusText}`);
       }
 
-      return await response.json();
+      const apiData: DashboardData = await response.json();
+      return { ...apiData, stock: normalizeStock(apiData.stock) };
     } catch (error) {
       console.error("Error fetching from factory API:", error);
       // Fall back to config data if API fails
@@ -45,6 +56,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   // Return data from config file
   const config = dashboardConfig.data;
+  const rawMaterials = config.stock.rawMaterials;
 
   // Calculate kiln counts from the list
   const workingCount = config.kilns.filter((k) => k.status === "working").length;
@@ -66,22 +78,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         image: product.image,
         variants: product.variants.map(toVariant),
       })),
-      wood: {
-        unit: config.stock.wood.unit,
-        types: config.stock.wood.types.map((type, index) => ({
-          id: `wood-${index + 1}`,
-          name: type.name,
-          ...(type.subTypes
-            ? {
-                subTypes: type.subTypes.map((sub) => ({
-                  name: sub.name,
-                  quantity: sub.quantity,
-                  minimumThreshold: sub.minimum,
-                })),
-              }
-            : { quantity: type.quantity, minimumThreshold: type.minimum }),
-        })),
-      },
       sacks: config.stock.sacks.map((sack, index) => ({
         id: ["orange", "mango", "casuarina"][index] ?? `sack-${index + 1}`,
         name: sack.name,
@@ -89,6 +85,31 @@ export async function getDashboardData(): Promise<DashboardData> {
         variants: sack.variants.map(toVariant),
         icon: ["🍊", "🥭", "🌲"][index],
       })),
+      rawMaterials: {
+        wood: {
+          unit: rawMaterials.wood.unit,
+          types: rawMaterials.wood.types.map((type, index) => ({
+            id: `wood-${index + 1}`,
+            name: type.name,
+            ...(type.subTypes
+              ? {
+                  subTypes: type.subTypes.map((sub) => ({
+                    name: sub.name,
+                    quantity: sub.quantity,
+                    minimumThreshold: sub.minimum,
+                  })),
+                }
+              : { quantity: type.quantity, minimumThreshold: type.minimum }),
+          })),
+        },
+        packaging: rawMaterials.packaging.map((item, index) => ({
+          id: `packaging-${index + 1}`,
+          name: item.name,
+          unit: item.unit,
+          quantity: item.quantity,
+          minimumThreshold: item.minimum,
+        })),
+      },
     },
     kilns: {
       working: workingCount,
