@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -8,9 +8,11 @@ import { dashboardConfig } from "@/config/dashboard.config";
 interface HeaderProps {
   lastUpdate: string | null;
   isConnected: boolean;
+  // أزرار التنقل بين الصفحات (بتظهر في أقصى الشمال) - page navigation, shown at the far left
+  nav?: ReactNode;
 }
 
-export default function Header({ lastUpdate, isConnected }: HeaderProps) {
+export default function Header({ lastUpdate, isConnected, nav }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -151,6 +153,8 @@ export default function Header({ lastUpdate, isConnected }: HeaderProps) {
             <Maximize2 className="w-5 h-5 text-gray-300" />
           </button>
         )}
+
+        {nav}
       </div>
     </header>
   );

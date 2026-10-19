@@ -3,6 +3,21 @@
 
 export const dashboardConfig = {
   // ============================================================
+  // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
+  // Pages - the dashboard has several pages (arrows at the top-left of the header or keyboard arrows)
+  // ============================================================
+
+  pages: {
+    autoRotateSeconds: 0, // كل كام ثانية الصفحة تتقلب لوحدها (0 = مقفول) - auto switch every N seconds (0 = off)
+    // ترتيب الصفحات - عشان تفتح صفحة معينة على التلفزيون اكتب في اللينك ?page=2
+    // Page order - open a specific page directly with ?page=2 in the URL
+    list: [
+      { id: "main", title: "الرئيسية" }, // الصفحة 1: الخزنة والحضور والأفران - page 1
+      { id: "stock", title: "رصيد المخازن" }, // الصفحة 2: المخازن - page 2
+    ],
+  },
+
+  // ============================================================
   // الجزء الأول: البيانات (الأرقام اللي بتظهر على الشاشة)
   // Part 1: DATA (the numbers shown on the screen)
   // ============================================================
@@ -172,11 +187,17 @@ export const dashboardConfig = {
       clockFontSize: 30, // حجم الساعة - clock font size
     },
 
+    // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)
+    pageNav: {
+      iconSize: 18, // حجم سهم التالي/السابق - next/previous arrow size
+      titleFontSize: 12, // حجم اسم الصفحة الحالية - current page name font size
+      dotSize: 7, // حجم النقط اللي بتوضح الصفحة الحالية - page indicator dot size
+      fadeMs: 500, // مدة الاختفاء/الظهور بين الصفحات بالملي ثانية - fade duration between pages (ms)
+    },
+
     // الكروت - البطاقات اللي بتظهر البيانات
     // Cards - the cards showing data
     cards: {
-      topRowHeight: "1.2fr", // ارتفاع الصف العلوي بالنسبة للصف السفلي - top row height relative to bottom row
-      warehouseHeight: "1fr", // ارتفاع قسم المخزن - warehouse section height
       cardPadding: 16, // المسافة داخل البطاقة من الحواف - padding inside card
       gap: 16, // المسافة بين البطاقات - gap between cards
       borderRadius: 16, // تقويس حواف البطاقة - card border radius
