@@ -4,8 +4,11 @@ import { dashboardConfig } from "@/config/dashboard.config";
 // Replace this function with the real factory system call
 // If FACTORY_API_URL is set in environment variables, fetch from the real system
 // Otherwise, return data from config file
-// The API must return floorWorkers as { production, packing, saw, drivers },
-// each { label, total, presentNames } - present count is presentNames.length
+// The API must return floorWorkers as { productionFactory, packing, saw, drivers },
+// where productionFactory is { label, groups: { production, workshop, operators } } and every
+// group is { label, total, presentNames } - present count is presentNames.length
+// treasury is { balance, incomingToday, outgoingToday } - today's change is calculated in the UI
+// batches is { unit, list: [{ kiln, type, weight, time: "HH:MM" }] } - totals are calculated in the UI
 // stock.products must be in display order: quarter, half, kilo, 2kg, 3kg
 // stock.sacks must be in display order: orange, mango, casuarina,
 // each { id, name, unit, icon?, fine: { quantity, minimumThreshold }, coarse: { quantity, minimumThreshold } }
@@ -79,14 +82,26 @@ export async function getDashboardData(): Promise<DashboardData> {
       })),
     },
     floorWorkers: {
-      production: { ...config.workers.production },
+      productionFactory: {
+        label: config.workers.productionFactory.label,
+        groups: {
+          production: { ...config.workers.productionFactory.groups.production },
+          workshop: { ...config.workers.productionFactory.groups.workshop },
+          operators: { ...config.workers.productionFactory.groups.operators },
+        },
+      },
       packing: { ...config.workers.packing },
       saw: { ...config.workers.saw },
       drivers: { ...config.workers.drivers },
     },
     treasury: {
       balance: config.treasury.balance,
-      todayChange: config.treasury.todayChange,
+      incomingToday: config.treasury.incomingToday,
+      outgoingToday: config.treasury.outgoingToday,
+    },
+    batches: {
+      unit: config.batches.unit,
+      list: config.batches.list.map((batch) => ({ ...batch })),
     },
     updatedAt: new Date().toISOString(),
   };

@@ -23,11 +23,13 @@ export const dashboardConfig = {
   // ============================================================
 
   data: {
-    // رصيد الخزنة - الباقي في الخزنة والتغيير في اليوم
-    // Treasury balance - money in treasury and today's change
+    // رصيد الخزنة - الباقي في الخزنة والوارد والمنصرف النهارده
+    // Treasury balance - money in treasury plus today's incoming / outgoing
+    // تغيير اليوم = الوارد − المنصرف (بيتحسب لوحده) - today's change = incoming − outgoing (calculated)
     treasury: {
       balance: 316178, // الرصيد الحالي بالجنيه - current balance in EGP
-      todayChange: 0, // التغيير في اليوم (موجب للزيادة، سالب للنقصان) - today's change (positive for increase, negative for decrease)
+      incomingToday: 25000, // الوارد النهارده بالجنيه - money in today (EGP)
+      outgoingToday: 10000, // المنصرف النهارده بالجنيه - money out today (EGP)
     },
 
     // حضور الإدارة - العمال في الإدارة
@@ -46,22 +48,50 @@ export const dashboardConfig = {
     // عدد الحاضرين في كل قسم = عدد الأسماء في presentNames (بيتحسب لوحده، متكتبوش بإيدك)
     // Present count of each group = presentNames.length (calculated automatically)
     workers: {
-      production: {
-        // عمال الإنتاج - production workers
-        label: "عمال إنتاج", // اسم المجموعة - group name
-        total: 9, // الإجمالي المسجل في القسم - total registered in department
-        presentNames: [
-          // أسماء العمال الحاضرين - names of present workers
-          "الطيب",
-          "شعبان",
-          "محمود عابدين",
-          "فايز زكى",
-          "عبدالناصر",
-          " احمد حمدى ",
-          "محمد حسين",
-          "محمد الطيب",
-          " حسن فضيل",
-        ],
+      // مصنع الإنتاج - متقسم 3 مجموعات، والرقم اللي في عنوانه = مجموع التلاتة (بيتحسب لوحده)
+      // Production factory - split into 3 sub-groups; its header shows their sum (calculated)
+      productionFactory: {
+        label: "مصنع إنتاج", // اسم القسم الكبير - section name
+        groups: {
+          production: {
+            // عمال الإنتاج - production workers
+            label: "عمال إنتاج", // اسم المجموعة - group name
+            total: 9, // الإجمالي المسجل في المجموعة - total registered
+            presentNames: [
+              // أسماء العمال الحاضرين - names of present workers
+              "الطيب",
+              "شعبان",
+              "محمود عابدين",
+              "فايز زكى",
+              "عبدالناصر",
+              " احمد حمدى ",
+              "محمد حسين",
+              "محمد الطيب",
+              " حسن فضيل",
+            ],
+          },
+          workshop: {
+            // الورشة - workshop workers
+            label: "ورشة", // اسم المجموعة - group name
+            total: 4, // الإجمالي المسجل في المجموعة - total registered
+            presentNames: [
+              // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
+              "سيد",
+              "كريم",
+              "ياسر",
+            ],
+          },
+          operators: {
+            // الأوبريتر - machine operators
+            label: "أوبريتر", // اسم المجموعة - group name
+            total: 3, // الإجمالي المسجل في المجموعة - total registered
+            presentNames: [
+              // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
+              "مصطفى",
+              "عادل",
+            ],
+          },
+        },
       },
       packing: {
         // عمال التعبئة - packing workers
@@ -117,6 +147,24 @@ export const dashboardConfig = {
       { name: "فرن 5", status: "working" as const },
       { name: "فرن 6", status: "stopped" as const },
     ],
+
+    // الطرحات اليوم - كل طرحة طلعت من فرن النهارده (بتظهر تحت الأفران في الصفحة الرئيسية)
+    // Today's batches - every batch out of a kiln today (shown under the kilns card)
+    // الإجمالي وعدد الطرحات ووزن كل نوع بيتحسبوا لوحدهم - totals are calculated automatically
+    // الترتيب مش مهم - الأحدث بيظهر الأول حسب الوقت - order doesn't matter, newest time shows first
+    batches: {
+      unit: "طن", // وحدة الوزن - weight unit
+      list: [
+        // kiln = اسم الفرن (لازم يبقى زي اسمه في الأفران عشان لون الحالة)، type = نوع الخشب، weight = الوزن، time = الوقت (24 ساعة)
+        // kiln = kiln name (must match the kilns list for the status color), type = wood type, weight, time (24h "HH:MM")
+        { kiln: "فرن 1", type: "برتقال", weight: 2.5, time: "08:30" },
+        { kiln: "فرن 2", type: "مانجو", weight: 1.8, time: "10:15" },
+        { kiln: "فرن 5", type: "برتقال", weight: 2.2, time: "11:00" },
+        { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
+        { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
+        { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
+      ],
+    },
 
     // المخزون - المنتجات والشكاير
     // Stock - products and sacks
@@ -216,6 +264,8 @@ export const dashboardConfig = {
     // Treasury - treasury balance card
     treasury: {
       numberFontSize: 48, // حجم الرقم الكبير اللي بي الباقي - big number font size
+      flowNumberFontSize: 20, // حجم رقم الوارد والمنصرف - incoming / outgoing number font size
+      flowLabelFontSize: 13, // حجم كلمة "وارد اليوم" و "منصرف اليوم" - incoming / outgoing label font size
     },
 
     // الحضور - بطاقة حضور الإدارة مع الدونت
@@ -234,6 +284,8 @@ export const dashboardConfig = {
       groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
       nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
       minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
+      subGroupTitleFontSize: 14, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
+      factoryRowHeight: 1.2, // ارتفاع صف مصنع الإنتاج بالنسبة لصف باقي الأقسام - factory row height vs the other groups' row
     },
 
     // الأفران - بطاقة الأفران
@@ -241,6 +293,15 @@ export const dashboardConfig = {
     kilns: {
       countFontSize: 30, // حجم أرقام الأعداد (شغالة/صيانة/متوقفة) - font size for count numbers
       kilnChipHeight: 32, // ارتفاع شريحة الفرن - kiln chip height
+    },
+
+    // الطرحات اليوم - بطاقة الطرحات تحت الأفران
+    // Today's batches - batches card under the kilns
+    batches: {
+      totalFontSize: 24, // حجم رقم إجمالي الوزن وعدد الطرحات - total weight / batch count font size
+      typeChipFontSize: 12, // حجم شرايح وزن كل نوع - per-type weight chip font size
+      rowFontSize: 14, // حجم الكلام في صفوف الجدول - table row font size
+      rowHeight: 34, // ارتفاع كل صف في الجدول (بالبكسل) - height of each table row (px)
     },
 
     // المنتجات - بطاقات المنتجات في المخزن

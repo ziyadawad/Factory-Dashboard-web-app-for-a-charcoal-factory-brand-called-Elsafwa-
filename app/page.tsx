@@ -9,6 +9,7 @@ import KilnsSection from "@/components/KilnsSection";
 import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
+import BatchesSection from "@/components/BatchesSection";
 import { DashboardData } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -95,6 +96,12 @@ export default function Dashboard() {
         setTimeout(() => setFlashSection(null), 500);
       }
 
+      // Check for changes in today's batches
+      if (JSON.stringify(data.batches) !== JSON.stringify(prev.batches)) {
+        setFlashSection("batches");
+        setTimeout(() => setFlashSection(null), 500);
+      }
+
       // Check for changes in kilns
       if (JSON.stringify(data.kilns.kilns) !== JSON.stringify(prev.kilns.kilns)) {
         setFlashSection("kilns");
@@ -133,8 +140,14 @@ export default function Dashboard() {
             <div className={flashClass("floorWorkers")}>
               <FloorWorkersSection data={data.floorWorkers} />
             </div>
-            <div className={flashClass("kilns")}>
-              <KilnsSection data={data.kilns} />
+            {/* الأفران وتحتها الطرحات اليوم - kilns with today's batches below */}
+            <div className="min-h-0 flex flex-col gap-4">
+              <div className={`shrink-0 ${flashClass("kilns")}`}>
+                <KilnsSection data={data.kilns} />
+              </div>
+              <div className={`flex-1 ${flashClass("batches")}`}>
+                <BatchesSection data={data.batches} kilns={data.kilns.kilns} />
+              </div>
             </div>
           </div>
         );

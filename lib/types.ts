@@ -59,16 +59,41 @@ export interface WorkerGroup {
   presentNames: string[];
 }
 
+// مصنع الإنتاج: 3 مجموعات - production factory with 3 sub-groups (its total = their sum)
+export interface ProductionFactory {
+  label: string;
+  groups: {
+    production: WorkerGroup; // عمال إنتاج
+    workshop: WorkerGroup; // ورشة
+    operators: WorkerGroup; // أوبريتر
+  };
+}
+
 export interface FloorWorkers {
-  production: WorkerGroup;
+  productionFactory: ProductionFactory;
   packing: WorkerGroup;
   saw: WorkerGroup;
   drivers: WorkerGroup;
 }
 
+// تغيير اليوم = incomingToday - outgoingToday (calculated in the UI)
 export interface Treasury {
   balance: number;
-  todayChange?: number;
+  incomingToday: number; // وارد اليوم
+  outgoingToday: number; // منصرف اليوم
+}
+
+// طرحة واحدة من فرن - one kiln batch; totals are calculated in the UI
+export interface Batch {
+  kiln: string; // must match a Kiln.name for the status color
+  type: string;
+  weight: number;
+  time: string; // "HH:MM" 24h
+}
+
+export interface Batches {
+  unit: string;
+  list: Batch[];
 }
 
 export interface DashboardData {
@@ -77,5 +102,6 @@ export interface DashboardData {
   kilns: Kilns;
   floorWorkers: FloorWorkers;
   treasury: Treasury;
+  batches: Batches;
   updatedAt: string;
 }
