@@ -9,11 +9,12 @@ export const dashboardConfig = {
 
   pages: {
     autoRotateSeconds: 0, // كل كام ثانية الصفحة تتقلب لوحدها (0 = مقفول) - auto switch every N seconds (0 = off)
+    // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
     // ترتيب الصفحات - عشان تفتح صفحة معينة على التلفزيون اكتب في اللينك ?page=2
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
       { id: "main", title: "الرئيسية" }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "رصيد المخازن" }, // الصفحة 2: المخازن - page 2
+      { id: "stock", title: "أرصدة المخازن" }, // الصفحة 2: المخازن - page 2
     ],
   },
 
@@ -292,6 +293,7 @@ export const dashboardConfig = {
       titleFontSize: 24, // حجم عنوان "لوحة متابعة المصنع" - title font size
       subtitleFontSize: 14, // حجم كلمة "الصفوة" - subtitle font size
       clockFontSize: 30, // حجم الساعة - clock font size
+      pageTitleFontSize: 16, // حجم اسم الصفحة الحالية في نص الهيدر - current page title (header center) font size
     },
 
     // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)
@@ -371,8 +373,7 @@ export const dashboardConfig = {
         wood: 1, // أرصدة الخشب - wood balances
         sacks: 1, // الشكاير - sacks
       },
-      sectionTitleFontSize: 20, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
-      sectionTotalFontSize: 20, // حجم رقم "إجمالي الخشب" - wood grand total font size
+      sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
       imageWidth: 44, // عرض صورة المنتج - product image width
       imageHeight: 44, // ارتفاع صورة المنتج - product image height
       nameFontSize: 18, // حجم اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name font size
@@ -380,7 +381,30 @@ export const dashboardConfig = {
       numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد المساحة) - quantity font size (auto-shrinks to fit)
       minNumberFontSize: 16, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
       unitFontSize: 12, // حجم وحدة القياس (باكت/طن/شكارة) - unit font size
-      totalFontSize: 16, // حجم رقم "الإجمالي" تحت كل كارت - card total row font size
+    },
+
+    // صف "الإجمالي" في كروت الصفحة 2 - the "الإجمالي" (total) rows on page 2
+    page2: {
+      totalFontSize: 26, // حجم رقم "الإجمالي" تحت كل كارت - card total number font size
+      totalLabelFontSize: 16, // حجم كلمة "الإجمالي" - "الإجمالي" label font size
+      totalUnitFontSize: 14, // حجم وحدة القياس جنب الإجمالي (باكت/طن/شكارة) - unit next to the total
+      sectionTotalFontSize: 24, // حجم رقم "إجمالي الخشب" فوق قسم الخشب - wood grand total font size
+    },
+  },
+
+  // ============================================================
+  // الجزء التالت: ألوان الصفحة 2 (رصيد المخازن)
+  // Part 3: page 2 (stock) colors
+  // ============================================================
+
+  page2: {
+    // لون كل قسم: الخط الجانبي والأيقونة والخلفية الخفيفة وإطار الكروت ورقم الإجمالي
+    // Each section's accent color: side bar, icon, faint background, card borders and total numbers
+    // اكتب اللون بالشكل ده "#RRGGBB" - use the "#RRGGBB" format
+    colors: {
+      packaged: "#FF7A00", // المنتجات المعبأة (برتقالي) - packaged products (orange)
+      wood: "#C8873A", // أرصدة الخشب (بني خشبي) - wood balances (wood brown)
+      sacks: "#2F80ED", // الشكاير (أزرق) - sacks (blue)
     },
   },
 };

@@ -2,7 +2,7 @@
 
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Stock, StockVariant, WoodType } from "@/lib/types";
-import { AlertTriangle, Package, Trees } from "lucide-react";
+import { AlertTriangle, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -12,6 +12,12 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 // أصغر حجم لاسم الكارت لو مش واخد المساحة - smallest card name font size when it doesn't fit
 const MIN_NAME_FONT_SIZE = 12;
+
+// لون "#RRGGBB" بشفافية (0 لـ 1) - "#RRGGBB" color with an opacity (0 to 1)
+function withAlpha(hex: string, alpha: number) {
+  const value = Math.round(alpha * 255).toString(16).padStart(2, "0");
+  return `${hex}${value}`;
+}
 
 interface StockSectionProps {
   data: Stock;
@@ -142,6 +148,7 @@ function VariantsCard({
   variants,
   image,
   icon,
+  accent,
   showTotal = true,
 }: {
   name: string;
@@ -149,9 +156,11 @@ function VariantsCard({
   variants: StockVariant[];
   image?: string;
   icon?: ReactNode;
+  accent: string;
   showTotal?: boolean;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
+  const totalSizes = dashboardConfig.sizes.page2;
   const anyLow = variants.some(isLow);
   const total = sumQuantities(variants);
   const { count: totalCount } = useCountUp(total, 500);
@@ -215,8 +224,9 @@ function VariantsCard({
   return (
     <div
       className={`bg-background border-2 rounded-2xl p-3 h-full min-h-0 min-w-0 flex flex-col gap-2 overflow-hidden ${
-        anyLow ? "border-statusRed" : "border-cardBorder"
+        anyLow ? "border-statusRed" : ""
       }`}
+      style={anyLow ? undefined : { borderColor: withAlpha(accent, 0.3) }}
     >
       <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -247,13 +257,18 @@ function VariantsCard({
       </div>
 
       {showTotal && (
-        <div className="flex items-baseline justify-between gap-2 border-t border-cardBorder pt-1.5 shrink-0">
-          <span className="text-gray-400 text-sm">الإجمالي</span>
-          <p className="whitespace-nowrap">
-            <span className="font-bold text-brandOrange tabular-nums" style={{ fontSize: `${sizes.totalFontSize}px` }}>
+        <div className="flex items-baseline justify-between gap-2 border-t border-cardBorder pt-1 shrink-0">
+          <span className="font-semibold text-gray-300" style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}>
+            الإجمالي
+          </span>
+          <p className="whitespace-nowrap leading-none">
+            <span
+              className="font-extrabold tabular-nums"
+              style={{ fontSize: `${totalSizes.totalFontSize}px`, color: accent }}
+            >
               {formatNumber(totalCount)}
             </span>
-            <span className="text-gray-400" style={{ fontSize: `${sizes.unitFontSize}px` }}>
+            <span className="text-gray-400" style={{ fontSize: `${totalSizes.totalUnitFontSize}px` }}>
               {" "}
               {unit}
             </span>
@@ -265,13 +280,18 @@ function VariantsCard({
 }
 
 // قسم كبير بعنوان وكروت جنب بعض - big titled section with cards side by side
+// كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
 function SectionCard({
   title,
+  icon: Icon,
+  accent,
   extra,
   columns,
   children,
 }: {
   title: string;
+  icon: LucideIcon;
+  accent: string;
   extra?: ReactNode;
   columns: number;
   children: ReactNode;
@@ -279,11 +299,21 @@ function SectionCard({
   const sizes = dashboardConfig.sizes.stockPage;
 
   return (
-    <div className="bg-card border border-cardBorder rounded-2xl p-4 min-h-0 flex flex-col overflow-hidden">
-      <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
-        <h2 className="font-bold text-white whitespace-nowrap" style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}>
-          {title}
-        </h2>
+    <div
+      className="relative bg-card border border-cardBorder rounded-2xl p-4 min-h-0 flex flex-col overflow-hidden"
+      style={{ backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)` }}
+    >
+      <div className="absolute top-0 bottom-0 right-0 w-1" style={{ backgroundColor: accent }} />
+      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <Icon className="shrink-0" style={{ color: accent }} size={sizes.sectionTitleFontSize + 2} />
+          <h2
+            className="font-bold text-white whitespace-nowrap leading-tight"
+            style={{ fontSize: `${sizes.sectionTitleFontSize}px` }}
+          >
+            {title}
+          </h2>
+        </div>
         {extra}
       </div>
       <div
@@ -298,6 +328,8 @@ function SectionCard({
 
 export default function StockSection({ data, className }: StockSectionProps) {
   const sizes = dashboardConfig.sizes.stockPage;
+  const totalSizes = dashboardConfig.sizes.page2;
+  const colors = dashboardConfig.page2.colors;
   const rows = sizes.rowHeights;
   const woodTotal = data.wood.types.reduce((sum, type) => sum + sumQuantities(woodVariants(type)), 0);
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
@@ -309,7 +341,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
         gridTemplateRows: `minmax(0,${rows.packaged}fr) minmax(0,${rows.wood}fr) minmax(0,${rows.sacks}fr)`,
       }}
     >
-      <SectionCard title="المنتجات المعبأة" columns={data.packaged.length}>
+      <SectionCard title="المنتجات المعبأة" icon={Package} accent={colors.packaged} columns={data.packaged.length}>
         {data.packaged.map((product) => (
           <VariantsCard
             key={product.id}
@@ -318,17 +350,23 @@ export default function StockSection({ data, className }: StockSectionProps) {
             image={product.image}
             icon={<Package className="w-8 h-8 text-gray-500" />}
             variants={product.variants}
+            accent={colors.packaged}
           />
         ))}
       </SectionCard>
 
       <SectionCard
         title="أرصدة الخشب"
+        icon={TreePine}
+        accent={colors.wood}
         columns={data.wood.types.length}
         extra={
-          <p className="text-gray-400 text-sm whitespace-nowrap">
+          <p className="text-gray-300 font-semibold whitespace-nowrap leading-none" style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}>
             إجمالي الخشب:{" "}
-            <span className="font-bold text-brandOrange tabular-nums" style={{ fontSize: `${sizes.sectionTotalFontSize}px` }}>
+            <span
+              className="font-extrabold tabular-nums"
+              style={{ fontSize: `${totalSizes.sectionTotalFontSize}px`, color: colors.wood }}
+            >
               {formatNumber(woodTotalCount)}
             </span>{" "}
             {data.wood.unit}
@@ -342,14 +380,22 @@ export default function StockSection({ data, className }: StockSectionProps) {
             unit={data.wood.unit}
             icon={<Trees className="w-8 h-8 text-brandOrange" />}
             variants={woodVariants(type)}
+            accent={colors.wood}
             showTotal={!!type.subTypes}
           />
         ))}
       </SectionCard>
 
-      <SectionCard title="الشكاير" columns={data.sacks.length}>
+      <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={data.sacks.length}>
         {data.sacks.map((sack) => (
-          <VariantsCard key={sack.id} name={sack.name} unit={sack.unit} icon={sack.icon} variants={sack.variants} />
+          <VariantsCard
+            key={sack.id}
+            name={sack.name}
+            unit={sack.unit}
+            icon={sack.icon}
+            variants={sack.variants}
+            accent={colors.sacks}
+          />
         ))}
       </SectionCard>
     </div>

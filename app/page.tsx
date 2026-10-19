@@ -163,6 +163,7 @@ export default function Dashboard() {
       <Header
         lastUpdate={lastUpdate}
         isConnected={isConnected}
+        page={PAGES[pageIndex]}
         nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} />}
       />
 
