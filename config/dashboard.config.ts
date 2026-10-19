@@ -404,27 +404,22 @@ export const dashboardConfig = {
       sectionTitleFontSize: 22, // حجم عناوين الأقسام (المنتجات المعبأة، أرصدة الخشب، الشكاير) - section title font size
       imageWidth: 44, // عرض صورة المنتج - product image width
       imageHeight: 44, // ارتفاع صورة المنتج - product image height
-      // الأحجام اللي فيها scale بتكبر وتصغر مع عرض الكارت: scale = نسبة من عرض الكارت (13 يعني 13%)،
-      // والحجم عمره ما يقل عن الأصغر ولا يزيد عن الأكبر
-      // Sizes with a "scale" follow the card width: scale = percent of the card width (13 = 13%),
-      // never smaller than the minimum nor bigger than the maximum
-      nameFont: { min: 12, scale: 9.5, max: 18 }, // اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name
-      rowLabelFontSize: 15, // حجم اسم النوع في الصف (عادي، كامل، ناعم، كازوارينا...) - type label in a row
-      rowNumberFontSize: 26, // أكبر حجم لرقم الصف (المنتجات المعبأة والشكاير) - biggest row number (packaged, sacks)
-      rowNumberScale: 13, // رقم الصف كنسبة من عرض الكارت - row number as a percent of the card width
-      subTypeNumberFontSize: 22, // أكبر حجم لأرقام صفوف البلدي (كازوارينا/توت/زيتون) - biggest بلدي row number
-      singleNumberFontSize: 34, // أكبر حجم للرقم الكبير في الكروت اللي فيها رقم واحد (مواد التعبئة والخشب العادي) - biggest number in one-number cards
-      singleNumberScale: 14, // الرقم الكبير كنسبة من عرض الكارت - big number as a percent of the card width
-      minNumberFontSize: 16, // أصغر حجم لأي رقم - smallest size for any number
+      nameFontSize: 18, // حجم اسم الكارت (ربع كيلو، برتقال، شكاير مانجو...) - card name font size
+      variantLabelFontSize: 13, // حجم اسم النوع (عادي، كامل، ناعم، خشن...) - type label font size
+      minVariantLabelFontSize: 11, // أصغر حجم لاسم النوع لو مش واخد مكانه (بدل ما يتقص) - smallest type label size (instead of cutting it)
+      numberFontSize: 30, // حجم رقم الكمية (بيصغر لوحده لو مش واخد العرض) - quantity font size (auto-shrinks to fit the width)
+      singleNumberFontSize: 34, // حجم الرقم الكبير في الكروت اللي فيها رقم واحد (مواد التعبئة والخشب العادي) - big number in one-number cards
+      subTypeNumberFontSize: 26, // حجم أرقام أنواع البلدي (كازوارينا/توت/زيتون) - بلدي sub-type numbers
+      minNumberFontSize: 18, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
       unitFontSize: 14, // حجم الوحدة الصغيرة جنب الرقم الكبير (كجم/رول/كيس/طن) - small unit next to the big number
     },
 
     // صف "الإجمالي" في كروت الصفحة 2 - the "الإجمالي" (total) rows on page 2
     page2: {
-      totalFontSize: 30, // أكبر حجم لرقم "الإجمالي" تحت كل كارت - biggest card total number size
-      minTotalFontSize: 18, // أصغر حجم لرقم الإجمالي - smallest total number size
-      totalScale: 16, // رقم الإجمالي كنسبة من عرض الكارت - total number as a percent of the card width
+      totalFontSize: 30, // حجم رقم "الإجمالي" تحت كل كارت - card total number font size
+      minTotalFontSize: 18, // أصغر حجم لرقم الإجمالي لو مش واخد مكانه - smallest total number size when it doesn't fit
       totalLabelFontSize: 16, // حجم كلمة "الإجمالي" - "الإجمالي" label font size
+      totalUnitFontSize: 14, // حجم وحدة القياس جنب الإجمالي (باكت/طن/شكارة) - unit next to the total
       sectionTotalFontSize: 24, // حجم رقم "إجمالي الخشب" فوق قسم الخشب - wood grand total font size
     },
   },
