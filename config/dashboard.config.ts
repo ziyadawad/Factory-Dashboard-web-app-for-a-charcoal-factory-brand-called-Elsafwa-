@@ -28,9 +28,9 @@ export const dashboardConfig = {
     // Treasury balance - money in treasury plus today's incoming / outgoing
     // تغيير اليوم = الوارد − المنصرف (بيتحسب لوحده) - today's change = incoming − outgoing (calculated)
     treasury: {
-      balance: 316178, // الرصيد الحالي بالجنيه - current balance in EGP
-      incomingToday: 25000, // الوارد النهارده بالجنيه - money in today (EGP)
-      outgoingToday: 10000, // المنصرف النهارده بالجنيه - money out today (EGP)
+      balance: 460607, // الرصيد الحالي بالجنيه - current balance in EGP
+      incomingToday: 156729, // الوارد النهارده بالجنيه - money in today (EGP)
+      outgoingToday: 12300, // المنصرف النهارده بالجنيه - money out today (EGP)
     },
 
     // حضور الإدارة - العمال في الإدارة
@@ -57,7 +57,7 @@ export const dashboardConfig = {
           production: {
             // عمال الإنتاج - production workers
             label: "عمال إنتاج", // اسم المجموعة - group name
-            total: 9, // الإجمالي المسجل في المجموعة - total registered
+            total: 5, // الإجمالي المسجل في المجموعة - total registered
             presentNames: [
               // أسماء العمال الحاضرين - names of present workers
               "الطيب",
@@ -65,21 +65,18 @@ export const dashboardConfig = {
               "محمود عابدين",
               "فايز زكى",
               "عبدالناصر",
-              " احمد حمدى ",
-              "محمد حسين",
-              "محمد الطيب",
-              " حسن فضيل",
+
             ],
           },
           workshop: {
             // الورشة - workshop workers
             label: "ورشة", // اسم المجموعة - group name
-            total: 4, // الإجمالي المسجل في المجموعة - total registered
+            total: 3, // الإجمالي المسجل في المجموعة - total registered
             presentNames: [
               // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
-              "سيد",
-              "كريم",
-              "ياسر",
+              "عم عيد",
+              "محمد عصام",
+              " احمد حمدى ",
             ],
           },
           operators: {
@@ -88,8 +85,10 @@ export const dashboardConfig = {
             total: 3, // الإجمالي المسجل في المجموعة - total registered
             presentNames: [
               // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
-              "مصطفى",
-              "عادل",
+
+              "محمد حسين",
+              "محمد الطيب",
+              " حسن فضيل",
             ],
           },
         },
@@ -131,6 +130,11 @@ export const dashboardConfig = {
           "محمود القرش",
           "حماده فهمى",
           "عبدالمقصود",
+          " اسلام",
+          " كريم",
+          "اليمنى",
+          "محمود عز",
+          " ابراهيم وصفى",
         ],
       },
     },
@@ -161,9 +165,9 @@ export const dashboardConfig = {
         { kiln: "فرن 1", type: "برتقال", weight: 2.5, time: "08:30" },
         { kiln: "فرن 2", type: "مانجو", weight: 1.8, time: "10:15" },
         { kiln: "فرن 5", type: "برتقال", weight: 2.2, time: "11:00" },
-        { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
-        { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
-        { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
+      //  { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
+       // { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
+       // { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
       ],
     },
 
@@ -272,17 +276,17 @@ export const dashboardConfig = {
           name: "شكاير برتقال", // اسم الشكاير - sack name
           unit: "شكارة", // وحدة القياس - unit
           variants: [
-            { label: "ناعم", quantity: 814, minimum: 0 }, // label = النوع، quantity = الكمية، minimum = الحد الأدنى
-            { label: "خشن", quantity: 490, minimum: 0 },
-            { label: "مكمورة", quantity: 150, minimum: 0 },
+            { label: "ناعم", quantity: 766, minimum: 0 }, // label = النوع، quantity = الكمية، minimum = الحد الأدنى
+            { label: "خشن", quantity: 520, minimum: 0 },
+            { label: "مكمورة", quantity: 0, minimum: 0 },
           ],
         },
         {
           name: "شكاير مانجو",
           unit: "شكارة",
           variants: [
-            { label: "ناعم", quantity: 66, minimum: 0 },
-            { label: "خشن", quantity: 101, minimum: 0 },
+            { label: "ناعم", quantity: 80, minimum: 0 },
+            { label: "خشن", quantity: 204, minimum: 0 },
           ],
         },
         {
@@ -291,7 +295,7 @@ export const dashboardConfig = {
           variants: [
             { label: "ناعم", quantity: 1058, minimum: 0 },
             { label: "خشن", quantity: 82, minimum: 0 },
-            { label: "مكمورة", quantity: 120, minimum: 0 },
+            { label: "مكمورة", quantity: 330, minimum: 0 },
           ],
         },
       ],
