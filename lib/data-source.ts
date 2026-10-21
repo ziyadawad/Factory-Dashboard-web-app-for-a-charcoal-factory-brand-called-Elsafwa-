@@ -8,7 +8,10 @@ import {
   ConfigWoodSubType,
   ConfigWoodType,
   ConfigErpStockItem,
+  ConfigWorker,
   DashboardData,
+  FloorWorkers,
+  WorkerGroup,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpCall, erpGet, erpToday } from "./erp";
@@ -18,6 +21,62 @@ import { erpCall, erpGet, erpToday } from "./erp";
 // { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
 function toVariant(variant: ConfigVariant) {
   return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
+}
+
+// مفتاح الشخص: ID الموظف، ولو مفيش الاسم - a person's key: employee ID, else the name
+const personKey = (worker: ConfigWorker) => worker.employeeId || worker.name.replace(/\s+/g, " ").trim();
+
+// كل شخص مرة واحدة (لو اتكرر يبقى حاضر لو أي نسخة منه حاضرة) - each person once (present if any copy is)
+function uniqueWorkers(workers: ConfigWorker[]): ConfigWorker[] {
+  const byKey = new Map<string, ConfigWorker>();
+  for (const worker of workers) {
+    const key = personKey(worker);
+    const seen = byKey.get(key);
+    byKey.set(key, seen ? { ...seen, present: seen.present || worker.present } : worker);
+  }
+  return Array.from(byKey.values());
+}
+
+function toWorkerGroup(label: string, members: ConfigWorker[]): WorkerGroup {
+  const people = uniqueWorkers(members);
+  return {
+    label,
+    total: people.length,
+    presentNames: people.filter((p) => p.present).map((p) => p.name.trim()),
+  };
+}
+
+function countPeople(members: ConfigWorker[]) {
+  const people = uniqueWorkers(members);
+  return { present: people.filter((p) => p.present).length, total: people.length };
+}
+
+// عمال الأرضية من الكونفج - floor workers from the config
+function floorWorkers(): FloorWorkers {
+  const workers = dashboardConfig.data.workers;
+  const factory = workers.productionFactory;
+  const factoryMembers = [
+    ...factory.groups.production.members,
+    ...factory.groups.workshop.members,
+    ...factory.groups.operators.members,
+  ];
+  const allMembers = [...factoryMembers, ...workers.packing.members, ...workers.saw.members, ...workers.drivers.members];
+  return {
+    productionFactory: {
+      label: factory.label,
+      groups: {
+        production: toWorkerGroup(factory.groups.production.label, factory.groups.production.members),
+        workshop: toWorkerGroup(factory.groups.workshop.label, factory.groups.workshop.members),
+        operators: toWorkerGroup(factory.groups.operators.label, factory.groups.operators.members),
+      },
+      ...countPeople(factoryMembers),
+    },
+    packing: toWorkerGroup(workers.packing.label, workers.packing.members),
+    saw: toWorkerGroup(workers.saw.label, workers.saw.members),
+    drivers: toWorkerGroup(workers.drivers.label, workers.drivers.members),
+    daily: toWorkerGroup(workers.daily.label, allMembers.filter((worker) => worker.daily)),
+    ...countPeople(allMembers),
+  };
 }
 
 // آخر قيمة نجحت من ERPNext (في ذاكرة السيرفر) - last successful ERPNext value per number (server memory)
@@ -255,19 +314,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: kiln.status,
       })),
     },
-    floorWorkers: {
-      productionFactory: {
-        label: config.workers.productionFactory.label,
-        groups: {
-          production: { ...config.workers.productionFactory.groups.production },
-          workshop: { ...config.workers.productionFactory.groups.workshop },
-          operators: { ...config.workers.productionFactory.groups.operators },
-        },
-      },
-      packing: { ...config.workers.packing },
-      saw: { ...config.workers.saw },
-      drivers: { ...config.workers.drivers },
-    },
+    floorWorkers: floorWorkers(),
     treasury: {
       balance,
       incomingToday,

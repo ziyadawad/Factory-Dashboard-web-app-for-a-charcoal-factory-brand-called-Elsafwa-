@@ -13,6 +13,7 @@ import type {
   ConfigWoodType,
   ConfigErpField,
   ConfigErpStockMap,
+  ConfigWorker,
 } from "@/lib/types";
 
 export const dashboardConfig = {
@@ -156,96 +157,97 @@ export const dashboardConfig = {
 
     // عمال الأرضية - العمال على الأرض مقسمين حسب القسم
     // Floor workers - workers on the floor divided by department
-    // عدد الحاضرين في كل قسم = عدد الأسماء في presentNames (بيتحسب لوحده، متكتبوش بإيدك)
-    // Present count of each group = presentNames.length (calculated automatically)
+    // كل مجموعة فيها members: كل عامل { name, employeeId, present }
+    // - name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext (لو لسه مش معروف سيبه)
+    // - present = حاضر النهارده (true) ولا لأ (false)
+    // - daily: true = عامل يومية: بيظهر في قسمه وكمان في خانة "عمال يومية"، ومتكتبوش مرتين
+    // الإجمالي = عدد الأعضاء، والحاضر = اللي present بتاعهم true (بيتحسبوا لوحدهم)
+    // الشخص بيتعد مرة واحدة في إجمالي مصنع الإنتاج وإجمالي الكارت (بالـ employeeId، ولو مفيش بالاسم)
+    // Each person is listed ONCE; totals count each person once (by employeeId, else by name)
     workers: {
-      // مصنع الإنتاج - متقسم 3 مجموعات، والرقم اللي في عنوانه = مجموع التلاتة (بيتحسب لوحده)
-      // Production factory - split into 3 sub-groups; its header shows their sum (calculated)
+      // مصنع الإنتاج - متقسم 3 مجموعات، والرقم اللي في عنوانه بيتحسب لوحده
+      // Production factory - split into 3 sub-groups; its header count is calculated
       productionFactory: {
         label: "مصنع إنتاج", // اسم القسم الكبير - section name
         groups: {
           production: {
             // عمال الإنتاج - production workers
             label: "عمال إنتاج", // اسم المجموعة - group name
-            total: 5, // الإجمالي المسجل في المجموعة - total registered
-            presentNames: [
-              // أسماء العمال الحاضرين - names of present workers
-              "الطيب",
-              "شعبان",
-              "محمود عابدين",
-              "فايز زكى",
-              "عبدالناصر",
-
-            ] as string[],
+            members: [
+              { name: "الطيب", present: true },
+              { name: "شعبان", present: true },
+              { name: "محمود عابدين", present: true },
+              { name: "فايز زكى", present: true },
+              // عامل يومية – بيظهر في خانة اليومية وفي قسمه
+              { name: "عبدالناصر", employeeId: "عبدالناصر عبداللطيف", present: true, daily: true },
+              { name: "عبدالظاهر", employeeId: "عبدالظاهر الطيب مصطفى", present: true }, // اتنقل من المنشار
+              // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينه في ERPNext لسه)
+              { name: "هاشم نادر", present: true, daily: true },
+            ] as ConfigWorker[],
           },
           workshop: {
             // الورشة - workshop workers
             label: "ورشة", // اسم المجموعة - group name
-            total: 3, // الإجمالي المسجل في المجموعة - total registered
-            presentNames: [
-              // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
-              "عم عيد",
-              "محمد عصام",
-              " احمد حمدى ",
-            ] as string[],
+            members: [
+              { name: "محمد عصام", present: true },
+              // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينه في ERPNext لسه)
+              { name: "احمد حمدى", present: true, daily: true },
+            ] as ConfigWorker[],
           },
           operators: {
             // الأوبريتر - machine operators
             label: "أوبريتر", // اسم المجموعة - group name
-            total: 3, // الإجمالي المسجل في المجموعة - total registered
-            presentNames: [
-              // أسماء العمال الحاضرين (أمثلة - غيرها) - present names (samples, replace them)
-
-              "محمد حسين",
-              "محمد الطيب",
-              " حسن فضيل",
-            ] as string[],
+            members: [
+              { name: "محمد حسين", present: true },
+              { name: "محمد الطيب", present: true },
+              { name: "حسن فضيل", present: true },
+            ] as ConfigWorker[],
           },
         },
       },
       packing: {
         // عمال التعبئة - packing workers
         label: "عمال تعبئة", // اسم المجموعة - group name
-        total: 10, // الإجمالي المسجل في القسم - total registered in department
-        presentNames: [
-          // أسماء العمال الحاضرين - names of present workers
-          "طارق",
-          "رضا",
-          "زهراء",
-          "دنيا",
-          "زينب",
-          "هويدا",
-          "ملك",
-          "جيهان",
-          "جومانه",
-          "سماح",
-        ] as string[],
+        members: [
+          { name: "طارق", present: true },
+          { name: "رضا", present: true },
+          { name: "زهراء", present: true },
+          { name: "دنيا", present: true },
+          { name: "زينب", present: true },
+          { name: "هويدا", present: true },
+          { name: "ملك", present: true },
+          { name: "جيهان", present: true },
+          { name: "جومانه", present: true },
+          { name: "سماح", present: true },
+          // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينها في ERPNext لسه)
+          { name: "وفاء فكرى", present: true, daily: true },
+        ] as ConfigWorker[],
       },
       saw: {
         // عمال المنشار - saw workers
         label: "عمال منشار", // اسم المجموعة - group name
-        total: 2, // الإجمالي المسجل في القسم - total registered in department
-        presentNames: [
-          // أسماء العمال الحاضرين - names of present workers
-          "محمد حسن",
-          "عبدالظاهر",
-        ] as string[],
+        members: [
+          { name: "محمد حسن", present: true },
+        ] as ConfigWorker[],
       },
       drivers: {
         // السواقين - drivers
         label: "سواقين", // اسم المجموعة - group name
-        total: 7, // الإجمالي المسجل في القسم - total registered in department
-        presentNames: [
-          // أسماء العمال الحاضرين - names of present workers
-          "محمود القرش",
-          "حماده فهمى",
-          "عبدالمقصود",
-          " اسلام",
-          " كريم",
-          "اليمنى",
-          "محمود عز",
-          " ابراهيم وصفى",
-        ] as string[],
+        members: [
+          { name: "محمود القرش", present: true },
+          { name: "حماده فهمى", present: true },
+          { name: "عبدالمقصود", present: true },
+          { name: "اسلام", present: true },
+          { name: "كريم", present: true },
+          { name: "اليمنى", present: true },
+          { name: "محمود عز", present: true },
+          { name: "ابراهيم وصفى", present: true },
+        ] as ConfigWorker[],
+      },
+      // عمال اليومية - أعضاءها هما اللي daily: true في كل الأقسام فوق (متكتبش أسماء هنا)
+      // Daily workers - its members are everyone marked daily: true above (don't list names here)
+      daily: {
+        label: "عمال يومية", // اسم المجموعة - group name
       },
     },
 
@@ -497,6 +499,7 @@ export const dashboardConfig = {
     // Floor Workers - floor workers card
     floorWorkers: {
       groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
+      minGroupTitleFontSize: 11, // أصغر حجم لاسم القسم لو مش واخد مكانه (الاسم عمره ما بيتقص) - smallest group name size; names are never cut
       groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
       nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
       minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit

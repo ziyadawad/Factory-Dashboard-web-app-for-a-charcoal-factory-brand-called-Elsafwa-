@@ -4,6 +4,7 @@ import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, 
 import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
 import { AlertTriangle, Box, Cylinder, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
+import { useFitFontSize } from "@/lib/useFitFontSize";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -24,36 +25,6 @@ const MIN_NAME_FONT_SIZE = 12;
 // حجم "الحد الأدنى" وأصغر حجم ليه لو الكارت ضيق - "الحد الأدنى" font size and its smallest size in narrow cards
 const MINIMUM_LABEL_FONT_SIZE = 12;
 const MIN_MINIMUM_LABEL_FONT_SIZE = 9;
-
-// بيصغر الخط لحد ما الكلام ياخد مكانه من غير ما يتقص، ويرجع للحجم الأصلي لو العرض أو المحتوى اتغير
-// Shrinks the font until the text fits without clipping; resets when the width or the content changes
-function useFitFontSize<T extends HTMLElement>(maxSize: number, minSize: number, contentKey: string) {
-  const ref = useRef<T>(null);
-  const [fontSize, setFontSize] = useState(maxSize);
-
-  useIsomorphicLayoutEffect(() => setFontSize(maxSize), [maxSize, contentKey]);
-
-  useIsomorphicLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    if (fontSize > minSize) setFontSize(fontSize - 1);
-  });
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    let width = el.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (el.clientWidth === width) return;
-      width = el.clientWidth;
-      setFontSize(maxSize);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [maxSize]);
-
-  return [ref, fontSize] as const;
-}
 
 // لون "#RRGGBB" بشفافية (0 لـ 1) - "#RRGGBB" color with an opacity (0 to 1)
 function withAlpha(hex: string, alpha: number) {

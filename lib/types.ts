@@ -96,7 +96,8 @@ export interface WorkerGroup {
   presentNames: string[];
 }
 
-// مصنع الإنتاج: 3 مجموعات - production factory with 3 sub-groups (its total = their sum)
+// مصنع الإنتاج: 3 مجموعات - production factory with 3 sub-groups
+// present / total بيعدوا كل شخص مرة واحدة - present / total count each person once
 export interface ProductionFactory {
   label: string;
   groups: {
@@ -104,13 +105,20 @@ export interface ProductionFactory {
     workshop: WorkerGroup; // ورشة
     operators: WorkerGroup; // أوبريتر
   };
+  present: number;
+  total: number;
 }
 
+// daily = عمال اليومية (برضه موجودين في أقسامهم) - daily workers (also listed in their own group)
+// present / total = إجمالي الكارت، كل شخص مرة واحدة - card totals, each person once
 export interface FloorWorkers {
   productionFactory: ProductionFactory;
   packing: WorkerGroup;
   saw: WorkerGroup;
   drivers: WorkerGroup;
+  daily: WorkerGroup;
+  present: number;
+  total: number;
 }
 
 // تغيير اليوم = incomingToday - outgoingToday (calculated in the UI)
@@ -166,6 +174,14 @@ export type ConfigErpStockMap = Record<string, ConfigErpStockItem>;
 export interface ConfigPage {
   id: string;
   title: string;
+}
+
+// عامل في الكونفج - a worker in the config (listed once, in their department group)
+export interface ConfigWorker {
+  name: string;
+  employeeId?: string; // ID الموظف في ERPNext
+  present: boolean;
+  daily?: boolean; // عامل يومية: بيظهر كمان في خانة عمال يومية
 }
 
 export interface ConfigKiln {

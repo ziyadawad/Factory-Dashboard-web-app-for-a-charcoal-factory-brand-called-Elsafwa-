@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Factory, Package, Axe, Truck, HardHat, Wrench, Cog, LucideIcon } from "lucide-react";
+import { Factory, Package, Axe, Truck, HardHat, Wrench, Cog, CalendarDays, LucideIcon } from "lucide-react";
 import { FloorWorkers, WorkerGroup } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { useFitFontSize } from "@/lib/useFitFontSize";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 // useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
@@ -22,32 +23,23 @@ const FACTORY_GROUPS: { key: FactoryGroupKey; icon: LucideIcon }[] = [
   { key: "operators", icon: Cog },
 ];
 
-// باقي الأقسام - the other sections
-const GROUPS: { key: "packing" | "saw" | "drivers"; icon: LucideIcon }[] = [
-  { key: "packing", icon: Package },
-  { key: "saw", icon: Axe },
-  { key: "drivers", icon: Truck },
-];
-
-function sumPresent(groups: WorkerGroup[]) {
-  return groups.reduce((sum, group) => sum + group.presentNames.length, 0);
-}
-
-function sumTotal(groups: WorkerGroup[]) {
-  return groups.reduce((sum, group) => sum + group.total, 0);
-}
-
 export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) {
   const sizes = dashboardConfig.sizes.floorWorkers;
 
   const factory = data.productionFactory;
   const factoryGroups = FACTORY_GROUPS.map(({ key, icon }) => ({ group: factory.groups[key], icon, key }));
-  const groups = GROUPS.map(({ key, icon }) => ({ group: data[key], icon, key }));
-  const allGroups = [...factoryGroups, ...groups].map(({ group }) => group);
-  const factoryPresent = sumPresent(factoryGroups.map(({ group }) => group));
-  const factoryTotal = sumTotal(factoryGroups.map(({ group }) => group));
-  const totalPresent = sumPresent(allGroups);
-  const totalRegistered = sumTotal(allGroups);
+  const allGroups = [
+    ...factoryGroups.map(({ group }) => group),
+    data.packing,
+    data.drivers,
+    data.saw,
+    data.daily,
+  ];
+  // الإجماليات جاية محسوبة (كل شخص مرة واحدة) - totals arrive pre-computed (each person once)
+  const factoryTotal = factory.total;
+  const factoryPresent = Math.min(factory.present, factoryTotal);
+  const totalRegistered = data.total;
+  const totalPresent = Math.min(data.present, totalRegistered);
 
   // حجم خط واحد للأسماء في كل الأقسام (أصغر حجم يكفي الكل)
   // One shared chip font size for every group (the smallest one that makes every group fit).
@@ -78,6 +70,15 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
     prevAllNamesKey.current = allNamesKey;
     remeasure();
   }, [allNamesKey, remeasure]);
+
+  // لما خط Cairo يخلص تحميل الأسماء بتعرض، فنقيس تاني - re-measure once web fonts load (Cairo is wider)
+  useEffect(() => {
+    let active = true;
+    document.fonts?.ready.then(() => active && remeasure());
+    return () => {
+      active = false;
+    };
+  }, [remeasure]);
 
   const boxProps = {
     sizes,
@@ -118,10 +119,21 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
           </div>
         </div>
 
+        {/* تحت (من اليمين): تعبئة، سواقين، والعمود التالت منشار فوق ويومية تحت
+            Bottom row (right to left): packing, drivers, then saw on top of daily workers */}
         <div className="min-h-0 grid grid-cols-3 gap-2">
-          {groups.map(({ group, icon, key }) => (
-            <GroupBox key={key} group={group} icon={icon} {...boxProps} />
-          ))}
+          <GroupBox group={data.packing} icon={Package} {...boxProps} />
+          <GroupBox group={data.drivers} icon={Truck} {...boxProps} />
+          {/* المساحة بينهم على قد عدد الأسماء عشان كل الأسماء تبان - height split by name count so every name fits */}
+          <div
+            className="min-h-0 grid gap-2"
+            style={{
+              gridTemplateRows: `minmax(0,${data.saw.presentNames.length + 4}fr) minmax(0,${data.daily.presentNames.length + 4}fr)`,
+            }}
+          >
+            <GroupBox group={data.saw} icon={Axe} {...boxProps} />
+            <GroupBox group={data.daily} icon={CalendarDays} {...boxProps} />
+          </div>
         </div>
       </div>
     </div>
@@ -145,13 +157,22 @@ function GroupHeader({
   numberFontSize: number;
 }) {
   const percentage = total > 0 ? Math.min(100, (present / total) * 100) : 0;
+  // الاسم عمره ما بيتقص: لو مش واخد مكانه الخط بيصغر، ولو لسه مش واخد مكانه بينزل سطرين
+  // The title is never cut: its font shrinks to fit, and at the smallest size it wraps instead
+  const minTitleFontSize = dashboardConfig.sizes.floorWorkers.minGroupTitleFontSize;
+  const [titleRef, fittedTitleSize] = useFitFontSize<HTMLParagraphElement>(titleFontSize, minTitleFontSize, label);
+  const wrapTitle = fittedTitleSize <= minTitleFontSize;
 
   return (
     <>
       <div className="flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <Icon className="w-4 h-4 text-brandOrange shrink-0" />
-          <p className="font-bold text-white truncate" style={{ fontSize: `${titleFontSize}px` }}>
+          <p
+            ref={titleRef}
+            className={`font-bold text-white min-w-0 flex-1 ${wrapTitle ? "leading-tight" : "whitespace-nowrap overflow-hidden"}`}
+            style={{ fontSize: `${fittedTitleSize}px` }}
+          >
             {label}
           </p>
         </div>
@@ -186,7 +207,7 @@ interface GroupBoxProps {
 }
 
 function GroupBox({ group, icon, nested, sizes, chipFontSize, round, onOverflow, onResize }: GroupBoxProps) {
-  const present = group.presentNames.length;
+  const present = Math.min(group.presentNames.length, group.total);
   const sectionRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
