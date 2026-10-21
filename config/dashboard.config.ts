@@ -11,9 +11,39 @@ import type {
   ConfigVariant,
   ConfigWoodSubType,
   ConfigWoodType,
+  ConfigErpField,
 } from "@/lib/types";
 
 export const dashboardConfig = {
+  // ============================================================
+  // الربط مع ERPNext - كل رقم بنختار هو جاي منين
+  // ERPNext link - choose where each number comes from
+  // source: "erp" = من ERPNext، source: "manual" = من الأرقام اللي في الجزء الأول تحت
+  // لو ERPNext وقع بيفضل يظهر آخر رقم اتجاب، ولو مفيش يظهر رقم الكونفج، وتظهر علامة "غير متصل"
+  // If ERPNext fails the last good value stays (or the config value), and the "غير متصل" badge shows
+  // ============================================================
+
+  erp: {
+    refreshSeconds: 15, // كل كام ثانية الداشبورد يسأل السيستم - how often the dashboard asks the system
+
+    treasury: {
+      balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
+      incomingToday: { source: "manual" } as ConfigErpField, // الوارد النهارده
+      outgoingToday: { source: "manual" } as ConfigErpField, // المنصرف النهارده
+    },
+    // لسه يدوي - still manual (هنربطهم واحد واحد - to be connected one by one)
+    attendance: { source: "manual" } as ConfigErpField, // حضور الإدارة
+    workers: { source: "manual" } as ConfigErpField, // عمال الأرضية
+    kilns: { source: "manual" } as ConfigErpField, // الأفران
+    batches: { source: "manual" } as ConfigErpField, // الطرحات
+    stock: {
+      packaged: { source: "manual" } as ConfigErpField, // المنتج المعبأ
+      sacks: { source: "manual" } as ConfigErpField, // الشكاير
+      wood: { source: "manual" } as ConfigErpField, // الأخشاب
+      packaging: { source: "manual" } as ConfigErpField, // مواد التعبئة
+    },
+  },
+
   // ============================================================
   // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
   // Pages - the dashboard has several pages (arrows at the top-left of the header or keyboard arrows)

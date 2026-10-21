@@ -13,7 +13,14 @@ import BatchesSection from "@/components/BatchesSection";
 import { DashboardData } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+// لو الـ API رجّع error بنرمي عشان SWR يسيب آخر داتا سليمة - throw on an error status so SWR keeps the last good data
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
+
+const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
 
 const PAGES = dashboardConfig.pages.list;
 
@@ -32,9 +39,9 @@ export default function Dashboard() {
     "/api/dashboard",
     fetcher,
     {
-      refreshInterval: 30000,
+      refreshInterval: REFRESH_MS,
       revalidateOnFocus: false,
-      dedupingInterval: 10000,
+      dedupingInterval: REFRESH_MS / 2,
     }
   );
 
@@ -114,8 +121,8 @@ export default function Dashboard() {
     }
   }, [data]);
 
-  // "غير متصل" بيظهر بس لو الجلب فشل (مش وقت التحميل) - offline only when the fetch failed, not while loading
-  const isConnected = !error;
+  // "غير متصل" بيظهر بس لو الجلب أو ERPNext فشل (مش وقت التحميل) - offline only when the fetch or ERPNext failed
+  const isConnected = !error && !data?.erpOffline;
 
   const flashClass = (section: string) =>
     `min-h-0 ${flashSection === section ? "animate-flash" : ""}`;

@@ -7,67 +7,61 @@ import {
   ConfigVariant,
   ConfigWoodSubType,
   ConfigWoodType,
+  ConfigErpField,
   DashboardData,
-  Stock,
-  Wood,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { erpCall, erpToday } from "./erp";
 
-// Replace this function with the real factory system call
-// If FACTORY_API_URL is set in environment variables, fetch from the real system
-// Otherwise, return data from config file
-// The API must return floorWorkers as { productionFactory, packing, saw, drivers },
-// where productionFactory is { label, groups: { production, workshop, operators } } and every
-// group is { label, total, presentNames } - present count is presentNames.length
-// treasury is { balance, incomingToday, outgoingToday } - today's change is calculated in the UI
-// batches is { unit, list: [{ kiln, type, weight, time: "HH:MM" }] } - totals are calculated in the UI
-// stock is { packaged, sacks, rawMaterials } (every total is calculated in the UI):
-// - packaged: [{ id, name, unit, image?, variants: [{ label, quantity, minimumThreshold }] }]
-// - sacks: [{ id, name, unit, icon?, variants: [{ label, quantity, minimumThreshold }] }]
-// - rawMaterials: { wood, packaging }
-//   - wood: { unit, types: [{ id, name, quantity, minimumThreshold } or { id, name, subTypes: [{ name, quantity, minimumThreshold }] }] }
-//   - packaging: [{ id, name, unit, quantity, minimumThreshold, icon?: "plastic" | "roll" | "bag" }]
-// The old shape with stock.wood (and no rawMaterials) is still accepted - see normalizeStock
+// كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
+// Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
 // { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
 function toVariant(variant: ConfigVariant) {
   return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
 }
 
-// الشكل القديم كان فيه stock.wood بدل rawMaterials - the old API shape had stock.wood instead of rawMaterials
-function normalizeStock(stock: Stock & { wood?: Wood }): Stock {
-  if (stock.rawMaterials) return stock;
-  const { wood, ...rest } = stock;
-  return { ...rest, rawMaterials: { wood: wood ?? { unit: "", types: [] }, packaging: [] } };
+// آخر قيمة نجحت من ERPNext (في ذاكرة السيرفر) - last successful ERPNext value per number (server memory)
+const lastGood = new Map<string, number>();
+
+// رقم واحد: من ERPNext لو source = "erp"، ولو فشل آخر قيمة نجحت، ولو مفيش رقم الكونفج
+// One number: from ERPNext when source is "erp"; on failure the last good value, else the config value
+async function erpNumber(
+  key: string,
+  field: ConfigErpField,
+  manual: number,
+  load: (account: string) => Promise<unknown>
+): Promise<{ value: number; failed: boolean }> {
+  if (field.source !== "erp") return { value: manual, failed: false };
+  try {
+    const value = await load(field.account);
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`expected a number, got ${JSON.stringify(value)}`);
+    }
+    lastGood.set(key, value);
+    return { value, failed: false };
+  } catch (error) {
+    const fallback = lastGood.get(key);
+    console.error(
+      `[erp] ${key} failed, showing ${fallback !== undefined ? "last good" : "config"} value:`,
+      error instanceof Error ? error.message : error
+    );
+    return { value: fallback ?? manual, failed: true };
+  }
 }
 
+// رصيد الحساب النهارده - account balance as of today
+const balanceOn = (account: string) =>
+  erpCall("erpnext.accounts.utils.get_balance_on", { account, date: erpToday() });
+
 export async function getDashboardData(): Promise<DashboardData> {
-  const factoryApiUrl = process.env.FACTORY_API_URL;
-  const factoryApiKey = process.env.FACTORY_API_KEY;
-
-  if (factoryApiUrl) {
-    try {
-      const response = await fetch(factoryApiUrl, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(factoryApiKey && { "Authorization": `Bearer ${factoryApiKey}` }),
-        },
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`);
-      }
-
-      const apiData: DashboardData = await response.json();
-      return { ...apiData, stock: normalizeStock(apiData.stock) };
-    } catch (error) {
-      console.error("Error fetching from factory API:", error);
-      // Fall back to config data if API fails
-    }
-  }
-
-  // Return data from config file
   const config = dashboardConfig.data;
+  const balance = await erpNumber(
+    "treasury.balance",
+    dashboardConfig.erp.treasury.balance,
+    config.treasury.balance,
+    balanceOn
+  );
+
   const rawMaterials = config.stock.rawMaterials;
 
   // Calculate kiln counts from the list
@@ -149,7 +143,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       drivers: { ...config.workers.drivers },
     },
     treasury: {
-      balance: config.treasury.balance,
+      balance: balance.value,
       incomingToday: config.treasury.incomingToday,
       outgoingToday: config.treasury.outgoingToday,
     },
@@ -158,5 +152,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       list: config.batches.list.map((batch: Batch) => ({ ...batch })),
     },
     updatedAt: new Date().toISOString(),
+    erpOffline: balance.failed,
   };
 }

@@ -141,7 +141,12 @@ export interface DashboardData {
   treasury: Treasury;
   batches: Batches;
   updatedAt: string;
+  erpOffline: boolean; // true when an ERPNext request failed on this refresh
 }
+
+// مصدر كل رقم: "erp" = من ERPNext، "manual" = من أرقام الكونفج
+// Where each number comes from: "erp" = ERPNext, "manual" = the config numbers
+export type ConfigErpField = { source: "manual" } | { source: "erp"; account: string };
 
 // ============================================================
 // أشكال الكونفج - config/dashboard.config.ts shapes
