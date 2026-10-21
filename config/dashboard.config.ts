@@ -12,6 +12,7 @@ import type {
   ConfigWoodSubType,
   ConfigWoodType,
   ConfigErpField,
+  ConfigErpStockMap,
 } from "@/lib/types";
 
 export const dashboardConfig = {
@@ -28,19 +29,86 @@ export const dashboardConfig = {
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
-      incomingToday: { source: "manual" } as ConfigErpField, // الوارد النهارده
-      outgoingToday: { source: "manual" } as ConfigErpField, // المنصرف النهارده
+      // الوارد = مجموع المدين والمنصرف = مجموع الدائن من GL Entry للحساب ده النهارده
+      // incoming = sum(debit), outgoing = sum(credit) from today's GL Entry for this account
+      incomingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // الوارد النهارده
+      outgoingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // المنصرف النهارده
     },
     // لسه يدوي - still manual (هنربطهم واحد واحد - to be connected one by one)
     attendance: { source: "manual" } as ConfigErpField, // حضور الإدارة
     workers: { source: "manual" } as ConfigErpField, // عمال الأرضية
     kilns: { source: "manual" } as ConfigErpField, // الأفران
     batches: { source: "manual" } as ConfigErpField, // الطرحات
+
+    // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
+    // الرقم = مجموع actual_qty لكل الأصناف اللي في itemCodes (لو أكتر من صنف بيتجمعوا)
+    // warehouses فاضية [] = كل مخازن الشركة، أو اكتب اسم المخزن بالظبط زي ERPNext مثلا ["مخزن منتج تام - تعبئة - AC"]
+    // الأسماء (ربع كيلو، عادي، برتقال...) لازم تبقى زي اللي في data.stock تحت بالظبط، وأي اسم مش موجود هنا بيفضل يدوي
+    // Names must match data.stock below exactly; anything not listed here stays manual
+    // التفاصيل والأرصدة في docs/erp-mapping.md - details in docs/erp-mapping.md
     stock: {
-      packaged: { source: "manual" } as ConfigErpField, // المنتج المعبأ
-      sacks: { source: "manual" } as ConfigErpField, // الشكاير
-      wood: { source: "manual" } as ConfigErpField, // الأخشاب
-      packaging: { source: "manual" } as ConfigErpField, // مواد التعبئة
+      // المنتجات المعبأة: المنتج ← النوع - packaged: product -> variant
+      packaged: {
+        "ربع كيلو": {
+          عادي: { source: "erp", itemCodes: ["باكت ربع"], warehouses: [] },
+          كامل: { source: "erp", itemCodes: ["باكت ربع كامل"], warehouses: [] }, // مفيش كرتونة ربع في ERPNext
+        },
+        "نص كيلو": {
+          عادي: { source: "erp", itemCodes: ["باكت نص"], warehouses: [] },
+          كامل: { source: "erp", itemCodes: ["باكت نص كامل"], warehouses: [] }, // مفيش كرتونة نص في ERPNext
+        },
+        كيلو: {
+          عادي: { source: "erp", itemCodes: ["باكت كيلو"], warehouses: [] },
+          كامل: { source: "erp", itemCodes: ["كرتونة 1 كيلو"], warehouses: [] },
+        },
+        "2 كيلو": {
+          عادي: { source: "erp", itemCodes: ["باكت 2 كيلو"], warehouses: [] },
+          كامل: { source: "erp", itemCodes: ["كرتونة 2 كيلو"], warehouses: [] },
+        },
+        "3 كيلو": {
+          عادي: { source: "erp", itemCodes: ["كيس 3 كيلو جازورينا"], warehouses: [] }, // مفيش كرتونة 3 كيلو
+        },
+      } as Record<string, ConfigErpStockMap>,
+
+      // الشكاير: الشكارة ← النوع - sacks: sack -> variant
+      sacks: {
+        "شكاير برتقال": {
+          ناعم: { source: "erp", itemCodes: ["شيكارة فحم برتقال ناعم"], warehouses: [] },
+          خشن: { source: "erp", itemCodes: ["شيكارة فحم برتقال خشن"], warehouses: [] },
+          مكمورة: { source: "erp", itemCodes: ["فحم برتقال مكمورة", "فحم برتقال مكمورة مصنع"], warehouses: [] },
+        },
+        "شكاير مانجو": {
+          ناعم: { source: "erp", itemCodes: ["شيكارة فحم مانجة ناعم"], warehouses: [] },
+          خشن: { source: "erp", itemCodes: ["شيكارة فحم مانجة خشن"], warehouses: [] },
+        },
+        "شكاير كازوارينا": {
+          ناعم: { source: "erp", itemCodes: ["شيكارة فحم جازورينا ناعم"], warehouses: [] },
+          خشن: { source: "erp", itemCodes: ["شيكارة فحم جازورينا خشن"], warehouses: [] },
+          مكمورة: { source: "erp", itemCodes: ["فحم جازورينا مكمورة", "فحم جازورينا مكمورة مصنع"], warehouses: [] },
+        },
+      } as Record<string, ConfigErpStockMap>,
+
+      // الأخشاب: باسم النوع أو النوع الفرعي (كازوارينا/توت/زيتون جوه بلدي) - wood: by type or sub-type name
+      // الوحدة اللي بتظهر = وحدة أول صنف خشب في ERPNext - the unit shown is the first wood item's ERPNext unit
+      wood: {
+        برتقال: { source: "erp", itemCodes: ["خشب برتقال"], warehouses: [] },
+        مانجو: { source: "erp", itemCodes: ["خشب مانجة"], warehouses: [] },
+        جوافة: { source: "erp", itemCodes: ["خشب جوافة"], warehouses: [] },
+        كازوارينا: { source: "erp", itemCodes: ["خشب جازورينا"], warehouses: [] },
+        توت: { source: "erp", itemCodes: ["خشب توت"], warehouses: [] },
+        زيتون: { source: "erp", itemCodes: ["خشب زايتون"], warehouses: [] },
+        "بيت نار": { source: "erp", itemCodes: ["خشب بيت نار"], warehouses: [] },
+      } as ConfigErpStockMap,
+
+      // مواد التعبئة: الوحدة اللي بتظهر = وحدة الصنف في ERPNext - packaging: the unit shown is the ERPNext unit
+      packaging: {
+        بلاستيك: { source: "erp", itemCodes: ["اكياس تعبئة 60*70", "اكياس تعبئة 40*50"], warehouses: [] },
+        "رولات ربع": { source: "erp", itemCodes: ["رول احمر"], warehouses: [] },
+        "رولات نص": { source: "erp", itemCodes: ["رول ازرق"], warehouses: [] },
+        "أكياس كيلو": { source: "erp", itemCodes: ["بوكس كيلو"], warehouses: [] },
+        "أكياس 2 كيلو": { source: "erp", itemCodes: ["بوكس 2 كيلو"], warehouses: [] },
+        "أكياس 3 كيلو": { source: "erp", itemCodes: ["بوكس 3 كيلو"], warehouses: [] },
+      } as ConfigErpStockMap,
     },
   },
 

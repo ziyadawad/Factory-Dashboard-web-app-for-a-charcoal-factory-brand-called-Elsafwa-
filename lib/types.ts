@@ -148,6 +148,15 @@ export interface DashboardData {
 // Where each number comes from: "erp" = ERPNext, "manual" = the config numbers
 export type ConfigErpField = { source: "manual" } | { source: "erp"; account: string };
 
+// رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
+// A stock number: total actual_qty of every itemCode in warehouses (empty = all warehouses)
+export type ConfigErpStockItem =
+  | { source: "manual" }
+  | { source: "erp"; itemCodes: string[]; warehouses: string[] };
+
+// المفتاح = الاسم زي ما هو في data.stock - keyed by the name used in data.stock
+export type ConfigErpStockMap = Record<string, ConfigErpStockItem>;
+
 // ============================================================
 // أشكال الكونفج - config/dashboard.config.ts shapes
 // كل ليستة في الكونفج متعرفة بنوعها عشان لو فضيتها الـ build ميقعش
