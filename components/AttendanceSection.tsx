@@ -17,10 +17,13 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
   const { count: absentCount } = useCountUp(data.absent, 600);
   const sizes = dashboardConfig.sizes.attendance;
 
-  const chartData = [
-    { name: "حاضر", value: data.present, color: "#22C55E" },
-    { name: "غائب", value: data.absent, color: "#EF4444" },
-  ];
+  // لو الحضور لسه متسجلش الحلقة رمادي فاضية - not recorded yet: an empty gray ring
+  const chartData = data.notRecorded
+    ? [{ name: "لم يسجل", value: 1, color: "#374151" }]
+    : [
+        { name: "حاضر", value: data.present, color: "#22C55E" },
+        { name: "غائب", value: data.absent, color: "#EF4444" },
+      ];
 
   const presentPercentage =
     data.total > 0 ? ((data.present / data.total) * 100).toFixed(0) : "0";
@@ -32,7 +35,10 @@ export default function AttendanceSection({ data }: AttendanceSectionProps) {
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
-      <h2 className="text-xl font-bold text-white mb-2 shrink-0">حضور الإدارة</h2>
+      <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
+        <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور الإدارة</h2>
+        {data.notRecorded && <p className="text-gray-400 text-sm">لم يتم تسجيل الحضور بعد</p>}
+      </div>
 
       {/* المحتوى متوزع بالتساوي على طول الكارت - content spread evenly over the card height */}
       <div className="flex-1 min-h-0 flex flex-col justify-evenly">

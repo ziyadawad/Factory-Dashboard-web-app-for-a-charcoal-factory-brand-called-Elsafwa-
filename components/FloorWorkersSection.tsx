@@ -92,6 +92,7 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
         <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور عمال</h2>
+        {data.notRecorded && <p className="text-gray-400 text-sm truncate min-w-0">لم يتم تسجيل الحضور بعد</p>}
         <p className="text-gray-400 text-sm whitespace-nowrap">
           الإجمالي: <span className="text-white font-bold tabular-nums">{formatNumber(totalPresent)}</span> حاضر من{" "}
           <span className="text-white font-bold tabular-nums">{formatNumber(totalRegistered)}</span>

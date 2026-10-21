@@ -5,6 +5,7 @@ export interface Attendance {
   absent: number;
   total: number;
   absentNames: string[];
+  notRecorded?: boolean; // مفيش أي تسجيل حضور النهارده في ERPNext - nothing recorded today yet
 }
 
 // نوع واحد جوه الكارت (عادي/كامل، ناعم/خشن/مكمورة...) - one type inside a stock card
@@ -119,6 +120,7 @@ export interface FloorWorkers {
   daily: WorkerGroup;
   present: number;
   total: number;
+  notRecorded?: boolean; // مفيش أي تسجيل حضور النهارده في ERPNext - nothing recorded today yet
 }
 
 // تغيير اليوم = incomingToday - outgoingToday (calculated in the UI)
@@ -155,6 +157,13 @@ export interface DashboardData {
 // مصدر كل رقم: "erp" = من ERPNext، "manual" = من أرقام الكونفج
 // Where each number comes from: "erp" = ERPNext, "manual" = the config numbers
 export type ConfigErpField = { source: "manual" } | { source: "erp"; account: string };
+
+// قسم كامل من ERPNext ولا يدوي - a whole section from ERPNext or manual
+export type ConfigErpSource = { source: "erp" | "manual" };
+
+// الطرحات: fuelWood = أخشاب وقود مش بتحدد نوع الطرحة (بس بتدخل في الوزن)
+// Batches: fuelWood = fuel wood names that never decide a batch's type (still counted in its weight)
+export type ConfigErpBatches = { source: "manual" } | { source: "erp"; fuelWood: string[] };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
 // A stock number: total actual_qty of every itemCode in warehouses (empty = all warehouses)

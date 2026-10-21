@@ -78,6 +78,9 @@ export async function erpCall<T = unknown>(
 }
 
 // تاريخ النهارده بتوقيت مصر (YYYY-MM-DD) - today's date in Egypt time (the server may run in UTC)
+// ERP_TODAY=2026-08-31 للتجربة بس (يعرض يوم قديم) - for testing only: show an older day
 export function erpToday(): string {
+  const override = process.env.ERP_TODAY;
+  if (override && /^\d{4}-\d{2}-\d{2}$/.test(override)) return override;
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
 }

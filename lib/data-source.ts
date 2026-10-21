@@ -9,6 +9,7 @@ import {
   ConfigWoodType,
   ConfigErpStockItem,
   ConfigWorker,
+  Attendance,
   DashboardData,
   FloorWorkers,
   WorkerGroup,
@@ -51,38 +52,167 @@ function countPeople(members: ConfigWorker[]) {
   return { present: people.filter((p) => p.present).length, total: people.length };
 }
 
-// عمال الأرضية من الكونفج - floor workers from the config
-function floorWorkers(): FloorWorkers {
+// حضور النهارده من ERPNext: recorded = فيه أي تسجيل في الشركة، present = IDs الحاضرين
+// Today's attendance from ERPNext: recorded = anything recorded company-wide, present = present employee IDs
+type TodayAttendance = { recorded: boolean; present: string[] };
+
+const PRESENT_STATUSES = ["Present", "Half Day", "Work From Home"];
+
+// حاضر = Attendance (Draft أو Submitted) حاضر أو أي Checkin النهارده - present = a present Attendance or any check-in
+async function loadTodayAttendance(): Promise<TodayAttendance> {
+  const today = erpToday();
+  const [attendance, checkins] = await Promise.all([
+    erpGet<{ data: { employee: string; status: string }[] }>("/api/resource/Attendance", {
+      filters: JSON.stringify([["attendance_date", "=", today], ["docstatus", "<", 2]]),
+      fields: JSON.stringify(["employee", "status"]),
+      limit_page_length: 0,
+    }),
+    erpGet<{ data: { employee: string }[] }>("/api/resource/Employee Checkin", {
+      filters: JSON.stringify([["time", ">=", `${today} 00:00:00`], ["time", "<=", `${today} 23:59:59`]]),
+      fields: JSON.stringify(["employee"]),
+      limit_page_length: 0,
+    }),
+  ]);
+  const present = new Set(checkins.data.map((checkin) => checkin.employee));
+  for (const record of attendance.data) if (PRESENT_STATUSES.includes(record.status)) present.add(record.employee);
+  return { recorded: attendance.data.length + checkins.data.length > 0, present: Array.from(present) };
+}
+
+// حالة النهارده على الأعضاء: null = يدوي، ولو مفيش تسجيل خالص محدش حاضر، واللي مالوش employeeId بياخد اليدوي
+// Apply today's status: null = manual; nothing recorded = nobody present; no employeeId = manual flag
+function withToday(members: ConfigWorker[], today: TodayAttendance | null): ConfigWorker[] {
+  if (!today) return members;
+  if (!today.recorded) return members.map((member) => ({ ...member, present: false }));
+  return members.map((member) =>
+    member.employeeId ? { ...member, present: today.present.includes(member.employeeId) } : member
+  );
+}
+
+// حضور الإدارة - management attendance
+function managementAttendance(today: TodayAttendance | null): Attendance {
+  const people = uniqueWorkers(withToday(dashboardConfig.data.attendance.members, today));
+  const present = people.filter((p) => p.present).length;
+  const notRecorded = !!today && !today.recorded;
+  return {
+    present,
+    absent: notRecorded ? 0 : people.length - present,
+    total: people.length,
+    absentNames: notRecorded ? [] : people.filter((p) => !p.present).map((p) => p.name.trim()),
+    notRecorded,
+  };
+}
+
+// عمال الأرضية - floor workers (each list gets today's status first)
+function floorWorkers(today: TodayAttendance | null): FloorWorkers {
   const workers = dashboardConfig.data.workers;
   const factory = workers.productionFactory;
-  const factoryMembers = [
-    ...factory.groups.production.members,
-    ...factory.groups.workshop.members,
-    ...factory.groups.operators.members,
-  ];
-  const allMembers = [...factoryMembers, ...workers.packing.members, ...workers.saw.members, ...workers.drivers.members];
+  const production = withToday(factory.groups.production.members, today);
+  const workshop = withToday(factory.groups.workshop.members, today);
+  const operators = withToday(factory.groups.operators.members, today);
+  const packing = withToday(workers.packing.members, today);
+  const saw = withToday(workers.saw.members, today);
+  const drivers = withToday(workers.drivers.members, today);
+  const factoryMembers = [...production, ...workshop, ...operators];
+  const allMembers = [...factoryMembers, ...packing, ...saw, ...drivers];
   return {
     productionFactory: {
       label: factory.label,
       groups: {
-        production: toWorkerGroup(factory.groups.production.label, factory.groups.production.members),
-        workshop: toWorkerGroup(factory.groups.workshop.label, factory.groups.workshop.members),
-        operators: toWorkerGroup(factory.groups.operators.label, factory.groups.operators.members),
+        production: toWorkerGroup(factory.groups.production.label, production),
+        workshop: toWorkerGroup(factory.groups.workshop.label, workshop),
+        operators: toWorkerGroup(factory.groups.operators.label, operators),
       },
       ...countPeople(factoryMembers),
     },
-    packing: toWorkerGroup(workers.packing.label, workers.packing.members),
-    saw: toWorkerGroup(workers.saw.label, workers.saw.members),
-    drivers: toWorkerGroup(workers.drivers.label, workers.drivers.members),
+    packing: toWorkerGroup(workers.packing.label, packing),
+    saw: toWorkerGroup(workers.saw.label, saw),
+    drivers: toWorkerGroup(workers.drivers.label, drivers),
     daily: toWorkerGroup(workers.daily.label, allMembers.filter((worker) => worker.daily)),
     ...countPeople(allMembers),
+    notRecorded: !!today && !today.recorded,
   };
+}
+
+type ManufactureRow = { name: string; posting_time: string; item_code: string; qty: number; s_warehouse: string | null };
+
+// الطرحات النهارده: كل قيد Manufacture (Submitted) صرف خشب = طرحة
+// النوع = أكبر خشب اتصرف (من غير خشب الوقود)، الوزن = كل الخشب بالطن، والفرن مش متسجل في ERPNext
+// Today's batches: each submitted Manufacture entry that consumed wood; type = the largest non-fuel wood
+async function loadTodayBatches(fuelWood: string[]): Promise<Batch[]> {
+  // صنف الخشب في ERPNext ← اسمه في الداشبورد - ERPNext wood item -> dashboard wood name
+  const woodNames = new Map<string, string>();
+  for (const [name, field] of Object.entries(dashboardConfig.erp.stock.wood)) {
+    if (field.source === "erp") field.itemCodes.forEach((code) => woodNames.set(code, name));
+  }
+  const { data } = await erpGet<{ data: ManufactureRow[] }>("/api/resource/Stock Entry", {
+    filters: JSON.stringify([["purpose", "=", "Manufacture"], ["posting_date", "=", erpToday()], ["docstatus", "=", 1]]),
+    fields: JSON.stringify([
+      "name",
+      "posting_time",
+      "`tabStock Entry Detail`.item_code",
+      "`tabStock Entry Detail`.qty",
+      "`tabStock Entry Detail`.s_warehouse",
+    ]),
+    limit_page_length: 0,
+  });
+
+  const entries = new Map<string, { time: string; wood: Map<string, number> }>();
+  for (const row of data) {
+    const wood = woodNames.get(row.item_code);
+    if (!wood || !row.s_warehouse) continue; // الخشب اللي اتصرف بس - only consumed wood
+    const entry = entries.get(row.name) ?? { time: row.posting_time, wood: new Map<string, number>() };
+    entry.wood.set(wood, (entry.wood.get(wood) ?? 0) + row.qty);
+    entries.set(row.name, entry);
+  }
+
+  return Array.from(entries.values()).map(({ time, wood }) => {
+    const ranked = Array.from(wood.entries()).sort((a, b) => b[1] - a[1]);
+    const main = ranked.find(([name]) => !fuelWood.includes(name)) ?? ranked[0];
+    const weight = ranked.reduce((sum, [, qty]) => sum + qty, 0);
+    const [hours, minutes] = time.split(":");
+    return {
+      kiln: "—",
+      type: main[0],
+      weight: Math.round(weight * 100) / 100,
+      time: `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`,
+    };
+  });
+}
+
+// آخر نتيجة نجحت لكل قسم (حضور، طرحات) - last good result per section (attendance, batches)
+const lastGoodSection = new Map<string, unknown>();
+
+// قسم كامل من ERPNext، ولو فشل آخر نتيجة نجحت، ولو مفيش null (يعني يدوي)
+// A whole section from ERPNext; on failure the last good result, else null (= manual)
+async function erpSection<T>(
+  key: string,
+  enabled: boolean,
+  load: () => Promise<T>,
+  results: ErpStatus[]
+): Promise<T | null> {
+  if (!enabled) return null;
+  try {
+    const value = await load();
+    lastGoodSection.set(key, value);
+    results.push({ fromErp: true, failed: false });
+    return value;
+  } catch (error) {
+    const fallback = lastGoodSection.get(key) as T | undefined;
+    console.error(
+      `[erp] ${key} failed, showing ${fallback !== undefined ? "last good" : "config"} value:`,
+      error instanceof Error ? error.message : error
+    );
+    results.push({ fromErp: true, failed: true });
+    return fallback ?? null;
+  }
 }
 
 // آخر قيمة نجحت من ERPNext (في ذاكرة السيرفر) - last successful ERPNext value per number (server memory)
 const lastGood = new Map<string, number>();
 
-type ErpResult = { value: number; fromErp: boolean; failed: boolean };
+// fromErp = الرقم المفروض من ERPNext، failed = الطلب فشل - used to decide the "غير متصل" badge
+type ErpStatus = { fromErp: boolean; failed: boolean };
+type ErpResult = ErpStatus & { value: number };
 
 // رقم واحد: من ERPNext لو source = "erp"، ولو فشل آخر قيمة نجحت، ولو مفيش رقم الكونفج
 // One number: from ERPNext when source is "erp"; on failure the last good value, else the config value
@@ -158,7 +288,7 @@ const lastUnit = new Map<string, string>();
 
 // أرصدة المخازن: طلب Bin واحد لكل الأصناف المربوطة في كل تحديث، وكل رقم بيجمع الصفوف بتاعته
 // Stock: one Bin request for every mapped item per refresh, then each number sums its own rows
-function stockLoader(results: ErpResult[]) {
+function stockLoader(results: ErpStatus[]) {
   let request: Promise<BinRow[]> | undefined;
   const bins = () =>
     (request ??= erpGet<{ data: BinRow[] }>("/api/resource/Bin", {
@@ -204,11 +334,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   const erp = dashboardConfig.erp;
   const rawMaterials = config.stock.rawMaterials;
   const totals = todayTotals();
-  const results: ErpResult[] = [];
+  const results: ErpStatus[] = [];
   const stock = stockLoader(results);
   const firstWood = Object.values(erp.stock.wood).find((field) => field.source === "erp");
+  const batchesSource = erp.batches;
 
-  const [treasury, packaged, sacks, wood, packaging] = await Promise.all([
+  // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
+  const [treasury, packaged, sacks, wood, packaging, today, todayBatches] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
         ({ account }) => balanceOn(account)),
@@ -283,6 +415,19 @@ export async function getDashboardData(): Promise<DashboardData> {
         icon: item.icon,
       }))
     ),
+    // طلب حضور واحد للإدارة والعمال - one attendance request for management and workers
+    erpSection(
+      "attendance",
+      erp.attendance.source === "erp" || erp.workers.source === "erp",
+      loadTodayAttendance,
+      results
+    ),
+    erpSection(
+      "batches",
+      batchesSource.source === "erp",
+      () => loadTodayBatches(batchesSource.source === "erp" ? batchesSource.fuelWood : []),
+      results
+    ),
   ]);
   const [balance, incomingToday, outgoingToday] = treasury;
 
@@ -296,12 +441,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const stoppedCount = config.kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
-    attendance: {
-      present: config.attendance.present,
-      absent: config.attendance.absent,
-      total: config.attendance.present + config.attendance.absent,
-      absentNames: config.attendance.absentNames,
-    },
+    attendance: managementAttendance(erp.attendance.source === "erp" ? today : null),
     stock: { packaged, sacks, rawMaterials: { wood, packaging } },
     kilns: {
       working: workingCount,
@@ -314,7 +454,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: kiln.status,
       })),
     },
-    floorWorkers: floorWorkers(),
+    floorWorkers: floorWorkers(erp.workers.source === "erp" ? today : null),
     treasury: {
       balance,
       incomingToday,
@@ -322,7 +462,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     batches: {
       unit: config.batches.unit,
-      list: config.batches.list.map((batch: Batch) => ({ ...batch })),
+      list: (todayBatches ?? config.batches.list).map((batch: Batch) => ({ ...batch })),
     },
     updatedAt: new Date().toISOString(),
     erpOffline,

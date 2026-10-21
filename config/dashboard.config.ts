@@ -12,6 +12,8 @@ import type {
   ConfigWoodSubType,
   ConfigWoodType,
   ConfigErpField,
+  ConfigErpSource,
+  ConfigErpBatches,
   ConfigErpStockMap,
   ConfigWorker,
 } from "@/lib/types";
@@ -26,7 +28,7 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 15, // كل كام ثانية الداشبورد يسأل السيستم - how often the dashboard asks the system
+    refreshSeconds: 30, // كل كام ثانية الداشبورد يسأل السيستم - how often the dashboard asks the system
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -35,11 +37,24 @@ export const dashboardConfig = {
       incomingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // الوارد النهارده
       outgoingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // المنصرف النهارده
     },
-    // لسه يدوي - still manual (هنربطهم واحد واحد - to be connected one by one)
-    attendance: { source: "manual" } as ConfigErpField, // حضور الإدارة
-    workers: { source: "manual" } as ConfigErpField, // عمال الأرضية
-    kilns: { source: "manual" } as ConfigErpField, // الأفران
-    batches: { source: "manual" } as ConfigErpField, // الطرحات
+    // الحضور: كل شخص ليه employeeId في data.attendance و data.workers تحت
+    // حاضر = Attendance النهارده (Draft أو Submitted) بحالة Present / Half Day / Work From Home، أو أي Employee Checkin النهارده
+    // غايب = Attendance بحالة Absent / On Leave، أو مفيش أي تسجيل ليه
+    // اللي مالوش employeeId بيفضل ياخد present اليدوي بتاعه
+    // لو مفيش ولا تسجيل حضور في الشركة كلها النهارده: الكروت بتكتب "لم يتم تسجيل الحضور بعد" (ومحدش بيظهر غايب)
+    // Attendance: present / absent per employeeId; people without an employeeId keep their manual present flag
+    attendance: { source: "erp" } as ConfigErpSource, // حضور الإدارة
+    workers: { source: "erp" } as ConfigErpSource, // عمال الأرضية (ومعاهم عمال اليومية)
+
+    // الأفران يدوي: في ERPNext فيه Workstation واحد بس اسمه "تفحيم"، مش 6 أفران
+    // Kilns stay manual: ERPNext has a single Workstation ("تفحيم"), not the 6 kilns
+    kilns: { source: "manual" } as ConfigErpSource,
+
+    // الطرحات النهارده = قيود Stock Entry نوعها Manufacture (Submitted) اللي صرفت خشب النهارده
+    // النوع = أكبر خشب اتصرف (من غير fuelWood)، الوزن = كل الخشب اللي اتصرف بالطن، الوقت = posting_time
+    // الفرن مش متسجل في ERPNext (خانة custom_الغرفة في Work Order فاضية)، فبيظهر "—"
+    // Batches = today's submitted Manufacture Stock Entries that consumed wood; the kiln isn't in ERPNext
+    batches: { source: "erp", fuelWood: ["بيت نار"] } as ConfigErpBatches,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
     // الرقم = مجموع actual_qty لكل الأصناف اللي في itemCodes (لو أكتر من صنف بيتجمعوا)
@@ -146,13 +161,22 @@ export const dashboardConfig = {
 
     // حضور الإدارة - العمال في الإدارة
     // Management attendance - office workers
+    // كل واحد { name, employeeId, present }: name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext،
+    // present = يدوي (بيستخدم بس لو مالوش employeeId أو الحضور manual). الحاضر والغايب والنسبة بيتحسبوا لوحدهم
+    // Each person { name, employeeId, present }; present is the manual value (used without an employeeId)
     attendance: {
-      present: 9, // عدد الحاضرين - number of present workers
-      absent: 1, // عدد الغائبين - number of absent workers
-      absentNames: [
-        // أسماء الغائبين - names of absent workers
-        "فاطمه طلال ",
-      ] as string[],
+      members: [
+        { name: "حماده شاهين", employeeId: "حماده شحات محمد شاهين", present: true },
+        { name: "يوسف عاطف", employeeId: "يوسف عاطف", present: true },
+        { name: "زياد عوض", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
+        { name: "ايه احمد", employeeId: "ايه احمد", present: true },
+        { name: "طه على طه", employeeId: "طه علي طه", present: true },
+        { name: "عايد عرموش", employeeId: "عايد عرموش", present: true },
+        { name: "ايناس اشرف", employeeId: "ايناس إسماعيل عوض", present: true }, // محتمل: الإيناس الوحيدة بس الاسم التاني مختلف
+        { name: "مى منسى", present: true }, // مش لاقيينها في ERPNext - not found in ERPNext
+        { name: "فاطمه طلال", employeeId: "فاطمه طلال الصافورى", present: false },
+        { name: "ناجى احمد بصير", employeeId: "ناجى احمد بصير على", present: true },
+      ] as ConfigWorker[],
     },
 
     // عمال الأرضية - العمال على الأرض مقسمين حسب القسم
@@ -174,10 +198,10 @@ export const dashboardConfig = {
             // عمال الإنتاج - production workers
             label: "عمال إنتاج", // اسم المجموعة - group name
             members: [
-              { name: "الطيب", present: true },
-              { name: "شعبان", present: true },
-              { name: "محمود عابدين", present: true },
-              { name: "فايز زكى", present: true },
+              { name: "الطيب", employeeId: "الطيب مصطفى محمد عبدالظاهر", present: true }, // محتمل: الوحيد اللي اسمه الأول الطيب (وظيفته مشرف انتاج)
+              { name: "شعبان", employeeId: "شعبان السيد بيومى", present: true },
+              { name: "محمود عابدين", employeeId: "محمود عابدين", present: true },
+              { name: "فايز زكى", employeeId: "فايز  ذكى", present: true },
               // عامل يومية – بيظهر في خانة اليومية وفي قسمه
               { name: "عبدالناصر", employeeId: "عبدالناصر عبداللطيف", present: true, daily: true },
               { name: "عبدالظاهر", employeeId: "عبدالظاهر الطيب مصطفى", present: true }, // اتنقل من المنشار
@@ -189,7 +213,7 @@ export const dashboardConfig = {
             // الورشة - workshop workers
             label: "ورشة", // اسم المجموعة - group name
             members: [
-              { name: "محمد عصام", present: true },
+              { name: "محمد عصام", employeeId: "محمد عصام صقر", present: true },
               // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينه في ERPNext لسه)
               { name: "احمد حمدى", present: true, daily: true },
             ] as ConfigWorker[],
@@ -198,9 +222,9 @@ export const dashboardConfig = {
             // الأوبريتر - machine operators
             label: "أوبريتر", // اسم المجموعة - group name
             members: [
-              { name: "محمد حسين", present: true },
-              { name: "محمد الطيب", present: true },
-              { name: "حسن فضيل", present: true },
+              { name: "محمد حسين", employeeId: "محمد حسين محمود حسن", present: true },
+              { name: "محمد الطيب", employeeId: "محمد الطيب", present: true },
+              { name: "حسن فضيل", employeeId: "حسن محمد فضيل", present: true },
             ] as ConfigWorker[],
           },
         },
@@ -209,16 +233,16 @@ export const dashboardConfig = {
         // عمال التعبئة - packing workers
         label: "عمال تعبئة", // اسم المجموعة - group name
         members: [
-          { name: "طارق", present: true },
-          { name: "رضا", present: true },
-          { name: "زهراء", present: true },
-          { name: "دنيا", present: true },
-          { name: "زينب", present: true },
-          { name: "هويدا", present: true },
-          { name: "ملك", present: true },
-          { name: "جيهان", present: true },
-          { name: "جومانه", present: true },
-          { name: "سماح", present: true },
+          { name: "طارق", employeeId: "طارق قاسم حسن منصور", present: true },
+          { name: "رضا", employeeId: "رضا احمد سيد", present: true },
+          { name: "زهراء", employeeId: "زهرة محمد الحسينى", present: true }, // محتمل: زهرة هي الوحيدة
+          { name: "دنيا", employeeId: "دنيا حسن محمود", present: true },
+          { name: "زينب", employeeId: "زينب احمد فريد", present: true },
+          { name: "هويدا", employeeId: "هويدا السيد ابراهيم", present: true },
+          { name: "ملك", employeeId: "ملك سعيد فتحي", present: true },
+          { name: "جيهان", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
+          { name: "جومانه", employeeId: "جومانا سعيد فتحي", present: true },
+          { name: "سماح", employeeId: "سماح سعيد عامر", present: true },
           // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينها في ERPNext لسه)
           { name: "وفاء فكرى", present: true, daily: true },
         ] as ConfigWorker[],
@@ -227,21 +251,21 @@ export const dashboardConfig = {
         // عمال المنشار - saw workers
         label: "عمال منشار", // اسم المجموعة - group name
         members: [
-          { name: "محمد حسن", present: true },
+          { name: "محمد حسن", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
         ] as ConfigWorker[],
       },
       drivers: {
         // السواقين - drivers
         label: "سواقين", // اسم المجموعة - group name
         members: [
-          { name: "محمود القرش", present: true },
-          { name: "حماده فهمى", present: true },
-          { name: "عبدالمقصود", present: true },
-          { name: "اسلام", present: true },
-          { name: "كريم", present: true },
-          { name: "اليمنى", present: true },
-          { name: "محمود عز", present: true },
-          { name: "ابراهيم وصفى", present: true },
+          { name: "محمود القرش", employeeId: "محمود محمد عبده القرش", present: true },
+          { name: "حماده فهمى", employeeId: "حماده فهمى إسماعيل", present: true },
+          { name: "عبدالمقصود", employeeId: "محمد عبدالمقصود محمد", present: true }, // محتمل: السواق الوحيد اللي فيه عبدالمقصود
+          { name: "اسلام", employeeId: "اسلام محمد عوض", present: true }, // محتمل: الإسلام الوحيد (وظيفته مندوب)
+          { name: "كريم", employeeId: "كريم مدحت عوض", present: true },
+          { name: "اليمنى", employeeId: "مصطفى خالد اليمني", present: true }, // محتمل: الوحيد اللي اسمه اليمني (وظيفته مندوب)
+          { name: "محمود عز", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
+          { name: "ابراهيم وصفى", employeeId: "إبراهيم محمد وصفى", present: true },
         ] as ConfigWorker[],
       },
       // عمال اليومية - أعضاءها هما اللي daily: true في كل الأقسام فوق (متكتبش أسماء هنا)
