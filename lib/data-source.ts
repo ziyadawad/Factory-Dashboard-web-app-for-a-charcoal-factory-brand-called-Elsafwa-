@@ -15,7 +15,7 @@ import {
   WorkerGroup,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpCall, erpGet, erpToday } from "./erp";
+import { ErpError, erpCall, erpGet, erpPost, erpToday } from "./erp";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
 // Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
@@ -268,7 +268,15 @@ function todayTotals() {
 }
 
 type StockMapping = Extract<ConfigErpStockItem, { source: "erp" }>;
-type BinRow = { item_code: string; warehouse: string; actual_qty: number; stock_uom: string };
+type BalanceRow = { item_code: string; warehouse: string; balance_qty: number; stock_uom: string };
+type LedgerRow = {
+  item_code: string;
+  warehouse: string;
+  posting_datetime: string;
+  creation: string;
+  qty_after_transaction: number;
+  stock_uom: string;
+};
 
 // كل الأصناف المربوطة في erp.stock - every item code mapped in erp.stock
 function mappedItemCodes(): string[] {
@@ -286,17 +294,64 @@ const SHORT_UNITS: Record<string, string> = { "كيلو جرام": "كجم" };
 // آخر وحدة نجحت لكل رقم - last good unit per number
 const lastUnit = new Map<string, string>();
 
-// أرصدة المخازن: طلب Bin واحد لكل الأصناف المربوطة في كل تحديث، وكل رقم بيجمع الصفوف بتاعته
-// Stock: one Bin request for every mapped item per refresh, then each number sums its own rows
-function stockLoader(results: ErpStatus[]) {
-  let request: Promise<BinRow[]> | undefined;
-  const bins = () =>
-    (request ??= erpGet<{ data: BinRow[] }>("/api/resource/Bin", {
-      filters: JSON.stringify([["item_code", "in", mappedItemCodes()]]),
-      fields: JSON.stringify(["item_code", "warehouse", "actual_qty", "stock_uom"]),
+// رصيد كل صنف في كل مخزن النهارده من Stock Ledger Entry، بنفس طريقة تقرير Stock Balance:
+// الرصيد = qty_after_transaction بتاع آخر حركة لحد النهارده. مش SUM(actual_qty) لأن التسوية المخزنية
+// (Stock Reconciliation) بتسجل actual_qty = 0 وبتحط الرصيد الجديد في qty_after_transaction
+// Balance per item and warehouse as of today, the way the Stock Balance report computes it: the
+// qty_after_transaction of the last ledger entry up to today. Not SUM(actual_qty), because Stock
+// Reconciliation entries store actual_qty = 0 and put the new balance in qty_after_transaction.
+async function loadStockBalances(): Promise<BalanceRow[]> {
+  const today = erpToday();
+  const base = [
+    ["item_code", "in", mappedItemCodes()],
+    ["is_cancelled", "=", 0],
+    ["posting_date", "<=", today],
+  ];
+  // POST عشان قايمة الأصناف والأوقات أطول من إن الـ URL يشيلها - POST: the lists are too long for a URL
+  const getList = <T,>(body: Record<string, unknown>) =>
+    erpPost<{ message: T[] }>("/api/method/frappe.client.get_list", {
+      doctype: "Stock Ledger Entry",
       limit_page_length: 0,
-    }).then(({ data }) => data));
-  const rowsFor = (rows: BinRow[], mapping: StockMapping) =>
+      ...body,
+    }).then(({ message }) => message);
+
+  // 1) وقت آخر حركة لكل صنف في كل مخزن - time of the last entry per item and warehouse
+  const latest = await getList<{ item_code: string; warehouse: string; at: string }>({
+    filters: base,
+    fields: ["item_code", "warehouse", "max(posting_datetime) as at"],
+    group_by: "item_code, warehouse",
+  });
+  if (latest.length === 0) return [];
+  // 2) الحركات دي نفسها عشان الرصيد بعدها - those entries themselves, for the balance after them
+  const rows = await getList<LedgerRow>({
+    filters: [...base, ["posting_datetime", "in", Array.from(new Set(latest.map((row) => row.at)))]],
+    fields: ["item_code", "warehouse", "posting_datetime", "creation", "qty_after_transaction", "stock_uom"],
+  });
+  // لو حركتين في نفس الوقت، الأحدث تسجيلًا هي الأخيرة - two entries at the same time: the later created wins
+  const last = new Map<string, LedgerRow>();
+  for (const { item_code, warehouse, at } of latest) {
+    for (const row of rows) {
+      if (row.item_code !== item_code || row.warehouse !== warehouse || row.posting_datetime !== at) continue;
+      const key = `${item_code}\u0000${warehouse}`;
+      const current = last.get(key);
+      if (!current || row.creation > current.creation) last.set(key, row);
+    }
+  }
+  if (last.size !== latest.length) throw new ErpError("Stock Ledger Entry: missing the last entry of some item");
+  return Array.from(last.values(), (row) => ({
+    item_code: row.item_code,
+    warehouse: row.warehouse,
+    balance_qty: row.qty_after_transaction,
+    stock_uom: row.stock_uom,
+  }));
+}
+
+// أرصدة المخازن: طلب واحد لكل الأصناف المربوطة في كل تحديث، وكل رقم بيجمع الصفوف بتاعته
+// Stock: one balance load for every mapped item per refresh, then each number sums its own rows
+function stockLoader(results: ErpStatus[]) {
+  let request: Promise<BalanceRow[]> | undefined;
+  const balances = () => (request ??= loadStockBalances());
+  const rowsFor = (rows: BalanceRow[], mapping: StockMapping) =>
     rows.filter(
       (row) =>
         mapping.itemCodes.includes(row.item_code) &&
@@ -308,7 +363,7 @@ function stockLoader(results: ErpStatus[]) {
     // Quantity, rounded: decimals = 0 for packaged / sacks / packaging, 1 for wood
     async quantity(key: string, field: ConfigErpStockItem | undefined, manual: number, decimals = 0) {
       const result = await erpNumber(key, field ?? { source: "manual" }, manual, async (mapping: StockMapping) => {
-        const total = rowsFor(await bins(), mapping).reduce((sum, row) => sum + row.actual_qty, 0);
+        const total = rowsFor(await balances(), mapping).reduce((sum, row) => sum + row.balance_qty, 0);
         const factor = 10 ** decimals;
         return Math.round(total * factor) / factor;
       });
@@ -319,7 +374,7 @@ function stockLoader(results: ErpStatus[]) {
     async unit(key: string, field: ConfigErpStockItem | undefined, manual: string) {
       if (field?.source !== "erp") return manual;
       try {
-        const uom = (await bins()).find((row) => field.itemCodes.includes(row.item_code))?.stock_uom;
+        const uom = (await balances()).find((row) => field.itemCodes.includes(row.item_code))?.stock_uom;
         if (uom) lastUnit.set(key, SHORT_UNITS[uom] ?? uom);
       } catch {
         // الغلط بيتسجل مع الكمية - the error is logged with the quantity

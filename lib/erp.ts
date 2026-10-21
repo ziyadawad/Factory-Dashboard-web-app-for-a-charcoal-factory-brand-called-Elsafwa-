@@ -28,15 +28,31 @@ export async function erpGet<T = unknown>(
   path: string,
   params: Record<string, string | number> = {}
 ): Promise<T> {
-  const { baseUrl, auth } = erpSettings();
+  const { baseUrl } = erpSettings();
   const url = new URL(baseUrl + path);
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, String(value));
+  return erpRequest<T>(path, url, {});
+}
 
+// POST على ERPNext بـ JSON body - للطلبات الطويلة اللي مش هتيجي في الـ URL
+// POST a JSON body to ERPNext - for requests too long to fit in a URL
+export async function erpPost<T = unknown>(path: string, body: Record<string, unknown>): Promise<T> {
+  const { baseUrl } = erpSettings();
+  return erpRequest<T>(path, new URL(baseUrl + path), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function erpRequest<T>(path: string, url: URL, init: RequestInit): Promise<T> {
+  const { auth } = erpSettings();
   const started = Date.now();
   let response: Response;
   try {
     response = await fetch(url, {
-      headers: { Authorization: auth, Accept: "application/json" },
+      ...init,
+      headers: { ...init.headers, Authorization: auth, Accept: "application/json" },
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
