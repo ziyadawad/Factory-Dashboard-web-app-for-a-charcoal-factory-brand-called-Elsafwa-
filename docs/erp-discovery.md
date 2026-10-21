@@ -2,6 +2,7 @@
 
 > التاريخ: 2026-10-20 — استكشاف **قراية بس** (مفيش أي حاجة اتكتبت أو اتعدلت في ERPNext ولا في الكود).
 > الشركة في السيستم: **ALSafwa Coal** — العملة: **EGP**.
+> **اتراجع تاني** في نفس اليوم (2026-10-20) على البيانات الحية: كل الأرقام اللي تحت (الأصناف، المخازن، الأرصدة، الحسابات، الموظفين، الحضور، أوامر الشغل، والـ 403) **زي ما هي من غير أي تغيير**. ولسه مفيش أي قيد على الخزينة أو Work Order أو Stock Entry النهارده.
 
 ## 0) الاتصال والأمان
 
@@ -305,7 +306,7 @@
 | **Production Plan** | – |
 | **Holiday List** | تمييز أيام الإجازة في الحضور |
 
-كل اللي غير كده اتقري عادي: Item, Item Group, Warehouse, Bin, Account, Company, Department, Employee, Attendance, Employee Checkin, Shift Type, Work Order, Stock Entry, Stock Entry Type, Stock Ledger Entry, GL Entry, Asset, Payment Entry, Journal Entry، وكمان `get_balance_on` و`frappe.client.get_count`.
+كل اللي غير كده اتقري عادي: Item, Item Group, Warehouse, Bin, Account, Company, Department, Employee, Attendance, Employee Checkin, Shift Type, Shift Assignment, Leave Application, Work Order, Stock Entry, Stock Entry Type, Stock Ledger Entry, GL Entry, Asset, Payment Entry, Journal Entry، وكمان `get_balance_on` و`frappe.client.get_count`.
 
 > بالإضافة لـ **Cloudflare 1010** اللي حصل من User-Agent بايثون (مش صلاحيات ERPNext، شوف بند 0).
 
