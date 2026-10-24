@@ -183,6 +183,7 @@ export type ConfigErpStockMap = Record<string, ConfigErpStockItem>;
 export interface ConfigPage {
   id: string;
   title: string;
+  durationSeconds: number; // مدة الصفحة في التقليب التلقائي - seconds on screen when auto rotating
 }
 
 // عامل في الكونفج - a worker in the config (listed once, in their department group)

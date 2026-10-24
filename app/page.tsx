@@ -49,14 +49,17 @@ export default function Dashboard() {
   const prevDataRef = useRef<DashboardData | null>(null);
   const cols = dashboardConfig.sizes.topRowColumns;
   const fadeMs = dashboardConfig.sizes.pageNav.fadeMs;
-  const autoRotateSeconds = dashboardConfig.pages.autoRotateSeconds;
+  const autoRotate = dashboardConfig.pages.autoRotate;
 
   // الصفحة الحالية - current page index (data stays in SWR, so switching never refetches)
   const [pageIndex, setPageIndex] = useState(0);
+  // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
+  const [switchCount, setSwitchCount] = useState(0);
   useEffect(() => setPageIndex(pageFromUrl()), []);
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);
+    setSwitchCount((count) => count + 1);
     const url = new URL(window.location.href);
     url.searchParams.set("page", String(index + 1));
     window.history.replaceState(null, "", url);
@@ -74,12 +77,14 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pageIndex, changePage]);
 
-  // التقليب التلقائي - auto rotate (the timer restarts after every manual switch)
+  // التقليب التلقائي: كل صفحة بمدتها - auto rotate, each page for its own duration
+  // (the timer restarts after every switch, manual or automatic)
   useEffect(() => {
-    if (!(autoRotateSeconds > 0) || PAGES.length < 2) return;
-    const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length), autoRotateSeconds * 1000);
+    const seconds = PAGES[pageIndex]?.durationSeconds;
+    if (!autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
+    const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [pageIndex, autoRotateSeconds, changePage]);
+  }, [pageIndex, switchCount, autoRotate, changePage]);
 
   useEffect(() => {
     if (data && prevDataRef.current) {

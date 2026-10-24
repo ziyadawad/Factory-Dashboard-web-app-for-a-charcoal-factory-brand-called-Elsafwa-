@@ -28,7 +28,7 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 30, // كل كام ثانية الداشبورد يسأل السيستم - how often the dashboard asks the system
+    refreshSeconds: 60, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -136,13 +136,15 @@ export const dashboardConfig = {
   // ============================================================
 
   pages: {
-    autoRotateSeconds: 0, // كل كام ثانية الصفحة تتقلب لوحدها (0 = مقفول) - auto switch every N seconds (0 = off)
+    autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
+    // durationSeconds = الصفحة دي تفضل كام ثانية قبل ما تتقلب للي بعدها - seconds on screen before the next page
+    // لو حد داس على الأسهم الصفحة بتتقلب والعداد بيبدأ من الأول - a manual switch restarts the timer
     // ترتيب الصفحات - عشان تفتح صفحة معينة على التلفزيون اكتب في اللينك ?page=2
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
-      { id: "main", title: "الرئيسية" }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "أرصدة المخازن" }, // الصفحة 2: المخازن - page 2
+      { id: "main", title: "الرئيسية", durationSeconds: 30 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 2: المخازن - page 2
     ] as ConfigPage[],
   },
 
