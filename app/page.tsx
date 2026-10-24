@@ -10,6 +10,7 @@ import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
+import ScaleStage from "@/components/ScaleStage";
 import { DashboardData } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -171,41 +172,43 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
-      <Header
-        isConnected={isConnected}
-        page={PAGES[pageIndex]}
-        pageNumber={pageIndex + 1}
-        pageCount={PAGES.length}
-        nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} />}
-      />
+    <ScaleStage>
+      <div className="h-full flex flex-col overflow-hidden bg-background">
+        <Header
+          isConnected={isConnected}
+          page={PAGES[pageIndex]}
+          pageNumber={pageIndex + 1}
+          pageCount={PAGES.length}
+          nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} />}
+        />
 
-      <main className="flex-1 min-h-0 p-4 overflow-hidden">
-        {data ? (
-          // كل الصفحات فوق بعض والحالية بس اللي ظاهرة - pages are stacked; only the active one is visible
-          <div className="relative h-full">
-            {PAGES.map((page, index) => {
-              const active = index === pageIndex;
-              return (
-                <div
-                  key={page.id}
-                  aria-hidden={!active}
-                  className={`absolute inset-0 transition-[opacity,visibility] ${
-                    active ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
-                  }`}
-                  style={{ transitionDuration: `${fadeMs}ms` }}
-                >
-                  {renderPage(page.id, data)}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-400 text-xl">جاري تحميل البيانات...</p>
-          </div>
-        )}
-      </main>
-    </div>
+        <main className="flex-1 min-h-0 p-4 overflow-hidden">
+          {data ? (
+            // كل الصفحات فوق بعض والحالية بس اللي ظاهرة - pages are stacked; only the active one is visible
+            <div className="relative h-full">
+              {PAGES.map((page, index) => {
+                const active = index === pageIndex;
+                return (
+                  <div
+                    key={page.id}
+                    aria-hidden={!active}
+                    className={`absolute inset-0 transition-[opacity,visibility] ${
+                      active ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
+                    }`}
+                    style={{ transitionDuration: `${fadeMs}ms` }}
+                  >
+                    {renderPage(page.id, data)}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-gray-400 text-xl">جاري تحميل البيانات...</p>
+            </div>
+          )}
+        </main>
+      </div>
+    </ScaleStage>
   );
 }
