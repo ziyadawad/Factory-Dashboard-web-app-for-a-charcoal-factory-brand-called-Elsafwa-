@@ -173,7 +173,7 @@ export const dashboardConfig = {
         { name: "حماده شاهين", employeeId: "حماده شحات محمد شاهين", present: true },
         { name: "يوسف عاطف", employeeId: "يوسف عاطف", present: true },
         { name: "ناجى احمد بصير", employeeId: "ناجى احمد بصير على", present: true },
-        { name: "زياد عوض", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
+        { name: "زياد مصطفى عوض", employeeId: "HR-EMP-00193", present: true },
         { name: "ايناس اسماعيل", employeeId: "ايناس إسماعيل عوض", present: true }, // محتمل: الإيناس الوحيدة بس الاسم التاني مختلف
         { name: "مى منسى", present: true }, // مش لاقيينها في ERPNext - not found in ERPNext
         { name: "فاطمه طلال", employeeId: "فاطمه طلال الصافورى", present: false },
