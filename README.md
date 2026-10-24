@@ -1,5 +1,7 @@
-## first page
-## second page
+# Smart Facial Recognition System
 
-![first page](first page.png)
-![second page](second page.png)
+## First Page
+![first page](first%20page.png)
+
+## Second Page
+![second page](second%20page.png)
