@@ -2,7 +2,7 @@
 
 import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
-import { AlertTriangle, Box, Cylinder, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
+import { AlertTriangle, Box, Cylinder, Disc3, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { useFitFontSize } from "@/lib/useFitFontSize";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
@@ -60,9 +60,10 @@ function woodVariants(type: WoodType): StockVariant[] {
 
 // أيقونة كل مادة تعبئة حسب الـ icon في الكونفج - packaging icon by its config "icon" value
 const PACKAGING_ICONS: Record<string, LucideIcon> = {
-  plastic: Layers, // بلاستيك
+  plastic: Layers, // أكياس تعبئة
   roll: Cylinder, // رولات
   bag: ShoppingBag, // أكياس
+  tape: Disc3, // بكر لاصق
 };
 
 // مادة التعبئة كنوع واحد من غير اسم (الاسم فوق في الكارت) - packaging item as one unnamed type

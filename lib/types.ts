@@ -55,14 +55,14 @@ export interface SackItem {
   variants: StockVariant[];
 }
 
-// مادة تعبئة (بلاستيك، رولات، أكياس...) - packaging material, one quantity each
+// مادة تعبئة (أكياس تعبئة، رولات، أكياس، بكر لاصق...) - packaging material, one quantity each
 export interface PackagingItem {
   id: string;
   name: string;
   unit: string;
   quantity: number;
   minimumThreshold: number;
-  icon?: string; // "plastic" | "roll" | "bag"
+  icon?: string; // "plastic" | "roll" | "bag" | "tape"
 }
 
 // المواد الخام: الأخشاب ومواد التعبئة - raw materials: wood + packaging materials
@@ -236,5 +236,5 @@ export interface ConfigPackagingItem {
   quantity: number;
   unit: string;
   minimum: number;
-  icon?: string; // "plastic" | "roll" | "bag"
+  icon?: string; // "plastic" | "roll" | "bag" | "tape"
 }

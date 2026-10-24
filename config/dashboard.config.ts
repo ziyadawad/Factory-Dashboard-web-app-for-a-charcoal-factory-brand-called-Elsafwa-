@@ -118,12 +118,14 @@ export const dashboardConfig = {
 
       // مواد التعبئة: الوحدة اللي بتظهر = وحدة الصنف في ERPNext - packaging: the unit shown is the ERPNext unit
       packaging: {
-        بلاستيك: { source: "erp", itemCodes: ["اكياس تعبئة 60*70", "اكياس تعبئة 40*50"], warehouses: [] },
+        "أكياس تعبئة": { source: "erp", itemCodes: ["اكياس تعبئة 60*70", "اكياس تعبئة 40*50"], warehouses: [] },
         "رولات ربع": { source: "erp", itemCodes: ["رول احمر"], warehouses: [] },
         "رولات نص": { source: "erp", itemCodes: ["رول ازرق"], warehouses: [] },
         "أكياس كيلو": { source: "erp", itemCodes: ["بوكس كيلو"], warehouses: [] },
         "أكياس 2 كيلو": { source: "erp", itemCodes: ["بوكس 2 كيلو"], warehouses: [] },
         "أكياس 3 كيلو": { source: "erp", itemCodes: ["بوكس 3 كيلو"], warehouses: [] },
+        // بكر اللاصق: صنف "بكر لاصق" في ERPNext، الرصيد من كل المخازن والوحدة "عدد" من ERPNext
+        "بكر لاصق": { source: "erp", itemCodes: ["بكر لاصق"], warehouses: [] },
       } as ConfigErpStockMap,
     },
   },
@@ -393,15 +395,16 @@ export const dashboardConfig = {
         // مواد التعبئة - كل مادة ليها رقم واحد، تقدر تزود مادة جديدة بسطر جديد
         // Packaging materials - one number each; add a material by adding a line
         // name = اسم المادة، quantity = الكمية، unit = وحدة القياس، minimum = الحد الأدنى
-        // icon = شكل الأيقونة: "plastic" (بلاستيك)، "roll" (رول)، "bag" (كيس)
-        // icon = icon shape: "plastic", "roll" or "bag"
+        // icon = شكل الأيقونة: "plastic" (أكياس تعبئة)، "roll" (رول)، "bag" (كيس)، "tape" (بكر لاصق)
+        // icon = icon shape: "plastic", "roll", "bag" or "tape"
         packaging: [
-          { name: "بلاستيك", quantity: 850, unit: "كجم", minimum: 0, icon: "plastic" },
+          { name: "أكياس تعبئة", quantity: 850, unit: "كجم", minimum: 0, icon: "plastic" },
           { name: "رولات ربع", quantity: 40, unit: "رول", minimum: 0, icon: "roll" },
           { name: "رولات نص", quantity: 35, unit: "رول", minimum: 0, icon: "roll" },
           { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0, icon: "bag" },
           { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0, icon: "bag" },
           { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0, icon: "bag" },
+          { name: "بكر لاصق", quantity: 0, unit: "عدد", minimum: 0, icon: "tape" },
         ] as ConfigPackagingItem[],
       },
 
