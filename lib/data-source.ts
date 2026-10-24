@@ -97,7 +97,9 @@ function managementAttendance(today: TodayAttendance | null): Attendance {
     present,
     absent: notRecorded ? 0 : people.length - present,
     total: people.length,
+    presentNames: notRecorded ? [] : people.filter((p) => p.present).map((p) => p.name.trim()),
     absentNames: notRecorded ? [] : people.filter((p) => !p.present).map((p) => p.name.trim()),
+    allNames: people.map((p) => p.name.trim()),
     notRecorded,
   };
 }

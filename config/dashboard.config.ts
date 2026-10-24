@@ -511,17 +511,18 @@ export const dashboardConfig = {
     // Attendance - management attendance card with donut chart
     // المحتوى بيتوزع بالتساوي على طول الكارت - content is spread evenly over the card height
     attendance: {
-      donutSize: 230, // حجم الدونت بالبكسل (عرض وطول) - donut size in pixels (width = height)
-      donutThickness: 22, // سماكة حلقة الدونت بالبكسل - donut ring thickness in pixels
-      percentFontSize: 52, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
+      donutSize: 170, // حجم الدونت بالبكسل (عرض وطول) - donut size in pixels (width = height)
+      donutThickness: 18, // سماكة حلقة الدونت بالبكسل - donut ring thickness in pixels
+      percentFontSize: 44, // حجم النسبة المئوية في وسط الدونت - percentage font size in donut center
       centerLabelFontSize: 18, // حجم "نسبة الحضور" اللي تحت النسبة - "نسبة الحضور" under the percentage
       countFontSize: 44, // حجم رقم الحاضر (أخضر) والغائب (أحمر) - present / absent number font size
       countLabelFontSize: 18, // حجم كلمة "حاضر" و "غائب" - "حاضر" / "غائب" label font size
       countPaddingY: 14, // المسافة فوق وتحت جوه مربع حاضر/غائب (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
-      absentLabelFontSize: 18, // حجم كلمة "الغائبون:" - "الغائبون:" label font size
-      nameFontSize: 18, // حجم أسماء الغايبين - absent name chips font size
-      namePaddingX: 12, // المسافة يمين وشمال جوه اسم الغايب - name chip horizontal padding
-      namePaddingY: 4, // المسافة فوق وتحت جوه اسم الغايب - name chip vertical padding
+      listLabelFontSize: 16, // حجم كلمة "الحاضرين" / "الغائبين" / "لم يسجّلوا بعد" - list label font size
+      chipFontSize: 16, // حجم الأسامي جوه الكبسولات - name chip font size
+      minChipFontSize: 13, // لو الأسامي مش واخدة مكانها الخط بيصغر لحد كده، والأسامي عمرها ما بتستخبى - smallest chip size; names are never hidden
+      chipPaddingX: 10, // المسافة يمين وشمال جوه الكبسولة - name chip horizontal padding
+      chipPaddingY: 3, // المسافة فوق وتحت جوه الكبسولة - name chip vertical padding
     },
 
     // عمال الأرضية - بطاقة عمال الأرضية

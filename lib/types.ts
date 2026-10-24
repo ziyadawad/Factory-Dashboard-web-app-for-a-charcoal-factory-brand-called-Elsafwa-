@@ -4,7 +4,9 @@ export interface Attendance {
   present: number;
   absent: number;
   total: number;
+  presentNames: string[];
   absentNames: string[];
+  allNames: string[]; // كل الإدارة (بتظهر لما الحضور لسه متسجلش) - everyone, shown while nothing is recorded
   notRecorded?: boolean; // مفيش أي تسجيل حضور النهارده في ERPNext - nothing recorded today yet
 }
 
