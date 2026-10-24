@@ -180,8 +180,6 @@ export const dashboardConfig = {
         { name: "ايه احمد", employeeId: "ايه احمد", present: true },
         { name: "عايد عرموش", employeeId: "عايد عرموش", present: true },
         { name: "طه على طه", employeeId: "طه علي طه", present: true },
-
-
       ] as ConfigWorker[],
     },
 
