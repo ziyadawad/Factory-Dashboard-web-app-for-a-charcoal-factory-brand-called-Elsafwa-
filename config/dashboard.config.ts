@@ -28,7 +28,7 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 10, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
+    refreshSeconds: 5, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
