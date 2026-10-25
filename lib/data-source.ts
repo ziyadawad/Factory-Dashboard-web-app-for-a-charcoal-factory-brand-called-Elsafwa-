@@ -173,7 +173,7 @@ function countsFrom(doc: Record<string, unknown>, fields: BatchesMapping["out"])
 // that changed an out field is from today (Africa/Cairo) - there is no date field, so Track Changes tells when
 async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
   const outFields = Object.values(mapping.out);
-  const [{ data: doc }, { data: versions }] = await Promise.all([
+  const [{ data: doc }, versions] = await Promise.all([
     erpGet<{ data: Record<string, unknown> }>(`/api/resource/${mapping.doctype}/${mapping.doctype}`),
     erpGet<{ data: { creation: string }[] }>("/api/resource/Version", {
       filters: JSON.stringify([["ref_doctype", "=", mapping.doctype], ["docname", "=", mapping.doctype]]),
@@ -182,10 +182,22 @@ async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
       fields: JSON.stringify(["creation"]),
       order_by: "creation desc",
       limit_page_length: 1,
-    }),
+    }).then(
+      ({ data }) => data,
+      (error) => {
+        console.error(
+          "[erp] batches: Version not readable, using the doc's modified date:",
+          error instanceof Error ? error.message : error
+        );
+        return null;
+      }
+    ),
   ]);
-  // creation بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ - creation is in ERPNext's time zone (Cairo)
-  const outChangedToday = versions[0]?.creation.slice(0, 10) === erpToday();
+  // تاريخ آخر تعديل في خانات out من Version، ولو Version مش متاح تاريخ آخر تعديل في الـ doc كله (modified)
+  // creation / modified بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
+  // Last out_* change from Version; if Version isn't readable, the doc's modified (any field) - both in Cairo time
+  const lastOutChange = versions ? versions[0]?.creation : String(doc.modified ?? "");
+  const outChangedToday = lastOutChange?.slice(0, 10) === erpToday();
   return {
     out: outChangedToday ? countsFrom(doc, mapping.out) : { orange: 0, mango: 0, casuarina: 0 },
     ground: countsFrom(doc, mapping.ground),
