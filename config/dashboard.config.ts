@@ -28,7 +28,7 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 60, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
+    refreshSeconds: 10, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -144,7 +144,7 @@ export const dashboardConfig = {
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
       { id: "main", title: "الرئيسية", durationSeconds: 30 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 2: المخازن - page 2
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 180 }, // الصفحة 2: المخازن - page 2
     ] as ConfigPage[],
   },
 
