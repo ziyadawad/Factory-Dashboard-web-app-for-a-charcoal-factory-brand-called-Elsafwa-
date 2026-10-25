@@ -40,9 +40,12 @@ export const dashboardConfig = {
     // الحضور: كل شخص ليه employeeId في data.attendance و data.workers تحت
     // حاضر = Attendance النهارده (Draft أو Submitted) بحالة Present / Half Day / Work From Home، أو أي Employee Checkin النهارده
     // غايب = Attendance بحالة Absent / On Leave، أو مفيش أي تسجيل ليه
-    // اللي مالوش employeeId بيفضل ياخد present اليدوي بتاعه
+    // بيظهر ويتعد بس اللي employeeId بتاعه موظف Active في ERPNext. اللي مالوش employeeId أو مش Active مش بيظهر خالص
+    // (لا في الإجمالي ولا حاضر ولا غايب) لحد ما يتضاف في ERPNext - القايمة في docs/missing-employees.md
+    // لو ERPNext وقع بيفضل آخر حضور نجح ظاهر مع علامة "غير متصل"
     // لو مفيش ولا تسجيل حضور في الشركة كلها النهارده: الكروت بتكتب "لم يتم تسجيل الحضور بعد" (ومحدش بيظهر غايب)
-    // Attendance: present / absent per employeeId; people without an employeeId keep their manual present flag
+    // Attendance: only members whose employeeId is an Active ERPNext Employee are shown or counted;
+    // present / absent comes from ERPNext only (the config present flag is not used)
     attendance: { source: "erp" } as ConfigErpSource, // حضور الإدارة
     workers: { source: "erp" } as ConfigErpSource, // عمال الأرضية (ومعاهم عمال اليومية)
 
@@ -166,8 +169,8 @@ export const dashboardConfig = {
     // حضور الإدارة - العمال في الإدارة
     // Management attendance - office workers
     // كل واحد { name, employeeId, present }: name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext،
-    // present = يدوي (بيستخدم بس لو مالوش employeeId أو الحضور manual). الحاضر والغايب والنسبة بيتحسبوا لوحدهم
-    // Each person { name, employeeId, present }; present is the manual value (used without an employeeId)
+    // present = يدوي (بيستخدم بس لو الحضور manual). اللي مالوش employeeId Active في ERPNext مش بيظهر
+    // Each person { name, employeeId, present }; present is used only when attendance is manual
     attendance: {
       members: [
         { name: "حماده شاهين", employeeId: "حماده شحات محمد شاهين", present: true },
@@ -189,7 +192,7 @@ export const dashboardConfig = {
     // - name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext (لو لسه مش معروف سيبه)
     // - present = حاضر النهارده (true) ولا لأ (false)
     // - daily: true = عامل يومية: بيظهر في قسمه وكمان في خانة "عمال يومية"، ومتكتبوش مرتين
-    // الإجمالي = عدد الأعضاء، والحاضر = اللي present بتاعهم true (بيتحسبوا لوحدهم)
+    // الإجمالي = عدد الأعضاء اللي ليهم employeeId Active في ERPNext، والحاضر من ERPNext (بيتحسبوا لوحدهم)
     // الشخص بيتعد مرة واحدة في إجمالي مصنع الإنتاج وإجمالي الكارت (بالـ employeeId، ولو مفيش بالاسم)
     // Each person is listed ONCE; totals count each person once (by employeeId, else by name)
     workers: {

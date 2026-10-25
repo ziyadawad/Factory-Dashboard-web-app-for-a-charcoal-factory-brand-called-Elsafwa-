@@ -52,16 +52,25 @@ function countPeople(members: ConfigWorker[]) {
   return { present: people.filter((p) => p.present).length, total: people.length };
 }
 
-// حضور النهارده من ERPNext: recorded = فيه أي تسجيل في الشركة، present = IDs الحاضرين
-// Today's attendance from ERPNext: recorded = anything recorded company-wide, present = present employee IDs
-type TodayAttendance = { recorded: boolean; present: string[] };
+// حضور النهارده من ERPNext: active = IDs الموظفين Active، recorded = فيه أي تسجيل في الشركة، present = IDs الحاضرين
+// Today's attendance from ERPNext: active = Active employee IDs, recorded = anything recorded company-wide,
+// present = present employee IDs
+type TodayAttendance = { active: string[]; recorded: boolean; present: string[] };
+
+// ERPNext عمره ما رد: محدش بيظهر (الكونفج مش بديل للأشخاص) - ERPNext never answered: nobody shows (no config fallback)
+const NO_ATTENDANCE: TodayAttendance = { active: [], recorded: true, present: [] };
 
 const PRESENT_STATUSES = ["Present", "Half Day", "Work From Home"];
 
 // حاضر = Attendance (Draft أو Submitted) حاضر أو أي Checkin النهارده - present = a present Attendance or any check-in
 async function loadTodayAttendance(): Promise<TodayAttendance> {
   const today = erpToday();
-  const [attendance, checkins] = await Promise.all([
+  const [employees, attendance, checkins] = await Promise.all([
+    erpGet<{ data: { name: string }[] }>("/api/resource/Employee", {
+      filters: JSON.stringify([["status", "=", "Active"]]),
+      fields: JSON.stringify(["name"]),
+      limit_page_length: 0,
+    }),
     erpGet<{ data: { employee: string; status: string }[] }>("/api/resource/Attendance", {
       filters: JSON.stringify([["attendance_date", "=", today], ["docstatus", "<", 2]]),
       fields: JSON.stringify(["employee", "status"]),
@@ -75,17 +84,23 @@ async function loadTodayAttendance(): Promise<TodayAttendance> {
   ]);
   const present = new Set(checkins.data.map((checkin) => checkin.employee));
   for (const record of attendance.data) if (PRESENT_STATUSES.includes(record.status)) present.add(record.employee);
-  return { recorded: attendance.data.length + checkins.data.length > 0, present: Array.from(present) };
+  return {
+    active: employees.data.map((employee) => employee.name),
+    recorded: attendance.data.length + checkins.data.length > 0,
+    present: Array.from(present),
+  };
 }
 
-// حالة النهارده على الأعضاء: null = يدوي، ولو مفيش تسجيل خالص محدش حاضر، واللي مالوش employeeId بياخد اليدوي
-// Apply today's status: null = manual; nothing recorded = nobody present; no employeeId = manual flag
+// حالة النهارده على الأعضاء: null = يدوي. غير كده بيفضل بس اللي employeeId بتاعه Active في ERPNext،
+// والحضور من ERPNext بس (لو مفيش تسجيل خالص محدش حاضر)
+// Apply today's status: null = manual. Otherwise only members whose employeeId is Active in ERPNext stay,
+// and presence comes from ERPNext only (nothing recorded = nobody present)
 function withToday(members: ConfigWorker[], today: TodayAttendance | null): ConfigWorker[] {
   if (!today) return members;
-  if (!today.recorded) return members.map((member) => ({ ...member, present: false }));
-  return members.map((member) =>
-    member.employeeId ? { ...member, present: today.present.includes(member.employeeId) } : member
-  );
+  const active = new Set(today.active);
+  return members
+    .filter((member) => member.employeeId && active.has(member.employeeId))
+    .map((member) => ({ ...member, present: today.recorded && today.present.includes(member.employeeId!) }));
 }
 
 // حضور الإدارة - management attendance
@@ -498,7 +513,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const stoppedCount = config.kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
-    attendance: managementAttendance(erp.attendance.source === "erp" ? today : null),
+    attendance: managementAttendance(erp.attendance.source === "erp" ? today ?? NO_ATTENDANCE : null),
     stock: { packaged, sacks, rawMaterials: { wood, packaging } },
     kilns: {
       working: workingCount,
@@ -511,7 +526,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: kiln.status,
       })),
     },
-    floorWorkers: floorWorkers(erp.workers.source === "erp" ? today : null),
+    floorWorkers: floorWorkers(erp.workers.source === "erp" ? today ?? NO_ATTENDANCE : null),
     treasury: {
       balance,
       incomingToday,
