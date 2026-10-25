@@ -49,9 +49,13 @@ export const dashboardConfig = {
     attendance: { source: "erp" } as ConfigErpSource, // حضور الإدارة
     workers: { source: "erp" } as ConfigErpSource, // عمال الأرضية (ومعاهم عمال اليومية)
 
-    // الأفران يدوي: في ERPNext فيه Workstation واحد بس اسمه "تفحيم"، مش 6 أفران
-    // Kilns stay manual: ERPNext has a single Workstation ("تفحيم"), not the 6 kilns
-    kilns: { source: "manual" } as ConfigErpSource,
+    // الأفران = كل Workstation اسمه بيبدأ بـ "فرن" (مترتبين بالرقم)، فلو اتضاف "فرن 7" في ERPNext بيظهر لوحده
+    // الحالة: Production = شغالة، Maintenance / Problem = صيانة، أي حاجة تانية (Off / Idle / Setup / فاضي) = متوقفة
+    // لو ERPNext وقع بيفضل آخر نتيجة نجحت، ولو مفيش قايمة data.kilns تحت
+    // Kilns = every Workstation whose name starts with "فرن", sorted by number; new ones appear automatically.
+    // Production = working, Maintenance / Problem = maintenance, anything else = stopped.
+    // ERPNext down: last good result, else the data.kilns list below
+    kilns: { source: "erp" } as ConfigErpSource,
 
     // الطرحات النهارده = قيود Stock Entry نوعها Manufacture (Submitted) اللي صرفت خشب النهارده
     // النوع = أكبر خشب اتصرف (من غير fuelWood)، الوزن = كل الخشب اللي اتصرف بالطن، الوقت = posting_time
@@ -282,8 +286,8 @@ export const dashboardConfig = {
       },
     },
 
-    // الأفران - حالة كل فرن
-    // Kilns - status of each kiln
+    // الأفران - حالة كل فرن (بتُستخدم بس لو erp.kilns يدوي أو ERPNext مش بيرد)
+    // Kilns - status of each kiln (used only when erp.kilns is manual or ERPNext is unreachable)
     kilns: [
       // الشكل ده يحدد حالة كل فرن - this defines each kiln's status
       // الحالات الممكنة: "working" (شغالة), "maintenance" (صيانة), "stopped" (متوقفة)

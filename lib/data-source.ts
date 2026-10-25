@@ -9,6 +9,7 @@ import {
   ConfigWoodType,
   ConfigErpStockItem,
   ConfigWorker,
+  KilnStatus,
   Attendance,
   DashboardData,
   FloorWorkers,
@@ -196,7 +197,34 @@ async function loadTodayBatches(fuelWood: string[]): Promise<Batch[]> {
   });
 }
 
-// آخر نتيجة نجحت لكل قسم (حضور، طرحات) - last good result per section (attendance, batches)
+// حالة الـ Workstation في ERPNext ← حالة الفرن (أي حاجة تانية = متوقفة)
+// ERPNext Workstation status -> kiln status (anything else = stopped)
+const KILN_STATUSES: Record<string, KilnStatus> = {
+  Production: "working",
+  Maintenance: "maintenance",
+  Problem: "maintenance",
+};
+
+// رقم الفرن من اسمه (أرقام عربي أو إنجليزي) - the kiln number from its name (Arabic-Indic or Latin digits)
+function kilnNumber(name: string): number {
+  const digits = name.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).match(/\d+/);
+  return digits ? Number(digits[0]) : Number.MAX_SAFE_INTEGER;
+}
+
+// الأفران: كل Workstation اسمه بيبدأ بـ "فرن"، مترتبين بالرقم - every Workstation named "فرن…", sorted by number
+async function loadKilns(): Promise<ConfigKiln[]> {
+  const { data } = await erpGet<{ data: { name: string; status: string | null }[] }>("/api/resource/Workstation", {
+    filters: JSON.stringify([["name", "like", "فرن%"]]),
+    fields: JSON.stringify(["name", "status"]),
+    limit_page_length: 0,
+  });
+  return data
+    .filter((row) => row.name.trim().startsWith("فرن"))
+    .sort((a, b) => kilnNumber(a.name) - kilnNumber(b.name) || a.name.localeCompare(b.name, "ar"))
+    .map((row) => ({ name: row.name.trim(), status: KILN_STATUSES[row.status ?? ""] ?? "stopped" }));
+}
+
+// آخر نتيجة نجحت لكل قسم (حضور، طرحات، أفران) - last good result per section (attendance, batches, kilns)
 const lastGoodSection = new Map<string, unknown>();
 
 // قسم كامل من ERPNext، ولو فشل آخر نتيجة نجحت، ولو مفيش null (يعني يدوي)
@@ -412,7 +440,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const batchesSource = erp.batches;
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
-  const [treasury, packaged, sacks, wood, packaging, today, todayBatches] = await Promise.all([
+  const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
         ({ account }) => balanceOn(account)),
@@ -500,6 +528,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       () => loadTodayBatches(batchesSource.source === "erp" ? batchesSource.fuelWood : []),
       results
     ),
+    erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
   ]);
   const [balance, incomingToday, outgoingToday] = treasury;
 
@@ -507,10 +536,11 @@ export async function getDashboardData(): Promise<DashboardData> {
   const erpNumbers = results.filter((n) => n.fromErp);
   const erpOffline = erpNumbers.length > 0 && erpNumbers.every((n) => n.failed);
 
-  // Calculate kiln counts from the list
-  const workingCount = config.kilns.filter((k: ConfigKiln) => k.status === "working").length;
-  const maintenanceCount = config.kilns.filter((k: ConfigKiln) => k.status === "maintenance").length;
-  const stoppedCount = config.kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
+  // الأفران من ERPNext، ولو مفيش من الكونفج، والأعداد من القايمة - kilns from ERPNext (else config); counts from the list
+  const kilns = erpKilns ?? config.kilns;
+  const workingCount = kilns.filter((k: ConfigKiln) => k.status === "working").length;
+  const maintenanceCount = kilns.filter((k: ConfigKiln) => k.status === "maintenance").length;
+  const stoppedCount = kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
     attendance: managementAttendance(erp.attendance.source === "erp" ? today ?? NO_ATTENDANCE : null),
@@ -519,8 +549,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       working: workingCount,
       maintenance: maintenanceCount,
       stopped: stoppedCount,
-      total: config.kilns.length,
-      kilns: config.kilns.map((kiln: ConfigKiln, index: number) => ({
+      total: kilns.length,
+      kilns: kilns.map((kiln: ConfigKiln, index: number) => ({
         id: `kiln-${index + 1}`,
         name: kiln.name,
         status: kiln.status,
