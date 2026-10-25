@@ -146,8 +146,8 @@ export const dashboardConfig = {
     // ترتيب الصفحات - عشان تفتح صفحة معينة على التلفزيون اكتب في اللينك ?page=2
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
-      { id: "main", title: "الرئيسية", durationSeconds: 30 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "أرصدة المخازن", durationSeconds: 180 }, // الصفحة 2: المخازن - page 2
+      { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 120 }, // الصفحة 2: المخازن - page 2
     ] as ConfigPage[],
   },
 
