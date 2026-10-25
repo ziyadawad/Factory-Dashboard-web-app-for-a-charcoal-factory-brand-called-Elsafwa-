@@ -2,7 +2,7 @@
 // Dashboard settings file - edit the numbers here to change the dashboard appearance
 
 import type {
-  Batch,
+  Batches,
   ConfigKiln,
   ConfigPackagedProduct,
   ConfigPackagingItem,
@@ -57,11 +57,20 @@ export const dashboardConfig = {
     // ERPNext down: last good result, else the data.kilns list below
     kilns: { source: "erp" } as ConfigErpSource,
 
-    // الطرحات النهارده = قيود Stock Entry نوعها Manufacture (Submitted) اللي صرفت خشب النهارده
-    // النوع = أكبر خشب اتصرف (من غير fuelWood)، الوزن = كل الخشب اللي اتصرف بالطن، الوقت = posting_time
-    // الفرن مش متسجل في ERPNext (خانة custom_الغرفة في Work Order فاضية)، فبيظهر "—"
-    // Batches = today's submitted Manufacture Stock Entries that consumed wood; the kiln isn't in ERPNext
-    batches: { source: "erp", fuelWood: ["بيت نار"] } as ConfigErpBatches,
+    // الطرحات اليوم = الـ Single DocType "Kiln Board" (لازم Track Changes يبقى شغال عليه)
+    // out = خروج طرحات: بيتصفر لوحده كل يوم - لو آخر تعديل في أي خانة out_* (من Version) مش النهارده بتوقيت القاهرة
+    // بيظهر 0، ولو النهارده بيظهر الرقم اللي في ERPNext
+    // ground = طرحات على الأرض: عمره ما بيتصفر، دايما الرقم اللي في ERPNext
+    // الكلام اللي على اليمين = اسم الخانة (fieldname) في ERPNext بالظبط
+    // لو ERPNext وقع بيفضل آخر رقم نجح، ولو مفيش أرقام data.batches تحت
+    // Batches = Single DocType "Kiln Board" (Track Changes must be on). out_* reset to 0 unless the last
+    // Version that changed an out_* field is from today (Africa/Cairo); ground_* are never reset
+    batches: {
+      source: "erp",
+      doctype: "Kiln Board",
+      out: { orange: "out_orange", mango: "out_mango", casuarina: "out_casuarina" }, // خروج طرحات
+      ground: { orange: "ground_orange", mango: "ground_mango", casuarina: "ground_casuarina" }, // طرحات على الأرض
+    } as ConfigErpBatches,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
     // الرقم = مجموع actual_qty لكل الأصناف اللي في itemCodes (لو أكتر من صنف بيتجمعوا)
@@ -300,23 +309,13 @@ export const dashboardConfig = {
       { name: "فرن 6", status: "stopped" as const },
     ] as ConfigKiln[],
 
-    // الطرحات اليوم - كل طرحة طلعت من فرن النهارده (بتظهر تحت الأفران في الصفحة الرئيسية)
-    // Today's batches - every batch out of a kiln today (shown under the kilns card)
-    // الإجمالي وعدد الطرحات ووزن كل نوع بيتحسبوا لوحدهم - totals are calculated automatically
-    // الترتيب مش مهم - الأحدث بيظهر الأول حسب الوقت - order doesn't matter, newest time shows first
+    // الطرحات اليوم (تحت الأفران في الصفحة الرئيسية) - بتُستخدم بس لو erp.batches يدوي أو ERPNext مش بيرد
+    // Today's batches (under the kilns card) - used only when erp.batches is manual or ERPNext is unreachable
+    // الإجمالي بيتحسب لوحده - totals are calculated automatically
     batches: {
-      unit: "طن", // وحدة الوزن - weight unit
-      list: [
-        // kiln = اسم الفرن (لازم يبقى زي اسمه في الأفران عشان لون الحالة)، type = نوع الخشب، weight = الوزن، time = الوقت (24 ساعة)
-        // kiln = kiln name (must match the kilns list for the status color), type = wood type, weight, time (24h "HH:MM")
-        //{ kiln: "فرن 1", type: "برتقال", weight: 2.5, time: "08:30" },
-       // { kiln: "فرن 2", type: "مانجو", weight: 1.8, time: "10:15" },
-      //  { kiln: "فرن 5", type: "برتقال", weight: 2.2, time: "11:00" },
-      //  { kiln: "فرن 1", type: "كازوارينا", weight: 3.1, time: "12:40" },
-       // { kiln: "فرن 2", type: "جوافة", weight: 1.6, time: "13:20" },
-       // { kiln: "فرن 5", type: "مانجو", weight: 2.0, time: "14:45" },
-      ] as Batch[],
-    },
+      out: { orange: 0, mango: 0, casuarina: 0 }, // خروج طرحات: برتقال / مانجا / جازورينا
+      ground: { orange: 0, mango: 0, casuarina: 0 }, // طرحات على الأرض: برتقال / مانجا / جازورينا
+    } as Batches,
 
     // ============================================================
     // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)
@@ -554,10 +553,8 @@ export const dashboardConfig = {
     // الطرحات اليوم - بطاقة الطرحات تحت الأفران
     // Today's batches - batches card under the kilns
     batches: {
-      totalFontSize: 24, // حجم رقم إجمالي الوزن وعدد الطرحات - total weight / batch count font size
-      typeChipFontSize: 12, // حجم شرايح وزن كل نوع - per-type weight chip font size
-      rowFontSize: 14, // حجم الكلام في صفوف الجدول - table row font size
-      rowHeight: 34, // ارتفاع كل صف في الجدول (بالبكسل) - height of each table row (px)
+      tileFontSize: 36, // حجم رقم كل نوع (برتقال / مانجا / جازورينا) - per-type number font size
+      totalFontSize: 20, // حجم رقم الإجمالي - total number font size
     },
 
     // رصيد المخازن (الصفحة 2) - stock page (page 2)

@@ -132,17 +132,17 @@ export interface Treasury {
   outgoingToday: number; // منصرف اليوم
 }
 
-// طرحة واحدة من فرن - one kiln batch; totals are calculated in the UI
-export interface Batch {
-  kiln: string; // must match a Kiln.name for the status color
-  type: string;
-  weight: number;
-  time: string; // "HH:MM" 24h
+// عدد الطرحات لكل نوع خشب - batch count per wood type; totals are calculated in the UI
+export interface BatchCounts {
+  orange: number; // برتقال
+  mango: number; // مانجا
+  casuarina: number; // جازورينا
 }
 
+// out = خروج طرحات النهارده، ground = طرحات على الأرض - today's batches out, batches on the ground
 export interface Batches {
-  unit: string;
-  list: Batch[];
+  out: BatchCounts;
+  ground: BatchCounts;
 }
 
 export interface DashboardData {
@@ -163,9 +163,16 @@ export type ConfigErpField = { source: "manual" } | { source: "erp"; account: st
 // قسم كامل من ERPNext ولا يدوي - a whole section from ERPNext or manual
 export type ConfigErpSource = { source: "erp" | "manual" };
 
-// الطرحات: fuelWood = أخشاب وقود مش بتحدد نوع الطرحة (بس بتدخل في الوزن)
-// Batches: fuelWood = fuel wood names that never decide a batch's type (still counted in its weight)
-export type ConfigErpBatches = { source: "manual" } | { source: "erp"; fuelWood: string[] };
+// الطرحات: doctype = الـ Single DocType، و out / ground = اسم الخانة (fieldname) لكل نوع خشب
+// Batches: doctype = the Single DocType; out / ground = the fieldname of each wood type
+export type ConfigErpBatches =
+  | { source: "manual" }
+  | {
+      source: "erp";
+      doctype: string;
+      out: Record<keyof BatchCounts, string>;
+      ground: Record<keyof BatchCounts, string>;
+    };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
 // A stock number: total actual_qty of every itemCode in warehouses (empty = all warehouses)

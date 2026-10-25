@@ -1,5 +1,7 @@
 import {
-  Batch,
+  BatchCounts,
+  Batches,
+  ConfigErpBatches,
   ConfigKiln,
   ConfigPackagedProduct,
   ConfigPackagingItem,
@@ -151,50 +153,43 @@ function floorWorkers(today: TodayAttendance | null): FloorWorkers {
   };
 }
 
-type ManufactureRow = { name: string; posting_time: string; item_code: string; qty: number; s_warehouse: string | null };
+type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
 
-// الطرحات النهارده: كل قيد Manufacture (Submitted) صرف خشب = طرحة
-// النوع = أكبر خشب اتصرف (من غير خشب الوقود)، الوزن = كل الخشب بالطن، والفرن مش متسجل في ERPNext
-// Today's batches: each submitted Manufacture entry that consumed wood; type = the largest non-fuel wood
-async function loadTodayBatches(fuelWood: string[]): Promise<Batch[]> {
-  // صنف الخشب في ERPNext ← اسمه في الداشبورد - ERPNext wood item -> dashboard wood name
-  const woodNames = new Map<string, string>();
-  for (const [name, field] of Object.entries(dashboardConfig.erp.stock.wood)) {
-    if (field.source === "erp") field.itemCodes.forEach((code) => woodNames.set(code, name));
-  }
-  const { data } = await erpGet<{ data: ManufactureRow[] }>("/api/resource/Stock Entry", {
-    filters: JSON.stringify([["purpose", "=", "Manufacture"], ["posting_date", "=", erpToday()], ["docstatus", "=", 1]]),
-    fields: JSON.stringify([
-      "name",
-      "posting_time",
-      "`tabStock Entry Detail`.item_code",
-      "`tabStock Entry Detail`.qty",
-      "`tabStock Entry Detail`.s_warehouse",
-    ]),
-    limit_page_length: 0,
-  });
+// خانة رقم من الـ Single doc، ولو مش رقم يبقى غلط - an Int field of the Single doc; anything else is an error
+function countsFrom(doc: Record<string, unknown>, fields: BatchesMapping["out"]): BatchCounts {
+  const read = (field: string) => {
+    const value = doc[field] ?? 0; // خانة Int فاضية = 0 - an empty Int field is 0
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new ErpError(`Kiln Board: field "${field}" is ${JSON.stringify(doc[field])}, expected a number`);
+    }
+    return value;
+  };
+  return { orange: read(fields.orange), mango: read(fields.mango), casuarina: read(fields.casuarina) };
+}
 
-  const entries = new Map<string, { time: string; wood: Map<string, number> }>();
-  for (const row of data) {
-    const wood = woodNames.get(row.item_code);
-    if (!wood || !row.s_warehouse) continue; // الخشب اللي اتصرف بس - only consumed wood
-    const entry = entries.get(row.name) ?? { time: row.posting_time, wood: new Map<string, number>() };
-    entry.wood.set(wood, (entry.wood.get(wood) ?? 0) + row.qty);
-    entries.set(row.name, entry);
-  }
-
-  return Array.from(entries.values()).map(({ time, wood }) => {
-    const ranked = Array.from(wood.entries()).sort((a, b) => b[1] - a[1]);
-    const main = ranked.find(([name]) => !fuelWood.includes(name)) ?? ranked[0];
-    const weight = ranked.reduce((sum, [, qty]) => sum + qty, 0);
-    const [hours, minutes] = time.split(":");
-    return {
-      kiln: "—",
-      type: main[0],
-      weight: Math.round(weight * 100) / 100,
-      time: `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`,
-    };
-  });
+// الطرحات من الـ Single DocType: ground دايما الرقم الحالي، و out بيتصفر لو آخر Version غيّر أي خانة out
+// مش النهارده (بتوقيت القاهرة) - مفيش خانة تاريخ، فالـ Version (Track Changes) هو اللي بيقول اتعدل إمتى
+// Batches from the Single DocType: ground is always the current value; out is 0 unless the latest Version
+// that changed an out field is from today (Africa/Cairo) - there is no date field, so Track Changes tells when
+async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
+  const outFields = Object.values(mapping.out);
+  const [{ data: doc }, { data: versions }] = await Promise.all([
+    erpGet<{ data: Record<string, unknown> }>(`/api/resource/${mapping.doctype}/${mapping.doctype}`),
+    erpGet<{ data: { creation: string }[] }>("/api/resource/Version", {
+      filters: JSON.stringify([["ref_doctype", "=", mapping.doctype], ["docname", "=", mapping.doctype]]),
+      // data فيها {"changed": [["out_orange", 3, 5], ...]} - the JSON lists every changed field by name
+      or_filters: JSON.stringify(outFields.map((field) => ["data", "like", `%"${field}"%`])),
+      fields: JSON.stringify(["creation"]),
+      order_by: "creation desc",
+      limit_page_length: 1,
+    }),
+  ]);
+  // creation بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ - creation is in ERPNext's time zone (Cairo)
+  const outChangedToday = versions[0]?.creation.slice(0, 10) === erpToday();
+  return {
+    out: outChangedToday ? countsFrom(doc, mapping.out) : { orange: 0, mango: 0, casuarina: 0 },
+    ground: countsFrom(doc, mapping.ground),
+  };
 }
 
 // حالة الـ Workstation في ERPNext ← حالة الفرن (أي حاجة تانية = متوقفة)
@@ -525,7 +520,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     erpSection(
       "batches",
       batchesSource.source === "erp",
-      () => loadTodayBatches(batchesSource.source === "erp" ? batchesSource.fuelWood : []),
+      () => loadBatches(batchesSource as BatchesMapping),
       results
     ),
     erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
@@ -562,10 +557,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       incomingToday,
       outgoingToday,
     },
-    batches: {
-      unit: config.batches.unit,
-      list: (todayBatches ?? config.batches.list).map((batch: Batch) => ({ ...batch })),
-    },
+    batches: todayBatches ?? config.batches,
     updatedAt: new Date().toISOString(),
     erpOffline,
   };

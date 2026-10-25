@@ -158,7 +158,7 @@ export default function Dashboard() {
                 <KilnsSection data={data.kilns} />
               </div>
               <div className={`flex-1 ${flashClass("batches")}`}>
-                <BatchesSection data={data.batches} kilns={data.kilns.kilns} />
+                <BatchesSection data={data.batches} />
               </div>
             </div>
           </div>
