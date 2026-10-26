@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "audit:production": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/production-audit.ts"
+    "audit:production": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/production-audit.ts",
+    "audit:stock": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/stock-reconciliation.ts"
   },
   "dependencies": {
     "@fontsource-variable/cairo": "^5.3.0",
