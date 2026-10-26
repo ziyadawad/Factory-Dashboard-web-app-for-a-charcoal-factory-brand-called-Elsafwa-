@@ -403,19 +403,21 @@ async function loadStockBalances(): Promise<BalanceRow[]> {
 function stockLoader(results: ErpStatus[]) {
   let request: Promise<BalanceRow[]> | undefined;
   const balances = () => (request ??= loadStockBalances());
-  const rowsFor = (rows: BalanceRow[], mapping: StockMapping) =>
+  const rowsFor = (rows: BalanceRow[], mapping: StockMapping, excluded: string[]) =>
     rows.filter(
       (row) =>
         mapping.itemCodes.includes(row.item_code) &&
-        (mapping.warehouses.length === 0 || mapping.warehouses.includes(row.warehouse))
+        (mapping.warehouses.length === 0 || mapping.warehouses.includes(row.warehouse)) &&
+        !excluded.includes(row.warehouse)
     );
 
   return {
     // الكمية متقربة: decimals = 0 للمعبأ والشكاير ومواد التعبئة، 1 للخشب
     // Quantity, rounded: decimals = 0 for packaged / sacks / packaging, 1 for wood
-    async quantity(key: string, field: ConfigErpStockItem | undefined, manual: number, decimals = 0) {
+    // excluded = مخازن مش بتتحسب (عربيات المعبأ) - warehouses left out (vehicles, for packaged)
+    async quantity(key: string, field: ConfigErpStockItem | undefined, manual: number, decimals = 0, excluded: string[] = []) {
       const result = await erpNumber(key, field ?? { source: "manual" }, manual, async (mapping: StockMapping) => {
-        const total = rowsFor(await balances(), mapping).reduce((sum, row) => sum + row.balance_qty, 0);
+        const total = rowsFor(await balances(), mapping, excluded).reduce((sum, row) => sum + row.balance_qty, 0);
         const factor = 10 ** decimals;
         return Math.round(total * factor) / factor;
       });
@@ -469,7 +471,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           product.variants.map(async (variant: ConfigVariant) => ({
             ...toVariant(variant),
             quantity: await stock.quantity(`packaged.${product.name}.${variant.label}`,
-              erp.stock.packaged[product.name]?.[variant.label], variant.quantity),
+              erp.stock.packaged[product.name]?.[variant.label], variant.quantity, 0, erp.stock.excludedWarehouses),
           }))
         ),
       }))

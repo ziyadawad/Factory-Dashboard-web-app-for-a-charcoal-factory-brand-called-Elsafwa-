@@ -28,7 +28,7 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 5, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
+    refreshSeconds: 3, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -80,6 +80,17 @@ export const dashboardConfig = {
     // Names must match data.stock below exactly; anything not listed here stays manual
     // التفاصيل والأرصدة في docs/erp-mapping.md - details in docs/erp-mapping.md
     stock: {
+      // المخازن دي حمولة عربيات ومش بتتحسب في رصيد المنتجات المعبأة (والكراتين بتاعتها)
+      // عربية جديدة؟ ضيف اسم المخزن بتاعها هنا بالظبط زي ERPNext. الشكاير والمواد الخام مش بيتأثروا
+      // Vehicle-load warehouses, excluded from packaged products only; add a new car by adding its warehouse name
+      excludedWarehouses: [
+        "مخزن سوزوكي 1 - AC",
+        "مخزن سوزوكي 2 - AC",
+        "مخزن سوزوكي 3 - AC",
+        "مخزن سوزوكي 4 - AC",
+        "مخزن الدبابة - AC",
+      ] as string[],
+
       // المنتجات المعبأة: المنتج ← النوع - packaged: product -> variant
       packaged: {
         "ربع كيلو": {
