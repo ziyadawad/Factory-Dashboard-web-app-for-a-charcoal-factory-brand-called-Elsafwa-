@@ -2,9 +2,10 @@
 // Day-by-day, vehicle-by-vehicle comparison: our issue/receipt Excel + the daily loading report vs ERPNext
 // قراية بس من ERPNext (مش بيغير حاجة) - read-only on ERPNext
 //
-// التشغيل - run:  npm run audit:issues -- --from 2026-10-01 --to 2026-10-25
+// بيشتغل من لقطة ERPNext (scripts/erp-snapshot.ts) - works from an ERPNext snapshot (the period comes from it)
+// التشغيل - run:  npm run audit:snapshot -- --from 2026-10-01 --to 2026-10-25   (لقطة جديدة + التقريرين)
+//                 npm run audit:issues [-- --snapshot reports/snapshot-….json]   (من آخر لقطة - from the latest snapshot)
 //   --azon / --tahmeel: مسار ملفات الإكسيل (الافتراضي reports/input/azon.xlsx و reports/input/tahmeel.xlsx)
-//   --warehouse: مخزن المنتج التام (الافتراضي "مخزن منتج تام - تعبئة - AC")
 // الناتج - output: reports/issue-comparison.md / .xlsx / .pdf — فولدر reports/ مينفعش يترفع (الريبو public)
 //
 // بنقارن على مستوى التاريخ × العربية × الصنف - compared at DATE × VEHICLE × ITEM:
@@ -21,7 +22,6 @@ import { chromium } from "playwright-core";
 // ============================================================
 
 const FACTORY_NAME = "الصفوة";
-const DEFAULT_WAREHOUSE = "مخزن منتج تام - تعبئة - AC";
 const MAX_DAY_SHIFT = 3; // نفس الحركة في يوم تاني لحد 3 أيام - the same movement on another day, up to 3 days apart
 const EPS = 0.001;
 
@@ -145,25 +145,40 @@ type Mismatch = {
 // أدوات - helpers
 // ============================================================
 
-const TIMEOUT_MS = 30000;
-function settings() {
-  const url = process.env.FACTORY_API_URL;
-  const key = process.env.FACTORY_API_KEY;
-  const secret = process.env.FACTORY_API_SECRET;
-  if (!url || !key || !secret) throw new Error("FACTORY_API_URL / FACTORY_API_KEY / FACTORY_API_SECRET مش موجودين في .env.local");
-  return { baseUrl: url.replace(/\/+$/, ""), auth: `token ${key}:${secret}` };
+// لقطة ERPNext (scripts/erp-snapshot.ts): الحركات بتاريخ لحد to بس - the ERPNext snapshot: entries dated up to to only
+type Snapshot = {
+  fetchedAt: string;
+  from: string;
+  to: string;
+  warehouse: string;
+  warehouses: { name: string }[];
+  ledger: LedgerRow[];
+  backdated: LedgerRow[];
+  stockEntries: { name: string; purpose: string }[];
+  stockEntryDetails: { name: string; s_warehouse: string | null; t_warehouse: string | null }[];
+};
+// لو الملف مفتوح (Excel / قارئ PDF) بنكتب نسخة باسم فيه وقت السحب - if the file is open (Excel / a PDF reader),
+// write a copy named with the fetch time instead
+function writable(file: string, fetchedAt: string) {
+  try {
+    if (fs.existsSync(file)) fs.closeSync(fs.openSync(file, "r+"));
+    return file;
+  } catch {
+    const copy = file.replace(/(\.\w+)$/, `-${fetchedAt.replace(/\D/g, "").slice(0, 12)}$1`);
+    console.log(`⚠️ ${path.basename(file)} مفتوح في برنامج تاني — اتكتب بدله ${path.basename(copy)}`);
+    return copy;
+  }
 }
-async function getList<T>(body: Record<string, unknown>): Promise<T[]> {
-  const { baseUrl, auth } = settings();
-  const response = await fetch(`${baseUrl}/api/method/frappe.client.get_list`, {
-    method: "POST",
-    headers: { Authorization: auth, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ limit_page_length: 0, ...body }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`ERPNext ${body.doctype}: HTTP ${response.status} ${text.slice(0, 200)}`);
-  return (JSON.parse(text) as { message: T[] }).message;
+
+// --snapshot ملف معين، أو آخر لقطة في reports/ - a given file, or the latest snapshot in reports/
+function loadSnapshot(arg: string | undefined) {
+  const dir = path.join(process.cwd(), "reports");
+  const latest = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => /^snapshot-.*\.json$/.test(f)).sort().map((f) => path.join(dir, f)).pop()
+    : undefined;
+  const file = arg ?? latest;
+  if (!file || !fs.existsSync(file)) throw new Error("مفيش لقطة من ERPNext — شغّل الأول: npm run audit:snapshot");
+  return { file, snapshot: JSON.parse(fs.readFileSync(file, "utf8")) as Snapshot };
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -228,17 +243,15 @@ function parseArgs() {
     const index = args.indexOf(flag);
     return index >= 0 ? args[index + 1] : undefined;
   };
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
-  const from = value("--from") ?? `${today.slice(0, 8)}01`;
-  const rawTo = value("--to") ?? today;
-  const to = rawTo === "today" ? today : rawTo;
-  for (const [flag, date] of [["--from", from], ["--to", to]])
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`تاريخ غلط في ${flag}: ${date} (اكتبه YYYY-MM-DD)`);
+  // الفترة والمخزن من اللقطة نفسها - the period and warehouse come from the snapshot itself
+  const { file, snapshot } = loadSnapshot(value("--snapshot"));
   const input = path.join(process.cwd(), "reports", "input");
   return {
-    from,
-    to,
-    warehouse: value("--warehouse") ?? DEFAULT_WAREHOUSE,
+    file,
+    snapshot,
+    from: snapshot.from,
+    to: snapshot.to,
+    warehouse: snapshot.warehouse,
     azon: value("--azon") ?? path.join(input, "azon.xlsx"),
     tahmeel: value("--tahmeel") ?? path.join(input, "tahmeel.xlsx"),
   };
@@ -438,40 +451,23 @@ type LedgerRow = {
   is_cancelled: number;
 };
 
-async function readErp(warehouse: string, from: string, to: string) {
-  const warehouses = await getList<{ name: string }>({ doctype: "Warehouse", fields: ["name"] });
+function readErp(snapshot: Snapshot) {
   const vehicleOf = new Map<string, string>();
-  for (const w of warehouses) {
+  for (const w of snapshot.warehouses) {
     const v = vehicleName(w.name.replace(/مخزن/, ""));
     if (v && v !== DIRECT) vehicleOf.set(w.name, v);
   }
-  const rows = await getList<LedgerRow>({
-    doctype: "Stock Ledger Entry",
-    filters: [["warehouse", "=", warehouse], ["posting_date", ">=", addDays(from, -MAX_DAY_SHIFT)], ["posting_date", "<=", addDays(to, MAX_DAY_SHIFT)]],
-    fields: ["item_code", "posting_date", "creation", "owner", "voucher_type", "voucher_no", "voucher_detail_no", "actual_qty", "is_cancelled"],
-    order_by: "posting_datetime asc, creation asc",
-  });
-  const entryRows = rows.filter((r) => r.voucher_type === "Stock Entry");
-  const names = Array.from(new Set(entryRows.map((r) => r.voucher_no)));
-  const [types, details] = names.length
-    ? await Promise.all([
-        getList<{ name: string; purpose: string }>({ doctype: "Stock Entry", filters: [["name", "in", names]], fields: ["name", "purpose"] }),
-        getList<{ name: string; s_warehouse: string | null; t_warehouse: string | null }>({
-          doctype: "Stock Entry Detail",
-          parent: "Stock Entry",
-          filters: [["name", "in", Array.from(new Set(entryRows.map((r) => r.voucher_detail_no)))]],
-          fields: ["name", "s_warehouse", "t_warehouse"],
-        }),
-      ])
-    : [[], []];
-  const purposeOf = new Map(types.map((t) => [t.name, t.purpose]));
-  const detailOf = new Map(details.map((d) => [d.name, d]));
+  // من 3 أيام قبل from (للحركات اللي في يوم تاني) لحد to — مفيش حاجة بعد to في اللقطة أصلًا
+  // from 3 days before from (to pair other-day entries) up to to — the snapshot has nothing after to
+  const rows = snapshot.ledger.filter((r) => r.posting_date >= addDays(snapshot.from, -MAX_DAY_SHIFT) && r.posting_date <= snapshot.to);
+  const purposeOf = new Map(snapshot.stockEntries.map((t) => [t.name, t.purpose]));
+  const detailOf = new Map(snapshot.stockEntryDetails.map((d) => [d.name, d]));
 
   // الإلغاء بيعلّم السطر الأصلي وسطر العكس: نسيب الأصلي بس - cancelling flags the original and its reversal: keep the original
   const live = rows.filter((r) => !r.is_cancelled);
   const gone = rows.filter((r) => r.is_cancelled && !rows.some((o) => o.is_cancelled && o.voucher_no === r.voucher_no && o.item_code === r.item_code && o.creation < r.creation));
 
-  const lines: ErpLine[] = [...live, ...gone].map((r) => {
+  const toLine = (r: LedgerRow): ErpLine => {
     let stream: Stream | "other" = "other";
     let vehicle = "-";
     if (r.voucher_type === "Stock Entry") {
@@ -498,8 +494,9 @@ async function readErp(warehouse: string, from: string, to: string) {
       created: r.creation.slice(0, 16),
       cancelled: !!r.is_cancelled,
     };
-  });
-  return { lines, vehicles: Array.from(new Set(Array.from(vehicleOf.values()))).sort() };
+  };
+  const lines = [...live, ...gone].map(toLine);
+  return { lines, toLine, vehicles: Array.from(new Set(Array.from(vehicleOf.values()))).sort() };
 }
 
 // ============================================================
@@ -507,17 +504,24 @@ async function readErp(warehouse: string, from: string, to: string) {
 // ============================================================
 
 async function main() {
-  const { from, to, warehouse, azon, tahmeel } = parseArgs();
+  const { file: snapshotFile, snapshot, from, to, warehouse, azon, tahmeel } = parseArgs();
   for (const file of [azon, tahmeel]) if (!fs.existsSync(file)) throw new Error(`الملف مش موجود: ${file}`);
-  console.log(`مقارنة المنصرف من ${from} لحد ${to} — ${warehouse}`);
+  console.log(`مقارنة المنصرف — ${warehouse} — الفترة: ${shortDate(from)} → ${shortDate(to)} — وقت سحب البيانات: ${snapshot.fetchedAt}`);
 
   const issues: Issue[] = [];
   const names = new Map<string, string>();
-  const [azonData, loadData, erpData] = await Promise.all([
-    readAzon(azon, from, to, issues, names),
-    readTahmeel(tahmeel, from, to, issues, names),
-    readErp(warehouse, from, to),
-  ]);
+  const [azonData, loadData] = await Promise.all([readAzon(azon, from, to, issues, names), readTahmeel(tahmeel, from, to, issues, names)]);
+  const erpData = readErp(snapshot);
+
+  // حركات بتاريخ لحد to بس اتسجلت بعده: محسوبة، ومعروضة للعلم - entries dated up to to but entered after it: counted, listed
+  const seen = new Set<string>();
+  const late = [...snapshot.backdated, ...snapshot.ledger]
+    .filter((r) => !r.is_cancelled && r.posting_date <= to && r.creation.slice(0, 10) > to)
+    .filter((r) => {
+      const key = `${r.voucher_detail_no}|${r.item_code}|${r.creation}`;
+      return !seen.has(key) && !!seen.add(key);
+    })
+    .sort((a, b) => a.creation.localeCompare(b.creation));
   const excelLines = [...azonData.lines];
   const erpAll = erpData.lines;
   const erpLive = erpAll.filter((l) => !l.cancelled && l.date >= from && l.date <= to);
@@ -782,7 +786,9 @@ async function main() {
     from,
     to,
     warehouse,
-    generated: new Date().toLocaleString("en-GB", { timeZone: "Africa/Cairo" }),
+    fetchedAt: snapshot.fetchedAt,
+    snapshotFile: path.relative(process.cwd(), snapshotFile),
+    late: late.map((r) => ({ ...erpData.toLine(r), signedQty: r.actual_qty, voucherType: r.voucher_type })),
     names: Array.from(names).sort(),
     issues,
     sheetTotals: azonData.sheetTotals,
@@ -796,9 +802,10 @@ async function main() {
 
   const dir = path.join(process.cwd(), "reports");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "issue-comparison.md"), renderMarkdown(report), "utf8");
-  await writeExcel(path.join(dir, "issue-comparison.xlsx"), report);
-  await writePdf(path.join(dir, "issue-comparison.pdf"), report);
+  const out = (name: string) => writable(path.join(dir, name), snapshot.fetchedAt);
+  fs.writeFileSync(out("issue-comparison.md"), renderMarkdown(report), "utf8");
+  await writeExcel(out("issue-comparison.xlsx"), report);
+  await writePdf(out("issue-comparison.pdf"), report);
 
   console.log(`\nالفروقات: ${mismatches.length} سطر (${real.length} غلطة بعد ما جوّزنا اللي بيلغوا بعض)`);
   for (const [cause, c] of conclusion.byCause) console.log(`  ${c.n} — ${cause} (${fmt(c.qty)})`);
@@ -817,7 +824,9 @@ type Report = {
   from: string;
   to: string;
   warehouse: string;
-  generated: string;
+  fetchedAt: string;
+  snapshotFile: string;
+  late: (ErpLine & { signedQty: number; voucherType: string })[]; // بتاريخ لحد to واتسجلت بعده - dated up to to, entered after
   names: [string, string][];
   issues: Issue[];
   sheetTotals: { sheet: string; total: number | null; parsed: number }[];
@@ -835,6 +844,23 @@ type Report = {
   };
   loadDays: number;
 };
+
+// أول سطر في كل ملف - the first line of every file
+const stamp = (r: Report) => `وقت سحب البيانات: ${r.fetchedAt} — الفترة: ${shortDate(r.from)} → ${shortDate(r.to)}`;
+const lateTitle = (r: Report) => `حركات بتاريخ يوم ${shortDate(r.to)} أو قبله بس اتسجلت بعده`;
+const LATE_NOTE = "محسوبة عادي في المقارنة (تاريخها جوه الفترة)، ومعروضة هنا للعلم بس";
+const LATE_HEAD = ["التاريخ", "نوع المستند", "رقم المستند", "النوع", "العربية / المخزن", "الصنف", "الكمية", "عملها", "اتسجلت يوم"];
+const lateCells = (l: Report["late"][number]): (string | number)[] => [
+  l.date,
+  l.voucherType,
+  l.voucher,
+  l.stream === "other" ? "أخرى" : STREAM_TITLES[l.stream],
+  l.vehicle,
+  l.item,
+  l.signedQty,
+  l.owner,
+  l.created,
+];
 
 const SUMMARY_HEAD = [
   "الصنف",
@@ -911,12 +937,16 @@ function renderMarkdown(r: Report) {
     [`| ${head.map(cell).join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((row) => `| ${row.map((v) => cell(show(v))).join(" | ")} |`)].join("\n");
   const md: string[] = [];
   md.push(`# مقارنة المنصرف: الإكسيل وتقرير التحميل مقابل ERPNext — ${FACTORY_NAME}`);
-  md.push(`المخزن: **${r.warehouse}** — من **${r.from}** لحد **${r.to}** — اتعمل ${r.generated} (بتوقيت مصر). أيام تقرير التحميل: ${r.loadDays}.`);
+  md.push(`**${stamp(r)}**`);
+  md.push(`المخزن: **${r.warehouse}** — ERPNext: posting_date لحد ${r.to} بس (is_cancelled = 0) — اللقطة: ${r.snapshotFile} — أيام تقرير التحميل: ${r.loadDays}.`);
   md.push(`## الخلاصة`);
   md.push(conclusionLines(r).map((l) => `- ${l}`).join("\n"));
   const fixes = groupedFixes(r);
   md.push(`### المطلوب تصحيحه في ERPNext (${fixes.length})`);
   md.push(fixes.map((l) => `- ${l}`).join("\n") || "- مفيش");
+  md.push(`## ${lateTitle(r)} (${r.late.length})`);
+  md.push(`${LATE_NOTE}.`);
+  md.push(r.late.length ? table(LATE_HEAD, r.late.map(lateCells)) : "مفيش ✅");
   md.push(`## الملخص لكل صنف`);
   md.push(table(SUMMARY_HEAD, [...r.summary.map(summaryCells), summaryTotal(r)]));
   md.push(`## الفروقات وأسبابها (${r.mismatches.length})`);
@@ -971,6 +1001,20 @@ async function writeExcel(file: string, r: Report) {
     c.fill = solid(COLORS.red);
     c.font = { bold: true, color: { argb: COLORS.redFont } };
   };
+
+  // شيت المعلومات الأول: وقت السحب والفترة والحركات المتأخرة - info sheet first: fetch time, period, late entries
+  const info = book.addWorksheet("معلومات", { views: [{ rightToLeft: true }] });
+  info.columns = [12, 26, 21, 22, 16, 20, 9, 18, 17].map((width) => ({ width }));
+  info.addRow([stamp(r)]).font = { bold: true, size: 13 };
+  info.addRow([`المخزن: ${r.warehouse} — اللقطة: ${r.snapshotFile}`]);
+  info.addRow([]);
+  info.addRow([`${lateTitle(r)} (${r.late.length}) — ${LATE_NOTE}`]).font = { bold: true };
+  const lateHead = info.addRow(LATE_HEAD);
+  lateHead.eachCell((c) => {
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = solid(COLORS.head);
+  });
+  for (const l of r.late) add(info, lateCells(l));
 
   const summary = sheet("الملخص", SUMMARY_HEAD, [22, 11, 11, 10, 11, 11, 10, 11, 11, 10, 13, 13, 11, 10], 1);
   for (const values of [...r.summary.map(summaryCells), summaryTotal(r)]) {
@@ -1043,6 +1087,7 @@ body { font-family: "Cairo Variable", sans-serif; color: #1f2328; font-size: 9.5
 h1 { font-size: 19px; margin: 0 0 2px; color: #c25a00; }
 h2 { font-size: 14px; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #FF7A00; break-after: avoid; }
 .meta { color: #57606a; margin-bottom: 6px; }
+.stamp { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 ul.conclusion { margin: 4px 0; padding-right: 18px; font-size: 10.5px; }
 ul.conclusion li { margin-bottom: 3px; }
 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
@@ -1076,11 +1121,15 @@ function renderHtml(r: Report) {
   const fixes = fixList.map((l) => `<li>${esc(l)}</li>`).join("");
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>${cairoFontCss()}${PDF_CSS}</style></head><body>
 <h1>مقارنة المنصرف: الإكسيل وتقرير التحميل مقابل ERPNext — ${esc(FACTORY_NAME)}</h1>
-<div class="meta">المخزن: <b>${esc(r.warehouse)}</b> — من <b>${ltr(r.from)}</b> لحد <b>${ltr(r.to)}</b> — اتعمل ${ltr(r.generated)} (بتوقيت مصر).</div>
+<div class="stamp">${esc(stamp(r))}</div>
+<div class="meta">المخزن: <b>${esc(r.warehouse)}</b> — ERPNext: posting_date لحد <b>${ltr(r.to)}</b> بس — اللقطة: ${ltr(r.snapshotFile)}</div>
 <h2>الخلاصة</h2>
 <ul class="conclusion">${conclusionLines(r).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
 <h2>المطلوب تصحيحه في ERPNext (${fixList.length})</h2>
 <ul class="conclusion">${fixes || "<li>مفيش</li>"}</ul>
+<h2>${esc(lateTitle(r))} (${r.late.length})</h2>
+<p class="meta">${esc(LATE_NOTE)}</p>
+${r.late.length ? `<table>${head(LATE_HEAD)}<tbody>${r.late.map((l) => `<tr>${lateCells(l).map((v) => td(v)).join("")}</tr>`).join("")}</tbody></table>` : "<p>مفيش ✅</p>"}
 <h2 class="page-break">الملخص لكل صنف</h2>
 <table>${head(SUMMARY_HEAD)}<tbody>${summaryRows}</tbody></table>
 <h2 class="page-break">الفروقات وأسبابها (${r.mismatches.length}) — بالتاريخ</h2>
@@ -1117,7 +1166,7 @@ async function writePdf(file: string, r: Report) {
       printBackground: true,
       margin: { top: "14mm", bottom: "12mm", left: "7mm", right: "7mm" },
       displayHeaderFooter: true,
-      headerTemplate: `<div style="${band}"><span>${esc(FACTORY_NAME)} — مقارنة المنصرف عربية بعربية</span><span>الفترة: ${ltr(r.from)} ← ${ltr(r.to)}</span></div>`,
+      headerTemplate: `<div style="${band}"><span>${esc(FACTORY_NAME)} — مقارنة المنصرف عربية بعربية</span><span>${esc(stamp(r))}</span></div>`,
       footerTemplate: `<div style="${band}justify-content:center;">صفحة&nbsp;<span class="pageNumber"></span>&nbsp;من&nbsp;<span class="totalPages"></span></div>`,
     });
   } finally {

@@ -1,9 +1,11 @@
 // مطابقة رصيد مخزن المنتج التام بين ERPNext والإكسيل بتاعنا (قراية بس، مش بيغير أي حاجة)
 // Finished-goods stock reconciliation: ERPNext vs our Excel (read-only: changes nothing)
 //
-// التشغيل - run:  npm run audit:stock -- --from 2026-10-01 --to best --match-from 2026-10-20 --warehouse "مخزن منتج تام - تعبئة - AC"
-//   --to: تاريخ YYYY-MM-DD، أو today، أو best = اليوم اللي أرقامه أقرب للإكسيل - a date, today, or best = the day closest to the Excel
-//   --match-from: أول يوم نجربه لما ندور على تاريخ الإكسيل - first day tried when looking for the Excel's date
+// بيشتغل من لقطة ERPNext (scripts/erp-snapshot.ts) مش من ERPNext مباشرة - works from an ERPNext snapshot, not ERPNext directly
+// التشغيل - run:  npm run audit:snapshot -- --from 2026-10-01 --to 2026-10-25   (لقطة جديدة + التقريرين - new snapshot + both reports)
+//                 npm run audit:stock [-- --snapshot reports/snapshot-….json]      (من آخر لقطة - from the latest snapshot)
+//   الفترة والمخزن من اللقطة - the period and warehouse come from the snapshot
+//   --match-from: أول يوم نجربه لما ندور على تاريخ الإكسيل (الافتراضي آخر 5 أيام) - first day tried for the Excel's date
 // أرقام الإكسيل في reports/excel-input.json (بيتعمل أول مرة وبعد كده عدّل فيه براحتك) - Excel numbers live in
 // reports/excel-input.json (created on the first run, then edit it freely)
 // الناتج - output: reports/stock-reconciliation.md / .xlsx / .pdf — فولدر reports/ مينفعش يترفع (الريبو public)
@@ -23,7 +25,6 @@ import { chromium } from "playwright-core";
 // ============================================================
 
 const FACTORY_NAME = "الصفوة";
-const DEFAULT_WAREHOUSE = "مخزن منتج تام - تعبئة - AC";
 
 // نفس ترتيب الإكسيل: label = اسم العمود عندنا، code = كود الصنف في ERPNext
 // Same order as our Excel: label = our column name, code = the ERPNext item code
@@ -122,43 +123,39 @@ type Totals = Record<RowKey, number> & { byCategory: Record<Category, number>; g
 type Explanation = { item: string; row: RowKey; erp: number; excel: number; diff: number; reasons: { text: string; entries: Movement[] }[] };
 
 // ============================================================
-// ERPNext (نفس اتصال الداشبورد من .env.local) - same connection as the dashboard, from .env.local
+// لقطة ERPNext (scripts/erp-snapshot.ts) - the ERPNext snapshot
 // ============================================================
 
-const TIMEOUT_MS = 30000;
+type Snapshot = {
+  fetchedAt: string;
+  from: string;
+  to: string;
+  warehouse: string;
+  lookback: string;
+  warehouses: { name: string; parent_warehouse: string | null }[];
+  opening: LedgerRow[]; // آخر حركة قبل from لكل صنف - the last entry before from, per item
+  ledger: LedgerRow[]; // المخزن من lookback لحد to (والملغي) - the warehouse from lookback to to (and cancelled)
+  backdated: LedgerRow[];
+  elsewhere: LedgerRow[];
+  stockEntries: { name: string; stock_entry_type: string; purpose: string }[];
+  stockEntryDetails: { name: string; s_warehouse: string | null; t_warehouse: string | null }[];
+};
 
-function settings() {
-  const url = process.env.FACTORY_API_URL;
-  const key = process.env.FACTORY_API_KEY;
-  const secret = process.env.FACTORY_API_SECRET;
-  if (!url || !key || !secret) throw new Error("FACTORY_API_URL / FACTORY_API_KEY / FACTORY_API_SECRET مش موجودين في .env.local");
-  return { baseUrl: url.replace(/\/+$/, ""), auth: `token ${key}:${secret}` };
+// --snapshot ملف معين، أو آخر لقطة في reports/ - a given file, or the latest snapshot in reports/
+function loadSnapshot(arg: string | undefined) {
+  const dir = path.join(process.cwd(), "reports");
+  const latest = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => /^snapshot-.*\.json$/.test(f)).sort().map((f) => path.join(dir, f)).pop()
+    : undefined;
+  const file = arg ?? latest;
+  if (!file || !fs.existsSync(file)) throw new Error("مفيش لقطة من ERPNext — شغّل الأول: npm run audit:snapshot");
+  return { file, snapshot: JSON.parse(fs.readFileSync(file, "utf8")) as Snapshot };
 }
-
-async function getList<T>(body: Record<string, unknown>): Promise<T[]> {
-  const { baseUrl, auth } = settings();
-  const response = await fetch(`${baseUrl}/api/method/frappe.client.get_list`, {
-    method: "POST",
-    headers: { Authorization: auth, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ limit_page_length: 0, ...body }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`ERPNext ${body.doctype}: HTTP ${response.status} ${text.slice(0, 200)}`);
-  return (JSON.parse(text) as { message: T[] }).message;
-}
-
-const LEDGER_FIELDS = [
-  "item_code", "warehouse", "posting_date", "posting_time", "posting_datetime", "creation", "owner",
-  "voucher_type", "voucher_no", "voucher_detail_no", "actual_qty", "qty_after_transaction", "is_cancelled",
-];
-const LEDGER_ORDER = "posting_datetime asc, creation asc";
 
 // ============================================================
 // التواريخ والتنسيق - dates and formatting
 // ============================================================
 
-const cairoToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -175,23 +172,33 @@ const fmt = (n: number) => round(n).toLocaleString("en");
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : fmt(n));
 const same = (a: number, b: number) => Math.abs(a - b) < EPS;
 
-function parseArgs(excel: ExcelInput) {
+// لو الملف مفتوح (Excel / قارئ PDF) بنكتب نسخة باسم فيه وقت السحب - if the file is open (Excel / a PDF reader),
+// write a copy named with the fetch time instead
+function writable(file: string, fetchedAt: string) {
+  try {
+    if (fs.existsSync(file)) fs.closeSync(fs.openSync(file, "r+"));
+    return file;
+  } catch {
+    const copy = file.replace(/(\.\w+)$/, `-${fetchedAt.replace(/\D/g, "").slice(0, 12)}$1`);
+    console.log(`⚠️ ${path.basename(file)} مفتوح في برنامج تاني — اتكتب بدله ${path.basename(copy)}`);
+    return copy;
+  }
+}
+
+// الفترة والمخزن من اللقطة نفسها - the period and warehouse come from the snapshot itself
+function parseArgs() {
   const args = process.argv.slice(2);
   const value = (flag: string) => {
     const index = args.indexOf(flag);
     return index >= 0 ? args[index + 1] : undefined;
   };
-  const today = cairoToday();
-  const from = value("--from") ?? `${today.slice(0, 8)}01`;
-  const rawTo = value("--to") ?? excel.toDate ?? "best";
-  const to = rawTo === "today" ? today : rawTo;
-  const matchFrom = value("--match-from") ?? addDays(isDate(to) ? to : today, -7);
-  const warehouse = value("--warehouse") ?? DEFAULT_WAREHOUSE;
-  for (const [name, date] of [["--from", from], ["--match-from", matchFrom]])
-    if (!isDate(date)) throw new Error(`تاريخ غلط في ${name}: ${date} (اكتبه YYYY-MM-DD)`);
-  if (to !== "best" && !isDate(to)) throw new Error(`--to لازم يبقى YYYY-MM-DD أو today أو best: ${rawTo}`);
-  return { from, to, matchFrom: matchFrom < from ? from : matchFrom, warehouse, today };
+  const { file, snapshot } = loadSnapshot(value("--snapshot"));
+  const { from, to, warehouse } = snapshot;
+  const matchFrom = value("--match-from") ?? addDays(to, -5);
+  if (!isDate(matchFrom)) throw new Error(`تاريخ غلط في --match-from: ${matchFrom} (اكتبه YYYY-MM-DD)`);
+  return { file, snapshot, from, to, warehouse, matchFrom: matchFrom < from ? from : matchFrom };
 }
+const ddmm = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
 
 // أرقام الإكسيل: بنعمل الملف أول مرة بس، وبعد كده بنقرا اللي فيه - created once, then read as edited
 function loadExcelInput(file: string): ExcelInput {
@@ -214,78 +221,25 @@ function loadExcelInput(file: string): ExcelInput {
 async function main() {
   const reportsDir = path.join(process.cwd(), "reports");
   const excel = loadExcelInput(path.join(reportsDir, "excel-input.json"));
-  const { from, to: rawTo, matchFrom, warehouse, today } = parseArgs(excel);
+  const { file: snapshotFile, snapshot, from, to, matchFrom, warehouse } = parseArgs();
   const codes = ITEMS.map((i) => i.code);
   const labelOf = new Map(ITEMS.map((i) => [i.code, i.label]));
-  const lastDay = rawTo === "best" ? today : rawTo;
-  console.log(`مطابقة ${warehouse} من ${from} ...`);
+  const lastDay = to;
+  console.log(`مطابقة ${warehouse} — الفترة: ${ddmm(from)} → ${ddmm(to)} — وقت سحب البيانات: ${snapshot.fetchedAt}`);
 
-  const warehouses = await getList<{ name: string; parent_warehouse: string | null }>({
-    doctype: "Warehouse",
-    fields: ["name", "parent_warehouse"],
-  });
+  const { warehouses } = snapshot;
   const isVehicle = (name: string | null | undefined) =>
     !!name && (VEHICLE_WORDS.test(name) || warehouses.some((w) => w.name === name && w.parent_warehouse === VEHICLE_GROUP));
+  const mapped = (rows: LedgerRow[]) => rows.filter((r) => codes.includes(r.item_code));
 
   // رصيد أول: آخر حركة قبل --from لكل صنف - opening: the last entry before --from, per item
-  const openingRows = await Promise.all(
-    codes.map((code) =>
-      getList<LedgerRow>({
-        doctype: "Stock Ledger Entry",
-        filters: [["item_code", "=", code], ["warehouse", "=", warehouse], ["is_cancelled", "=", 0], ["posting_date", "<", from]],
-        fields: LEDGER_FIELDS,
-        order_by: "posting_datetime desc, creation desc",
-        limit_page_length: 1,
-      })
-    )
-  );
-  const opening = new Map(codes.map((code, i) => [code, openingRows[i][0]?.qty_after_transaction ?? 0]));
-
-  // كل الحركات (والملغية) من أسبوعين قبل --from لحد آخر يوم - all entries (and cancelled) from two weeks before --from
-  const lookback = addDays(from, -14);
-  const ledger = await getList<LedgerRow>({
-    doctype: "Stock Ledger Entry",
-    filters: [["item_code", "in", codes], ["warehouse", "=", warehouse], ["posting_date", ">=", lookback], ["posting_date", "<=", lastDay]],
-    fields: LEDGER_FIELDS,
-    order_by: LEDGER_ORDER,
-  });
-  // نفس الأصناف في مخازن تانية (مش عربيات) - the same items in other (non-vehicle) warehouses
-  const elsewhere = (
-    await getList<LedgerRow>({
-      doctype: "Stock Ledger Entry",
-      filters: [["item_code", "in", codes], ["warehouse", "!=", warehouse], ["is_cancelled", "=", 0], ["posting_date", ">=", from], ["posting_date", "<=", lastDay]],
-      fields: LEDGER_FIELDS,
-      order_by: LEDGER_ORDER,
-    })
-  ).filter((row) => !isVehicle(row.warehouse));
-  // حركات قبل --from اتسجلت بعده (بتغير رصيد أول) - entries dated before --from but entered after it
-  const backdated = await getList<LedgerRow>({
-    doctype: "Stock Ledger Entry",
-    filters: [["item_code", "in", codes], ["warehouse", "=", warehouse], ["is_cancelled", "=", 0], ["posting_date", "<", from], ["creation", ">=", `${from} 00:00:00`]],
-    fields: LEDGER_FIELDS,
-    order_by: LEDGER_ORDER,
-  });
-
-  // نوع الـ Stock Entry والمخزن التاني لكل سطر - Stock Entry type and the other warehouse of each row
-  const stockEntryRows = [...ledger, ...elsewhere, ...backdated].filter((r) => r.voucher_type === "Stock Entry");
-  const entryNames = Array.from(new Set(stockEntryRows.map((r) => r.voucher_no)));
-  const [entryTypes, entryDetails] = entryNames.length
-    ? await Promise.all([
-        getList<{ name: string; stock_entry_type: string; purpose: string }>({
-          doctype: "Stock Entry",
-          filters: [["name", "in", entryNames]],
-          fields: ["name", "stock_entry_type", "purpose"],
-        }),
-        getList<{ name: string; s_warehouse: string | null; t_warehouse: string | null }>({
-          doctype: "Stock Entry Detail",
-          parent: "Stock Entry",
-          filters: [["name", "in", Array.from(new Set(stockEntryRows.map((r) => r.voucher_detail_no)))]],
-          fields: ["name", "s_warehouse", "t_warehouse"],
-        }),
-      ])
-    : [[], []];
-  const typeOf = new Map(entryTypes.map((e) => [e.name, e]));
-  const detailOf = new Map(entryDetails.map((d) => [d.name, d]));
+  const opening = new Map(codes.map((code) => [code, snapshot.opening.find((r) => r.item_code === code)?.qty_after_transaction ?? 0]));
+  // اللقطة فيها الحركات بتاريخ لحد --to بس، فمفيش حاجة بعده بتتحسب - the snapshot only holds entries dated up to --to
+  const ledger = mapped(snapshot.ledger);
+  const elsewhere = mapped(snapshot.elsewhere).filter((row) => !isVehicle(row.warehouse));
+  const backdated = mapped(snapshot.backdated);
+  const typeOf = new Map(snapshot.stockEntries.map((e) => [e.name, e]));
+  const detailOf = new Map(snapshot.stockEntryDetails.map((d) => [d.name, d]));
 
   // حركة الدفتر ← حركة متصنفة - a ledger row -> a classified movement
   const toMovement = (row: LedgerRow, qty: number): Movement => {
@@ -387,10 +341,21 @@ async function main() {
     return { day, exact, gap, closing: totals.reduce((s, t) => s + t.closing, 0) };
   });
   const best = [...matches].sort((a, b) => b.exact - a.exact || a.gap - b.gap)[0];
-  const to = rawTo === "best" ? best.day : rawTo;
   const erp = totalsAt(to);
   const inPeriod = movements.filter((m) => m.date <= to);
   console.log(`أقرب يوم للإكسيل: ${best.day} (${best.exact} من ${ITEMS.length * 3} رقم مطابق) — التقرير لحد ${to}`);
+
+  // حركات بتاريخ لحد --to بس اتسجلت بعده: محسوبة عادي، بنعرضها للعلم - entries dated up to --to but entered after it:
+  // counted as usual, listed for information
+  const seen = new Set<string>();
+  const late = [...snapshot.backdated, ...snapshot.ledger]
+    .filter((r) => !r.is_cancelled && r.posting_date <= to && r.creation.slice(0, 10) > to)
+    .filter((r) => {
+      const key = `${r.voucher_detail_no}|${r.item_code}|${r.creation}`;
+      return !seen.has(key) && !!seen.add(key);
+    })
+    .sort((a, b) => a.creation.localeCompare(b.creation))
+    .map((r) => toMovement(r, r.actual_qty));
 
   // ============================================================
   // أسباب الفروقات - explaining the differences
@@ -540,8 +505,21 @@ async function main() {
   // الكتابة - writing
   // ============================================================
 
-  const report: Report = { from, to, warehouse, best, matches, erp, excel, movements: inPeriod, explanations, generated: new Date().toLocaleString("en-GB", { timeZone: "Africa/Cairo" }) };
-  const out = (name: string) => path.join(reportsDir, name);
+  const report: Report = {
+    from,
+    to,
+    warehouse,
+    best,
+    matches,
+    erp,
+    excel,
+    movements: inPeriod,
+    explanations,
+    late,
+    fetchedAt: snapshot.fetchedAt,
+    snapshotFile: path.relative(process.cwd(), snapshotFile),
+  };
+  const out = (name: string) => writable(path.join(reportsDir, name), snapshot.fetchedAt);
   fs.writeFileSync(out("stock-reconciliation.md"), renderMarkdown(report), "utf8");
   await writeExcel(out("stock-reconciliation.xlsx"), report);
   await writePdf(out("stock-reconciliation.pdf"), report);
@@ -566,8 +544,15 @@ type Report = {
   excel: ExcelInput;
   movements: Movement[];
   explanations: Explanation[];
-  generated: string;
+  late: Movement[]; // بتاريخ لحد to واتسجلت بعده - dated up to to, entered after it
+  fetchedAt: string;
+  snapshotFile: string;
 };
+
+// أول سطر في كل ملف - the first line of every file
+const stamp = (r: Report) => `وقت سحب البيانات: ${r.fetchedAt} — الفترة: ${ddmm(r.from)} → ${ddmm(r.to)}`;
+const lateTitle = (r: Report) => `حركات بتاريخ يوم ${ddmm(r.to)} أو قبله بس اتسجلت بعده`;
+const LATE_NOTE = "محسوبة عادي في الأرقام (تاريخها جوه الفترة)، ومعروضة هنا للعلم بس";
 
 const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 const HEAD = ["", ...ITEMS.map((i) => i.label), "الإجمالي"];
@@ -617,7 +602,8 @@ function renderMarkdown(r: Report) {
     [`| ${head.map(cell).join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((row) => `| ${row.map((v) => cell(cellText(v))).join(" | ")} |`)].join("\n");
   const md: string[] = [];
   md.push(`# رصيد مخزن المنتج التام — ${FACTORY_NAME}`);
-  md.push(`المخزن: **${r.warehouse}** — الفترة من **${r.from}** لحد **${r.to}** — اتعمل ${r.generated} (بتوقيت مصر) من Stock Ledger Entry.`);
+  md.push(`**${stamp(r)}**`);
+  md.push(`المخزن: **${r.warehouse}** — من Stock Ledger Entry (is_cancelled = 0، posting_date لحد ${r.to}) — اللقطة: ${r.snapshotFile}`);
   md.push(`## أنهي يوم أقرب للإكسيل`);
   md.push(`أقرب يوم: **${r.best.day}** — ${r.best.exact} من ${ITEMS.length * 3} رقم (الإنتاج / المنصرف / رصيد آخر) مطابق بالظبط.`);
   md.push(table(["اليوم", "أرقام مطابقة", "مجموع الفروقات", "إجمالي رصيد آخر في ERPNext"], r.matches.map((m) => [m.day === r.best.day ? `**${m.day}** ✅` : m.day, `${m.exact} / ${ITEMS.length * 3}`, m.gap, m.closing])));
@@ -632,6 +618,9 @@ function renderMarkdown(r: Report) {
     md.push(`### ${e.item} — ${ROW_TITLES[e.row]}: ERPNext ${fmt(e.erp)} / الإكسيل ${fmt(e.excel)} / الفرق ${signed(e.diff)}`);
     md.push(e.reasons.map((reason) => [`- ${reason.text}`, ...reason.entries.map((m) => `  - ${movementLine(m)}`)].join("\n")).join("\n"));
   }
+  md.push(`## ${lateTitle(r)} (${r.late.length})`);
+  md.push(`${LATE_NOTE}.`);
+  md.push(r.late.length ? table(MOVEMENT_HEAD, r.late.map(movementCells)) : "مفيش ✅");
   md.push(`## الحركات (${r.movements.length})`);
   md.push(table(MOVEMENT_HEAD, r.movements.map(movementCells)));
   return md.join("\n\n") + "\n";
@@ -675,6 +664,16 @@ async function writeExcel(file: string, r: Report) {
     return row;
   };
   const widths = [26, ...ITEMS.map(() => 12), 13];
+
+  // شيت المعلومات الأول: وقت السحب والفترة والحركات المتأخرة - info sheet first: fetch time, period, late entries
+  const info = book.addWorksheet("معلومات", { views: [{ rightToLeft: true }] });
+  info.columns = [11, 7, 30, 21, 20, 9, 9, 12, 18, 28, 28, 17].map((width) => ({ width }));
+  info.addRow([stamp(r)]).font = { bold: true, size: 13 };
+  info.addRow([`المخزن: ${r.warehouse} — اللقطة: ${r.snapshotFile}`]);
+  info.addRow([]);
+  info.addRow([`${lateTitle(r)} (${r.late.length}) — ${LATE_NOTE}`]).font = { bold: true };
+  styleHead(info.addRow(MOVEMENT_HEAD));
+  for (const m of r.late) info.addRow(movementCells(m));
 
   const balance = sheet("الرصيد", HEAD, widths, false);
   for (const row of balanceRows(r)) addRow(balance, row);
@@ -753,6 +752,7 @@ h1 { font-size: 20px; margin: 0 0 2px; color: #c25a00; }
 h2 { font-size: 15px; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #FF7A00; break-after: avoid; }
 h3 { font-size: 11px; margin: 9px 0 3px; break-after: avoid; }
 .meta { color: #57606a; margin-bottom: 8px; }
+.stamp { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 .best { background: #e6f4ea; border-right: 4px solid #1a7f37; padding: 5px 10px; margin: 6px 0; font-size: 11px; }
 table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
 thead { display: table-header-group; }
@@ -807,7 +807,8 @@ function renderHtml(r: Report) {
 
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>${cairoFontCss()}${PDF_CSS}</style></head><body>
 <h1>رصيد مخزن المنتج التام — ${esc(FACTORY_NAME)}</h1>
-<div class="meta">المخزن: <b>${esc(r.warehouse)}</b> — الفترة من <b>${ltr(r.from)}</b> لحد <b>${ltr(r.to)}</b> — اتعمل ${ltr(r.generated)} (بتوقيت مصر) من Stock Ledger Entry.</div>
+<div class="stamp">${esc(stamp(r))}</div>
+<div class="meta">المخزن: <b>${esc(r.warehouse)}</b> — من Stock Ledger Entry (posting_date لحد <b>${ltr(r.to)}</b>) — اللقطة: ${ltr(r.snapshotFile)}</div>
 <div class="best">أقرب يوم للإكسيل: <b>${ltr(r.best.day)}</b> — ${r.best.exact} من ${ITEMS.length * 3} رقم (الإنتاج / المنصرف / رصيد آخر) مطابق بالظبط.</div>
 <h2>الرصيد من ERPNext (نفس شكل الإكسيل)</h2>
 ${htmlTable(HEAD, plain(balanceRows(r)))}
@@ -817,6 +818,9 @@ ${htmlTable(HEAD, plain(breakdownRows(r)))}
 ${htmlTable(HEAD, comparison)}
 <h3>أنهي يوم أقرب للإكسيل</h3>
 ${htmlTable(["اليوم", "أرقام مطابقة", "مجموع الفروقات", "إجمالي رصيد آخر في ERPNext"], matchRows)}
+<h2>${esc(lateTitle(r))} (${r.late.length})</h2>
+<p class="meta">${esc(LATE_NOTE)}</p>
+${r.late.length ? htmlTable(MOVEMENT_HEAD, r.late.map((m) => ({ cells: movementCells(m).map(cellText) }))) : "<p>مفيش ✅</p>"}
 <h2 class="page-break">أسباب الفروقات (${r.explanations.length})</h2>
 ${reasons || "<p>مفيش فروقات ✅</p>"}
 </body></html>`;
@@ -854,7 +858,7 @@ async function writePdf(file: string, r: Report) {
       printBackground: true,
       margin: { top: "14mm", bottom: "12mm", left: "8mm", right: "8mm" },
       displayHeaderFooter: true,
-      headerTemplate: `<div style="${band}"><span>${esc(FACTORY_NAME)} — رصيد مخزن المنتج التام</span><span>الفترة: ${ltr(r.from)} ← ${ltr(r.to)}</span></div>`,
+      headerTemplate: `<div style="${band}"><span>${esc(FACTORY_NAME)} — رصيد مخزن المنتج التام</span><span>${esc(stamp(r))}</span></div>`,
       footerTemplate: `<div style="${band}justify-content:center;">صفحة&nbsp;<span class="pageNumber"></span>&nbsp;من&nbsp;<span class="totalPages"></span></div>`,
     });
   } finally {
