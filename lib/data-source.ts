@@ -235,7 +235,7 @@ async function batchesSection(results: ErpStatus[]): Promise<Batches | null> {
 }
 
 type CharityRow = {
-  name: string;
+  name: string | number; // ممكن يبقى رقم (naming = autoincrement) - may be a number (autoincrement naming)
   fund: string | null;
   txn_type: string | null;
   amount: number | null;
@@ -245,7 +245,7 @@ type CharityRow = {
 };
 
 // txn_type في Charity Transaction ← نوع العملية - txn_type -> operation type
-const CHARITY_TYPES: Record<string, CharityOperation["type"]> = { صرف: "out", إيداع: "in" };
+const CHARITY_TYPES: Record<string, CharityOperation["type"]> = { صرف: "out", إيداع: "in", "رصيد افتتاحي": "opening" };
 
 // مبلغ متقرب لقرشين - amount rounded to 2 decimals
 const money = (value: number) => Math.round(value * 100) / 100;
@@ -265,7 +265,7 @@ async function loadCharityRows(doctype: string): Promise<CharityRow[]> {
 function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<Charity, "offline"> {
   const month = today.slice(0, 7);
   const byFund = new Map<string, CharityFund>(
-    funds.map((name) => [name, { name, balance: 0, monthOut: 0, lastOut: null, recent: [] }])
+    funds.map((name) => [name, { name, balance: 0, monthOut: 0, opening: null, lastOut: null, recent: [] }])
   );
   let todayOut = 0;
   for (const row of rows) {
@@ -276,7 +276,7 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
       continue;
     }
     const operation: CharityOperation = {
-      id: row.name,
+      id: String(row.name),
       date: String(row.txn_date ?? "").slice(0, 10),
       type,
       amount: row.amount ?? 0,
@@ -285,6 +285,14 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
     };
     // الصفوف جاية الأحدث الأول، فأول صرف = آخر صرف - rows come newest first, so the first spending is the latest
     if (fund.recent.length < 3) fund.recent.push(operation);
+    // الرصيد الافتتاحي بيزود الرصيد بس (مش صرف ولا إيداع) - the opening balance only adds to the balance
+    if (type === "opening") {
+      fund.balance += operation.amount;
+      fund.opening = fund.opening
+        ? { amount: fund.opening.amount + operation.amount, date: fund.opening.date }
+        : { amount: operation.amount, date: operation.date };
+      continue;
+    }
     if (type === "in") {
       fund.balance += operation.amount;
       continue;
@@ -298,6 +306,7 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
     ...fund,
     balance: money(fund.balance),
     monthOut: money(fund.monthOut),
+    opening: fund.opening && { ...fund.opening, amount: money(fund.opening.amount) },
   }));
   return {
     funds: list,

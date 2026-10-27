@@ -162,20 +162,23 @@ export interface Batches {
 export interface CharityOperation {
   id: string;
   date: string; // "2026-10-27"
-  type: "out" | "in"; // out = صرف، in = إيداع
+  type: "out" | "in" | "opening"; // out = صرف، in = إيداع، opening = رصيد افتتاحي
   amount: number;
   beneficiary: string; // صُرفت لـ
   details: string;
 }
 
-// صندوق صدقات: balance = الإيداع − الصرف من الأول، monthOut = صرف الشهر الحالي،
+// صندوق صدقات: balance = (الرصيد الافتتاحي + الإيداع) − الصرف من الأول، monthOut = صرف الشهر الحالي،
+// opening = مجموع الرصيد الافتتاحي وتاريخ آخر سجل ليه (null = مفيش)،
 // lastOut = آخر صرف (null = مفيش صرف)، recent = آخر 3 عمليات الأحدث الأول
-// A charity fund: balance = all-time deposits − spending, monthOut = this month's spending,
+// A charity fund: balance = all-time (opening + deposits) − spending, monthOut = this month's spending,
+// opening = total opening balance and its latest record's date (null = none),
 // lastOut = the latest spending (null = none), recent = the last 3 operations newest first
 export interface CharityFund {
   name: string;
   balance: number;
   monthOut: number;
+  opening: { amount: number; date: string } | null;
   lastOut: CharityOperation | null;
   recent: CharityOperation[];
 }

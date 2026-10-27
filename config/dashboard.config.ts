@@ -72,9 +72,10 @@ export const dashboardConfig = {
     } as ConfigErpBatches,
 
     // الصدقات (الصفحة 3) - كل حاجة بتتحدث كل refreshSeconds
-    // كل عملية = سجل "Charity Transaction" (مش مربوط بالحسابات): fund = الصندوق، txn_type = "صرف" أو "إيداع"،
+    // كل عملية = سجل "Charity Transaction" (مش مربوط بالحسابات): fund = الصندوق، txn_type = "صرف" أو "إيداع" أو "رصيد افتتاحي"،
     // amount = المبلغ، txn_date = التاريخ، beneficiary = صُرفت لـ، details = التفاصيل
-    // الرصيد = مجموع الإيداع − مجموع الصرف من أول ما بدأ، وصرف اليوم/الشهر بتوقيت القاهرة
+    // الرصيد = (الرصيد الافتتاحي + الإيداع) − الصرف من أول ما بدأ، وصرف اليوم/الشهر بتوقيت القاهرة
+    // "رصيد افتتاحي" بيدخل في الرصيد بس: مش صرف ولا إيداع، ومش بيتحسب في صرف اليوم/الشهر ولا "آخر صرف"
     // funds = الصناديق بالترتيب اللي بتظهر بيه في الشبكة (يمين فوق، شمال فوق، يمين تحت، شمال تحت)
     // الأسامي لازم تبقى زي اختيارات خانة fund في ERPNext بالظبط، ولو غيرت اسم هناك غيره هنا
     // عملية في صندوق مش في القايمة دي مش بتتعد (وبتتكتب في اللوج)
@@ -85,7 +86,8 @@ export const dashboardConfig = {
     // else the page shows "غير متصل" (never fake zeros)
     charity: {
       doctype: "Charity Transaction",
-      funds: ["صندوق 1", "صندوق 2", "صندوق 3", "صندوق 4"],
+      // الأسامي بتظهر على الشاشة زي ما هي مكتوبة هنا بالظبط - names are shown exactly as written
+      funds: ["خزينة حصة التعبئة", "خزينة حصة الانتاج", "خزينة خارجية 1", "خزينة خارجية 2"],
     } as ConfigErpCharity,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
@@ -636,6 +638,7 @@ export const dashboardConfig = {
       fundNameFontSize: 26, // حجم اسم الصندوق - fund name font size
       fundIconSize: 26, // حجم أيقونة الخزنة جنب اسم الصندوق - vault icon size
       balanceMaxSize: 84, // أكبر حجم لرقم الرصيد الكبير - max balance number size (px)
+      openingFontSize: 15, // حجم سطر "الرصيد الافتتاحي" تحت الرصيد - "الرصيد الافتتاحي" line under the balance
       lastOutAmountMaxSize: 38, // أكبر حجم لمبلغ "آخر صرف" - max "آخر صرف" amount size (px)
       textFontSize: 16, // حجم الكلام العادي (التاريخ، صُرفت لـ، التفاصيل) - normal text size
       monthOutFontSize: 18, // حجم "صرف الشهر" فوق على الشمال - "صرف الشهر" chip font size

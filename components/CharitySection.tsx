@@ -57,24 +57,25 @@ function SummaryBox({ label, value, icon: Icon, tone }: { label: string; value: 
   );
 }
 
+// نوع العملية: صرف أحمر، إيداع أخضر، رصيد افتتاحي أزرق رمادي - type colors: red / green / neutral slate blue
+const OPERATION_STYLES: Record<CharityOperation["type"], { label: string; badge: string; text: string }> = {
+  out: { label: "صرف", badge: "bg-statusRed/15 text-statusRed", text: "text-statusRed" },
+  in: { label: "إيداع", badge: "bg-statusGreen/15 text-statusGreen", text: "text-statusGreen" },
+  opening: { label: "رصيد افتتاحي", badge: "bg-sky-400/10 text-sky-300", text: "text-slate-300" },
+};
+
 // سطر في "آخر العمليات": التاريخ · النوع · المبلغ · صُرفت لـ - date · type · amount · beneficiary
 function OperationRow({ op }: { op: CharityOperation }) {
   const sizes = dashboardConfig.sizes.charityPage;
-  const out = op.type === "out";
+  const style = OPERATION_STYLES[op.type];
   return (
     <div
       className="shrink-0 grid items-center gap-3 px-3 rounded-lg bg-background/60 border border-cardBorder"
       style={{ height: sizes.recentRowHeight, fontSize: sizes.recentFontSize, gridTemplateColumns: "auto auto auto minmax(0,1fr)" }}
     >
       <span className="text-gray-300 whitespace-nowrap">{formatDay(op.date)}</span>
-      <span
-        className={`px-2 rounded-md font-semibold leading-6 ${
-          out ? "bg-statusRed/15 text-statusRed" : "bg-statusGreen/15 text-statusGreen"
-        }`}
-      >
-        {out ? "صرف" : "إيداع"}
-      </span>
-      <Money value={op.amount} className={`font-bold ${out ? "text-statusRed" : "text-statusGreen"}`} />
+      <span className={`px-2 rounded-md font-semibold leading-6 whitespace-nowrap ${style.badge}`}>{style.label}</span>
+      <Money value={op.amount} className={`font-bold ${style.text}`} />
       <span className="text-gray-400 truncate">{toEnglishDigits(op.beneficiary) || "—"}</span>
     </div>
   );
@@ -117,10 +118,16 @@ function FundCard({ fund }: { fund: CharityFund }) {
           </p>
           <p
             className={`font-extrabold leading-tight ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
-            style={{ fontSize: `min(${sizes.balanceMaxSize}px, 15cqi, 45cqh)` }}
+            style={{ fontSize: `min(${sizes.balanceMaxSize}px, 15cqi, 40cqh)` }}
           >
             <Money value={fund.balance} />
           </p>
+          {fund.opening && (
+            <p className="text-slate-400 whitespace-nowrap" style={{ fontSize: sizes.openingFontSize }}>
+              الرصيد الافتتاحي: <Money value={fund.opening.amount} className="text-slate-200 font-semibold" />{" "}
+              <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
+            </p>
+          )}
         </div>
 
         <div
