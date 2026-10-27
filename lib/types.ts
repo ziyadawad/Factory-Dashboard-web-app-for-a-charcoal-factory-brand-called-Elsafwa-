@@ -158,6 +158,38 @@ export interface Batches {
   offline: boolean;
 }
 
+// عملية صدقة (سجل Charity Transaction) - one charity operation (a Charity Transaction record)
+export interface CharityOperation {
+  id: string;
+  date: string; // "2026-10-27"
+  type: "out" | "in"; // out = صرف، in = إيداع
+  amount: number;
+  beneficiary: string; // صُرفت لـ
+  details: string;
+}
+
+// صندوق صدقات: balance = الإيداع − الصرف من الأول، monthOut = صرف الشهر الحالي،
+// lastOut = آخر صرف (null = مفيش صرف)، recent = آخر 3 عمليات الأحدث الأول
+// A charity fund: balance = all-time deposits − spending, monthOut = this month's spending,
+// lastOut = the latest spending (null = none), recent = the last 3 operations newest first
+export interface CharityFund {
+  name: string;
+  balance: number;
+  monthOut: number;
+  lastOut: CharityOperation | null;
+  recent: CharityOperation[];
+}
+
+// الصدقات (الصفحة 3): offline = ERPNext مش بيرد ودي آخر بيانات نجحت
+// Charity (page 3): offline = ERPNext failed and this is the last good data
+export interface Charity {
+  funds: CharityFund[];
+  totalBalance: number; // إجمالي أرصدة الصدقات
+  todayOut: number; // إجمالي صرف اليوم
+  monthOut: number; // إجمالي صرف الشهر
+  offline: boolean;
+}
+
 export interface DashboardData {
   attendance: Attendance;
   stock: Stock;
@@ -165,6 +197,7 @@ export interface DashboardData {
   floorWorkers: FloorWorkers;
   treasury: Treasury;
   batches: Batches | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
+  charity: Charity | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   updatedAt: string;
   erpOffline: boolean; // true when an ERPNext request failed on this refresh
 }
@@ -183,6 +216,9 @@ export type ConfigErpBatches =
       source: "erp";
       exitsDoctype: string;
     };
+
+// الصدقات: doctype = سجل لكل عملية، funds = الصناديق بالترتيب - Charity: one record per operation, funds in order
+export type ConfigErpCharity = { doctype: string; funds: string[] };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
 // A stock number: total actual_qty of every itemCode in warehouses (empty = all warehouses)

@@ -70,3 +70,18 @@ body {
     }
   }
 }
+
+/* تفاصيل "آخر صرف" في صفحة الصدقات: سطرين، وسطر واحد لو الكارت قصير */
+/* "آخر صرف" details on the charity page: 2 lines, 1 line when the card is short */
+.charity-details {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+@container (max-height: 115px) {
+  .charity-details {
+    -webkit-line-clamp: 1;
+  }
+}

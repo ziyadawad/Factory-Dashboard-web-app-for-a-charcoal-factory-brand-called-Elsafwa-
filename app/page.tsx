@@ -10,6 +10,7 @@ import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
+import CharitySection from "@/components/CharitySection";
 import { DashboardData } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -114,6 +115,12 @@ export default function Dashboard() {
         setTimeout(() => setFlashSection(null), 500);
       }
 
+      // Check for changes in charity funds
+      if (JSON.stringify(data.charity) !== JSON.stringify(prev.charity)) {
+        setFlashSection("charity");
+        setTimeout(() => setFlashSection(null), 500);
+      }
+
       // Check for changes in kilns
       if (JSON.stringify(data.kilns.kilns) !== JSON.stringify(prev.kilns.kilns)) {
         setFlashSection("kilns");
@@ -165,6 +172,12 @@ export default function Dashboard() {
         );
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" />;
+      case "charity":
+        return (
+          <div className={`h-full ${flashClass("charity")}`}>
+            <CharitySection data={data.charity} />
+          </div>
+        );
       default:
         return null;
     }

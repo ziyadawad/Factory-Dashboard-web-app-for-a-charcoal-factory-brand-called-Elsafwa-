@@ -14,6 +14,7 @@ import type {
   ConfigErpField,
   ConfigErpSource,
   ConfigErpBatches,
+  ConfigErpCharity,
   ConfigErpStockMap,
   ConfigWorker,
 } from "@/lib/types";
@@ -69,6 +70,23 @@ export const dashboardConfig = {
       source: "erp",
       exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
     } as ConfigErpBatches,
+
+    // الصدقات (الصفحة 3) - كل حاجة بتتحدث كل refreshSeconds
+    // كل عملية = سجل "Charity Transaction" (مش مربوط بالحسابات): fund = الصندوق، txn_type = "صرف" أو "إيداع"،
+    // amount = المبلغ، txn_date = التاريخ، beneficiary = صُرفت لـ، details = التفاصيل
+    // الرصيد = مجموع الإيداع − مجموع الصرف من أول ما بدأ، وصرف اليوم/الشهر بتوقيت القاهرة
+    // funds = الصناديق بالترتيب اللي بتظهر بيه في الشبكة (يمين فوق، شمال فوق، يمين تحت، شمال تحت)
+    // الأسامي لازم تبقى زي اختيارات خانة fund في ERPNext بالظبط، ولو غيرت اسم هناك غيره هنا
+    // عملية في صندوق مش في القايمة دي مش بتتعد (وبتتكتب في اللوج)
+    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على Charity Transaction، وإلا الصفحة تكتب "غير متصل"
+    // لو ERPNext وقع بتفضل آخر بيانات نجحت مع "غير متصل"، ولو مفيش الصفحة كلها تكتب "غير متصل" (مش أصفار)
+    // Charity (page 3): one "Charity Transaction" record per operation. funds = the 4 funds in grid order,
+    // spelled exactly like the fund Select options. On failure the last good data stays with "غير متصل",
+    // else the page shows "غير متصل" (never fake zeros)
+    charity: {
+      doctype: "Charity Transaction",
+      funds: ["صندوق 1", "صندوق 2", "صندوق 3", "صندوق 4"],
+    } as ConfigErpCharity,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
     // الرقم = مجموع actual_qty لكل الأصناف اللي في itemCodes (لو أكتر من صنف بيتجمعوا)
@@ -170,6 +188,7 @@ export const dashboardConfig = {
     list: [
       { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
       { id: "stock", title: "أرصدة المخازن", durationSeconds: 120 }, // الصفحة 2: المخازن - page 2
+      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 3: صناديق الصدقات - page 3
     ] as ConfigPage[],
   },
 
@@ -607,6 +626,21 @@ export const dashboardConfig = {
       sectionTotalFontSize: 24, // حجم رقم "إجمالي الخشب" فوق قسم الخشب - wood grand total font size
       variantNumberMaxSize: 32, // أكبر حجم لأرقام الأنواع (عادي/كامل/ناعم/خشن...) - biggest variant number size
       variantNumberScale: 36, // نسبة الرقم من عرض العمود (كل ما تزود الرقم يكبر، لو زاد أوي ممكن الأرقام تتداخل) - number size as % of the column width
+    },
+
+    // الصدقات (الصفحة 3) - charity page (page 3)
+    // الأرقام الكبيرة بتصغر لوحدها لو الكارت صغير (شاشة أقصر) - big numbers shrink by themselves on smaller cards
+    charityPage: {
+      summaryHeight: 84, // ارتفاع الشريط اللي فوق (إجمالي الأرصدة / صرف اليوم / صرف الشهر) - top summary strip height
+      summaryNumberFontSize: 34, // حجم أرقام الشريط اللي فوق - summary numbers font size
+      fundNameFontSize: 26, // حجم اسم الصندوق - fund name font size
+      fundIconSize: 26, // حجم أيقونة الخزنة جنب اسم الصندوق - vault icon size
+      balanceMaxSize: 84, // أكبر حجم لرقم الرصيد الكبير - max balance number size (px)
+      lastOutAmountMaxSize: 38, // أكبر حجم لمبلغ "آخر صرف" - max "آخر صرف" amount size (px)
+      textFontSize: 16, // حجم الكلام العادي (التاريخ، صُرفت لـ، التفاصيل) - normal text size
+      monthOutFontSize: 18, // حجم "صرف الشهر" فوق على الشمال - "صرف الشهر" chip font size
+      recentRowHeight: 32, // ارتفاع كل سطر في "آخر العمليات" - last operations row height (px)
+      recentFontSize: 15, // حجم الكلام في "آخر العمليات" - last operations font size
     },
   },
 
