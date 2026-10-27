@@ -643,13 +643,10 @@ export const dashboardConfig = {
     },
 
     // كروت الصناديق في الصفحة 3 - مربع "الرصيد" بعرض الكارت كله - page 3 fund cards: full-width balance box
-    // رقم الرصيد = أصغر قيمة بين الـ MaxSize بالبكسل و Scale% من عرض مربع "الرصيد" (cqi)
-    // فعلى تلفزيون 1920 بيبقى 100px، ولو الشاشة أضيق بيصغر لوحده عشان ميخرجش برا المربع
-    // Balance number = min(MaxSize px, Scale% of the "الرصيد" box width), so it never overflows sideways
+    // رقم الرصيد بحجم ثابت بالبكسل (أكبر كلام في الكارت)، والمربع بيطول على قده - fixed size; the box grows to fit
     page3: {
-      balanceNumberMaxSize: 100, // أكبر حجم لرقم الرصيد بالبكسل - max balance number size (px)
-      balanceNumberScale: 13, // الرقم = 13% من عرض مربع الرصيد لو أصغر من الـ Max - balance size as % of the box width
-      balanceCurrencyScale: 0.4, // حجم "ج.م" جنب الرقم = 40% من حجم الرقم - "ج.م" size relative to the number
+      balanceNumberSize: 88, // حجم رقم الرصيد بالبكسل - balance number size (px)
+      balanceCurrencySize: 36, // حجم "ج.م" جنب رقم الرصيد - "ج.م" next to the balance number (px)
       balanceLabelFontSize: 24, // حجم كلمة "الرصيد" فوق الرقم - "الرصيد" label above the number
       openingFontSize: 16, // حجم سطر "الرصيد الافتتاحي" تحت الرقم - "الرصيد الافتتاحي" line under the number
     },

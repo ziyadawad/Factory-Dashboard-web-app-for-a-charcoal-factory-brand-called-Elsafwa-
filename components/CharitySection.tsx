@@ -91,13 +91,6 @@ const BALANCE_LINE_HEIGHT = 1.3;
 function FundCard({ fund }: { fund: CharityFund }) {
   const sizes = dashboardConfig.sizes.charityPage;
   const big = dashboardConfig.sizes.page3;
-  // الرقم = min(Max, Scale% من عرض المربع). أمان بس: لو الشاشة أقصر من 1080 ومفيش طول كفاية، بيصغر على قد
-  // الطول الفاضل بعد "الرصيد" و"الرصيد الافتتاحي" عشان "آخر العمليات" متتقصش (على 1080 ده مش بيحصل)
-  // Number = min(Max, Scale% of the box width). Safety only: on screens shorter than 1080 it also fits the height
-  // left after the label and the opening line, so "آخر العمليات" is never cut (never kicks in at 1080)
-  const reserved =
-    (big.balanceLabelFontSize + (fund.opening ? big.openingFontSize : 0)) * BALANCE_LINE_HEIGHT + 22;
-  const balanceFontSize = `min(${big.balanceNumberMaxSize}px, ${big.balanceNumberScale}cqi, calc(100cqh - ${reserved}px))`;
 
   return (
     <div className="bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)]">
@@ -120,13 +113,8 @@ function FundCard({ fund }: { fund: CharityFund }) {
       </div>
 
       {/* الرصيد بعرض الكارت كله - the balance, full card width */}
-      {/* المساحة الفاضلة في الكارت (للأمان بالطول بس) - the space left in the card (height safety only) */}
-      <div className="flex-1 min-h-0" style={{ containerType: "size" }}>
-      {/* inline-size على مربع الرصيد نفسه: cqi = عرض المربع - inline-size on the box itself: cqi = the box width */}
-      <div
-        className="h-full py-2 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center overflow-hidden"
-        style={{ containerType: "inline-size" }}
-      >
+      {/* مربع الرصيد بياخد الطول الفاضل وبيطول على قد الرقم لو محتاج - takes the free height, grows to fit the number */}
+      <div className="flex-1 shrink-0 py-2 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center">
         <p
           className="text-emerald-300/90 font-semibold"
           style={{ fontSize: big.balanceLabelFontSize, lineHeight: BALANCE_LINE_HEIGHT }}
@@ -134,10 +122,10 @@ function FundCard({ fund }: { fund: CharityFund }) {
           الرصيد
         </p>
         <p
-          className={`font-extrabold leading-none ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
-          style={{ fontSize: balanceFontSize }}
+          className={`whitespace-nowrap ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
+          style={{ fontSize: big.balanceNumberSize, fontWeight: 800, lineHeight: 1.1 }}
         >
-          <Money value={fund.balance} currencyScale={big.balanceCurrencyScale} />
+          <Money value={fund.balance} currencyScale={big.balanceCurrencySize / big.balanceNumberSize} />
         </p>
         {fund.opening && (
           <p
@@ -148,7 +136,6 @@ function FundCard({ fund }: { fund: CharityFund }) {
             <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
           </p>
         )}
-      </div>
       </div>
 
       {/* آخر 3 عمليات صرف/إيداع (من غير الرصيد الافتتاحي) - the last 3 صرف / إيداع (no opening balance) */}
