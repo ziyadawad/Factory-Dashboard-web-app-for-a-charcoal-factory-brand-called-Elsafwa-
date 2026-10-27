@@ -264,6 +264,7 @@ async function loadCharityRows(doctype: string): Promise<CharityRow[]> {
 // Funds from the operations: all-time balance; spending by Cairo date (month = first 7 chars of today)
 function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<Charity, "offline"> {
   const month = today.slice(0, 7);
+  const recentCount = dashboardConfig.sizes.page3.recentOpsCount;
   const byFund = new Map<string, CharityFund>(
     funds.map((name) => [name, { name, balance: 0, monthOut: 0, opening: null, lastOut: null, recent: [] }])
   );
@@ -284,8 +285,9 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
       details: (row.details ?? "").trim(),
     };
     // الصفوف جاية الأحدث الأول، فأول صرف = آخر صرف - rows come newest first, so the first spending is the latest
-    // آخر العمليات = صرف وإيداع بس (الرصيد الافتتاحي مش بيظهر فيها) - last operations: صرف / إيداع only
-    if (type !== "opening" && fund.recent.length < 3) fund.recent.push(operation);
+    // آخر العمليات = صرف وإيداع بس (الرصيد الافتتاحي مش بيظهر فيها)، عددها من الكونفج
+    // Last operations: صرف / إيداع only; how many comes from the config
+    if (type !== "opening" && fund.recent.length < recentCount) fund.recent.push(operation);
     // الرصيد الافتتاحي بيزود الرصيد بس (مش صرف ولا إيداع) - the opening balance only adds to the balance
     if (type === "opening") {
       fund.balance += operation.amount;

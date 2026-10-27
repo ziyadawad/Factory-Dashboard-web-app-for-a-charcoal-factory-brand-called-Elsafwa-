@@ -642,13 +642,15 @@ export const dashboardConfig = {
       recentFontSize: 15, // حجم الكلام في "آخر العمليات" - last operations font size
     },
 
-    // كروت الصناديق في الصفحة 3 - مربع "الرصيد" بعرض الكارت كله - page 3 fund cards: full-width balance box
-    // رقم الرصيد بحجم ثابت بالبكسل (أكبر كلام في الكارت)، والمربع بيطول على قده - fixed size; the box grows to fit
+    // كروت الصناديق في الصفحة 3 - مربع "الرصيد" صغير في النص، وتحته "آخر العمليات" بياخد باقي الكارت
+    // Page 3 fund cards: a compact centered "الرصيد" box; "آخر العمليات" fills the rest of the card
     page3: {
-      balanceNumberSize: 88, // حجم رقم الرصيد بالبكسل - balance number size (px)
-      balanceCurrencySize: 36, // حجم "ج.م" جنب رقم الرصيد - "ج.م" next to the balance number (px)
-      balanceLabelFontSize: 24, // حجم كلمة "الرصيد" فوق الرقم - "الرصيد" label above the number
-      openingFontSize: 16, // حجم سطر "الرصيد الافتتاحي" تحت الرقم - "الرصيد الافتتاحي" line under the number
+      balanceNumberSize: 64, // حجم رقم الرصيد بالبكسل (أخضر زي "إجمالي أرصدة الصدقات") - balance number size (px)
+      balanceCurrencySize: 26, // حجم "ج.م" جنب رقم الرصيد - "ج.م" next to the balance number (px)
+      balanceLabelFontSize: 20, // حجم كلمة "الرصيد" فوق الرقم - "الرصيد" label above the number
+      // عدد العمليات في "آخر العمليات" (صرف وإيداع بس، الأحدث الأول) - لو زودته اتأكد إن الكارت لسه كافي على التلفزيون
+      // How many operations "آخر العمليات" shows (صرف / إيداع only, newest first) - check the TV still fits if raised
+      recentOpsCount: 4,
     },
   },
 

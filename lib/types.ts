@@ -170,10 +170,10 @@ export interface CharityOperation {
 
 // صندوق صدقات: balance = (الرصيد الافتتاحي + الإيداع) − الصرف من الأول، monthOut = صرف الشهر الحالي،
 // opening = مجموع الرصيد الافتتاحي وتاريخ آخر سجل ليه (null = مفيش)،
-// lastOut = آخر صرف (null = مفيش صرف)، recent = آخر 3 عمليات صرف/إيداع الأحدث الأول (من غير الرصيد الافتتاحي)
+// lastOut = آخر صرف (null = مفيش صرف)، recent = آخر عمليات صرف/إيداع الأحدث الأول (عددها sizes.page3.recentOpsCount، من غير الرصيد الافتتاحي)
 // A charity fund: balance = all-time (opening + deposits) − spending, monthOut = this month's spending,
 // opening = total opening balance and its latest record's date (null = none),
-// lastOut = the latest spending (null = none), recent = the last 3 صرف / إيداع newest first (no opening balance)
+// lastOut = the latest spending (null = none), recent = the last صرف / إيداع newest first (sizes.page3.recentOpsCount of them, no opening balance)
 export interface CharityFund {
   name: string;
   balance: number;

@@ -21,16 +21,13 @@ function formatDay(date: string): string {
 }
 
 // مبلغ بالجنيه - an amount in EGP
-// currencyScale = حجم "ج.م" بالنسبة للرقم - "ج.م" size relative to the number
-function Money({ value, className = "", currencyScale = 0.55 }: { value: number; className?: string; currencyScale?: number }) {
+function Money({ value, className = "" }: { value: number; className?: string }) {
   return (
     <span className={`whitespace-nowrap ${className}`}>
       <span dir="ltr" className="font-numbers tabular-nums">
         {formatNumber(value)}
       </span>{" "}
-      <span className="font-semibold opacity-80" style={{ fontSize: `${currencyScale}em` }}>
-        ج.م
-      </span>
+      <span className="text-[0.55em] font-semibold opacity-80">ج.م</span>
     </span>
   );
 }
@@ -85,12 +82,10 @@ function OperationRow({ op }: { op: CharityOperation }) {
 }
 
 // كارت الصندوق (خزنة) - one fund's "safe" card
-// ارتفاع السطر لكلمة "الرصيد" وسطر "الرصيد الافتتاحي" - line height of the label and the opening line
-const BALANCE_LINE_HEIGHT = 1.3;
-
 function FundCard({ fund }: { fund: CharityFund }) {
   const sizes = dashboardConfig.sizes.charityPage;
-  const big = dashboardConfig.sizes.page3;
+  const page3 = dashboardConfig.sizes.page3;
+  const negative = fund.balance < 0;
 
   return (
     <div className="bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)]">
@@ -112,44 +107,42 @@ function FundCard({ fund }: { fund: CharityFund }) {
         </div>
       </div>
 
-      {/* الرصيد بعرض الكارت كله - the balance, full card width */}
-      {/* مربع الرصيد بياخد الطول الفاضل وبيطول على قد الرقم لو محتاج - takes the free height, grows to fit the number */}
-      <div className="flex-1 shrink-0 py-2 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center">
-        <p
-          className="text-emerald-300/90 font-semibold"
-          style={{ fontSize: big.balanceLabelFontSize, lineHeight: BALANCE_LINE_HEIGHT }}
-        >
-          الرصيد
-        </p>
-        <p
-          className={`whitespace-nowrap ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
-          style={{ fontSize: big.balanceNumberSize, fontWeight: 800, lineHeight: 1.1 }}
-        >
-          <Money value={fund.balance} currencyScale={big.balanceCurrencySize / big.balanceNumberSize} />
-        </p>
-        {fund.opening && (
-          <p
-            className="text-slate-400 whitespace-nowrap"
-            style={{ fontSize: big.openingFontSize, lineHeight: BALANCE_LINE_HEIGHT }}
-          >
-            الرصيد الافتتاحي: <Money value={fund.opening.amount} className="text-slate-200 font-semibold" />{" "}
-            <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
+      {/* مربع الرصيد: صغير في النص بإطار أخضر متدرج - the balance: compact, centered, soft green gradient border */}
+      <div className="shrink-0 rounded-xl p-px bg-gradient-to-b from-emerald-400/50 via-emerald-500/20 to-emerald-500/5">
+        <div className="rounded-[11px] bg-card bg-gradient-to-b from-emerald-500/[0.08] to-transparent py-2.5 flex flex-col items-center">
+          <p className="text-emerald-200/60 font-semibold leading-tight" style={{ fontSize: page3.balanceLabelFontSize }}>
+            الرصيد
           </p>
-        )}
+          {/* أخضر زي "إجمالي أرصدة الصدقات" ولو بالسالب أحمر - emerald like the top total card, red if negative */}
+          <p
+            className={`whitespace-nowrap font-numbers tabular-nums ${negative ? "text-statusRed" : "text-emerald-400"}`}
+            style={{
+              fontSize: page3.balanceNumberSize,
+              fontWeight: 800,
+              lineHeight: 1.1,
+              textShadow: negative ? "0 0 18px rgba(239,68,68,0.3)" : "0 0 18px rgba(52,211,153,0.35)",
+            }}
+          >
+            <span dir="ltr">{formatNumber(fund.balance)}</span>{" "}
+            <span className="font-semibold text-emerald-200/50" style={{ fontSize: page3.balanceCurrencySize, textShadow: "none" }}>
+              ج.م
+            </span>
+          </p>
+        </div>
       </div>
 
-      {/* آخر 3 عمليات صرف/إيداع (من غير الرصيد الافتتاحي) - the last 3 صرف / إيداع (no opening balance) */}
-      <div className="shrink-0 flex flex-col gap-1">
-        <p className="text-gray-400 font-semibold text-sm">آخر العمليات</p>
+      {/* آخر عمليات صرف/إيداع (من غير الرصيد الافتتاحي) بتاخد باقي الكارت - the last صرف / إيداع fill the rest */}
+      <div className="flex-1 min-h-0 flex flex-col gap-1">
+        <p className="text-gray-400 font-semibold text-sm shrink-0">آخر العمليات</p>
         {fund.recent.length === 0 ? (
           <div
-            className="flex items-center justify-center rounded-lg border border-dashed border-cardBorder text-gray-500"
-            style={{ height: sizes.recentRowHeight * 3 + 8, fontSize: sizes.recentFontSize }}
+            className="flex-1 min-h-0 flex items-center justify-center rounded-lg border border-dashed border-cardBorder text-gray-500"
+            style={{ fontSize: sizes.recentFontSize }}
           >
             لا توجد عمليات
           </div>
         ) : (
-          <div className="flex flex-col gap-1" style={{ minHeight: sizes.recentRowHeight * 3 + 8 }}>
+          <div className="min-h-0 flex flex-col gap-1 overflow-hidden">
             {fund.recent.map((op) => (
               <OperationRow key={op.id} op={op} />
             ))}
