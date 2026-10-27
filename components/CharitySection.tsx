@@ -21,13 +21,16 @@ function formatDay(date: string): string {
 }
 
 // مبلغ بالجنيه - an amount in EGP
-function Money({ value, className = "" }: { value: number; className?: string }) {
+// currencyScale = حجم "ج.م" بالنسبة للرقم - "ج.م" size relative to the number
+function Money({ value, className = "", currencyScale = 0.55 }: { value: number; className?: string; currencyScale?: number }) {
   return (
     <span className={`whitespace-nowrap ${className}`}>
       <span dir="ltr" className="font-numbers tabular-nums">
         {formatNumber(value)}
       </span>{" "}
-      <span className="text-[0.55em] font-semibold opacity-80">ج.م</span>
+      <span className="font-semibold opacity-80" style={{ fontSize: `${currencyScale}em` }}>
+        ج.م
+      </span>
     </span>
   );
 }
@@ -88,11 +91,13 @@ const BALANCE_LINE_HEIGHT = 1.3;
 function FundCard({ fund }: { fund: CharityFund }) {
   const sizes = dashboardConfig.sizes.charityPage;
   const big = dashboardConfig.sizes.page3;
-  // الطول اللي بياخده "الرصيد" و"الرصيد الافتتاحي" + هامش، والرقم بياخد من الباقي
-  // height taken by the label and the opening line (+ margin); the number scales with what is left
+  // الرقم = min(Max, Scale% من عرض المربع). أمان بس: لو الشاشة أقصر من 1080 ومفيش طول كفاية، بيصغر على قد
+  // الطول الفاضل بعد "الرصيد" و"الرصيد الافتتاحي" عشان "آخر العمليات" متتقصش (على 1080 ده مش بيحصل)
+  // Number = min(Max, Scale% of the box width). Safety only: on screens shorter than 1080 it also fits the height
+  // left after the label and the opening line, so "آخر العمليات" is never cut (never kicks in at 1080)
   const reserved =
-    (big.balanceLabelFontSize + (fund.opening ? big.openingFontSize : 0)) * BALANCE_LINE_HEIGHT + 12;
-  const balanceFontSize = `min(${big.balanceMaxSize}px, ${big.balanceScale}cqi, calc((100cqh - ${reserved}px) * ${big.balanceHeightScale / 100}))`;
+    (big.balanceLabelFontSize + (fund.opening ? big.openingFontSize : 0)) * BALANCE_LINE_HEIGHT + 22;
+  const balanceFontSize = `min(${big.balanceNumberMaxSize}px, ${big.balanceNumberScale}cqi, calc(100cqh - ${reserved}px))`;
 
   return (
     <div className="bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)]">
@@ -115,10 +120,12 @@ function FundCard({ fund }: { fund: CharityFund }) {
       </div>
 
       {/* الرصيد بعرض الكارت كله - the balance, full card width */}
-      {/* container عشان الرقم يصغر مع عرض وطول المربع - container so the number scales with the box */}
+      {/* المساحة الفاضلة في الكارت (للأمان بالطول بس) - the space left in the card (height safety only) */}
+      <div className="flex-1 min-h-0" style={{ containerType: "size" }}>
+      {/* inline-size على مربع الرصيد نفسه: cqi = عرض المربع - inline-size on the box itself: cqi = the box width */}
       <div
-        className="flex-1 min-h-0 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center overflow-hidden"
-        style={{ containerType: "size" }}
+        className="h-full py-2 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center overflow-hidden"
+        style={{ containerType: "inline-size" }}
       >
         <p
           className="text-emerald-300/90 font-semibold"
@@ -127,10 +134,10 @@ function FundCard({ fund }: { fund: CharityFund }) {
           الرصيد
         </p>
         <p
-          className={`font-extrabold leading-tight ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
+          className={`font-extrabold leading-none ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
           style={{ fontSize: balanceFontSize }}
         >
-          <Money value={fund.balance} />
+          <Money value={fund.balance} currencyScale={big.balanceCurrencyScale} />
         </p>
         {fund.opening && (
           <p
@@ -141,6 +148,7 @@ function FundCard({ fund }: { fund: CharityFund }) {
             <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
           </p>
         )}
+      </div>
       </div>
 
       {/* آخر 3 عمليات صرف/إيداع (من غير الرصيد الافتتاحي) - the last 3 صرف / إيداع (no opening balance) */}
