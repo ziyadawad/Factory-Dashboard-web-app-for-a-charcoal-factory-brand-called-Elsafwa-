@@ -155,53 +155,101 @@ function floorWorkers(today: TodayAttendance | null): FloorWorkers {
 
 type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
 
-// خانة رقم من الـ Single doc، ولو مش رقم يبقى غلط - an Int field of the Single doc; anything else is an error
-function countsFrom(doc: Record<string, unknown>, fields: BatchesMapping["out"]): BatchCounts {
+// خانات طرحات على الأرض في Kiln Board - the ground_* fields of the Kiln Board Single DocType
+const GROUND_FIELDS: Record<keyof BatchCounts, string> = {
+  orange: "ground_orange",
+  mango: "ground_mango",
+  casuarina: "ground_casuarina",
+};
+
+// charcoal_type في Kiln Exit ← نوع الطرحة (بنقبل كذا طريقة كتابة) - charcoal_type -> type (a few spellings)
+const CHARCOAL_TYPES: Record<string, keyof BatchCounts> = {
+  برتقال: "orange",
+  مانجا: "mango",
+  مانجو: "mango",
+  جازورينا: "casuarina",
+  كازوارينا: "casuarina",
+  كازورينا: "casuarina",
+};
+
+// خانة رقم من الـ Single doc: فاضية = 0، مش موجودة أو مش رقم = غلط (عشان منعرضش أصفار غلط)
+// An Int field of the Single doc: empty = 0; missing or not a number = error (never show fake zeros)
+function groundFrom(doctype: string, doc: Record<string, unknown>): BatchCounts {
   const read = (field: string) => {
-    const value = doc[field] ?? 0; // خانة Int فاضية = 0 - an empty Int field is 0
+    if (!(field in doc)) throw new ErpError(`${doctype}: field "${field}" is missing`);
+    const value = doc[field] ?? 0;
     if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new ErpError(`Kiln Board: field "${field}" is ${JSON.stringify(doc[field])}, expected a number`);
+      throw new ErpError(`${doctype}: field "${field}" is ${JSON.stringify(doc[field])}, expected a number`);
     }
     return value;
   };
-  return { orange: read(fields.orange), mango: read(fields.mango), casuarina: read(fields.casuarina) };
+  return { orange: read(GROUND_FIELDS.orange), mango: read(GROUND_FIELDS.mango), casuarina: read(GROUND_FIELDS.casuarina) };
 }
 
-// الطرحات من الـ Single DocType: ground دايما الرقم الحالي، و out بيتصفر لو آخر Version غيّر أي خانة out
-// مش النهارده (بتوقيت القاهرة) - مفيش خانة تاريخ، فالـ Version (Track Changes) هو اللي بيقول اتعدل إمتى
-// Batches from the Single DocType: ground is always the current value; out is 0 unless the latest Version
-// that changed an out field is from today (Africa/Cairo) - there is no date field, so Track Changes tells when
+type KilnExitRow = { name: string; charcoal_type: string | null; kiln: string | null; exit_time: string | null };
+
+// الطرحات: خروج طرحات = سجلات Kiln Exit اللي exit_time بتاعها النهارده (فبتتصفر لوحدها كل يوم)،
+// وطرحات على الأرض = خانات ground_* في Kiln Board (عمرها ما بتتصفر)
+// exit_time بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
+// Batches: exits = Kiln Exit records whose exit_time is today (so they reset daily); ground = Kiln Board
+// ground_* fields (never reset). exit_time is in the ERPNext server time zone (Cairo) like every other date
 async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
-  const outFields = Object.values(mapping.out);
-  const [{ data: doc }, versions] = await Promise.all([
-    erpGet<{ data: Record<string, unknown> }>(`/api/resource/${mapping.doctype}/${mapping.doctype}`),
-    erpGet<{ data: { creation: string }[] }>("/api/resource/Version", {
-      filters: JSON.stringify([["ref_doctype", "=", mapping.doctype], ["docname", "=", mapping.doctype]]),
-      // data فيها {"changed": [["out_orange", 3, 5], ...]} - the JSON lists every changed field by name
-      or_filters: JSON.stringify(outFields.map((field) => ["data", "like", `%"${field}"%`])),
-      fields: JSON.stringify(["creation"]),
-      order_by: "creation desc",
-      limit_page_length: 1,
-    }).then(
-      ({ data }) => data,
-      (error) => {
-        console.error(
-          "[erp] batches: Version not readable, using the doc's modified date:",
-          error instanceof Error ? error.message : error
-        );
-        return null;
-      }
-    ),
+  const today = erpToday();
+  const [{ data: rows }, { data: board }] = await Promise.all([
+    erpGet<{ data: KilnExitRow[] }>(`/api/resource/${mapping.exitsDoctype}`, {
+      filters: JSON.stringify([
+        ["exit_time", ">=", `${today} 00:00:00`],
+        ["exit_time", "<=", `${today} 23:59:59.999999`],
+        ["docstatus", "!=", 2], // الملغي مش بيتعد - cancelled records don't count
+      ]),
+      fields: JSON.stringify(["name", "charcoal_type", "kiln", "exit_time"]),
+      order_by: "exit_time desc, creation desc",
+      limit_page_length: 0,
+    }),
+    erpGet<{ data: Record<string, unknown> }>(`/api/resource/${mapping.groundDoctype}/${mapping.groundDoctype}`),
   ]);
-  // تاريخ آخر تعديل في خانات out من Version، ولو Version مش متاح تاريخ آخر تعديل في الـ doc كله (modified)
-  // creation / modified بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
-  // Last out_* change from Version; if Version isn't readable, the doc's modified (any field) - both in Cairo time
-  const lastOutChange = versions ? versions[0]?.creation : String(doc.modified ?? "");
-  const outChangedToday = lastOutChange?.slice(0, 10) === erpToday();
-  return {
-    out: outChangedToday ? countsFrom(doc, mapping.out) : { orange: 0, mango: 0, casuarina: 0 },
-    ground: countsFrom(doc, mapping.ground),
-  };
+
+  const out: BatchCounts = { orange: 0, mango: 0, casuarina: 0 };
+  const exits = rows.map((row) => {
+    const typeLabel = (row.charcoal_type ?? "").trim();
+    const type = CHARCOAL_TYPES[typeLabel] ?? null;
+    if (type) out[type] += 1;
+    else console.error(`[erp] batches: ${row.name} has an unknown charcoal_type ${JSON.stringify(row.charcoal_type)}`);
+    return {
+      id: row.name,
+      time: String(row.exit_time ?? "").slice(11, 16), // "2026-10-27 10:45:12" -> "10:45"
+      kiln: (row.kiln ?? "").trim(),
+      type,
+      typeLabel,
+    };
+  });
+  return { out, ground: groundFrom(mapping.groundDoctype, board), exits, offline: false };
+}
+
+// آخر نتيجة نجحت للطرحات ويومها - last good batches result and the day it was loaded
+let lastGoodBatches: { day: string; value: Batches } | null = null;
+
+// الطرحات من ERPNext، ولو فشل آخر نتيجة نجحت النهارده مع offline، ولو مفيش null (الكارت يكتب "غير متصل")
+// نتيجة امبارح مش بتتعرض عشان خروج طرحات بيتصفر كل يوم
+// Batches from ERPNext; on failure today's last good result marked offline, else null ("غير متصل" on the card).
+// Yesterday's result is never shown because the exits reset daily
+async function batchesSection(results: ErpStatus[]): Promise<Batches | null> {
+  const mapping = dashboardConfig.erp.batches;
+  if (mapping.source !== "erp") return { ...dashboardConfig.data.batches, exits: [], offline: false };
+  try {
+    const value = await loadBatches(mapping as BatchesMapping);
+    lastGoodBatches = { day: erpToday(), value };
+    results.push({ fromErp: true, failed: false });
+    return value;
+  } catch (error) {
+    const fallback = lastGoodBatches?.day === erpToday() ? lastGoodBatches.value : null;
+    console.error(
+      `[erp] batches failed, showing ${fallback ? "last good value" : '"غير متصل"'}:`,
+      error instanceof Error ? error.message : error
+    );
+    results.push({ fromErp: true, failed: true });
+    return fallback && { ...fallback, offline: true };
+  }
 }
 
 // حالة الـ Workstation في ERPNext ← حالة الفرن (أي حاجة تانية = متوقفة)
@@ -231,7 +279,7 @@ async function loadKilns(): Promise<ConfigKiln[]> {
     .map((row) => ({ name: row.name.trim(), status: KILN_STATUSES[row.status ?? ""] ?? "stopped" }));
 }
 
-// آخر نتيجة نجحت لكل قسم (حضور، طرحات، أفران) - last good result per section (attendance, batches, kilns)
+// آخر نتيجة نجحت لكل قسم (حضور، أفران) - last good result per section (attendance, kilns)
 const lastGoodSection = new Map<string, unknown>();
 
 // قسم كامل من ERPNext، ولو فشل آخر نتيجة نجحت، ولو مفيش null (يعني يدوي)
@@ -446,7 +494,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   const results: ErpStatus[] = [];
   const stock = stockLoader(results);
   const firstWood = Object.values(erp.stock.wood).find((field) => field.source === "erp");
-  const batchesSource = erp.batches;
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
   const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns] = await Promise.all([
@@ -531,12 +578,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       loadTodayAttendance,
       results
     ),
-    erpSection(
-      "batches",
-      batchesSource.source === "erp",
-      () => loadBatches(batchesSource as BatchesMapping),
-      results
-    ),
+    batchesSection(results),
     erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
   ]);
   const [balance, incomingToday, outgoingToday] = treasury;
@@ -571,7 +613,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       incomingToday,
       outgoingToday,
     },
-    batches: todayBatches ?? config.batches,
+    batches: todayBatches,
     updatedAt: new Date().toISOString(),
     erpOffline,
   };

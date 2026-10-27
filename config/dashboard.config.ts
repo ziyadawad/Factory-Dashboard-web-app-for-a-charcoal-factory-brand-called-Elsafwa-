@@ -57,20 +57,21 @@ export const dashboardConfig = {
     // ERPNext down: last good result, else the data.kilns list below
     kilns: { source: "erp" } as ConfigErpSource,
 
-    // الطرحات اليوم = الـ Single DocType "Kiln Board" (لازم Track Changes يبقى شغال عليه)
-    // out = خروج طرحات: بيتصفر لوحده كل يوم - لو آخر تعديل في أي خانة out_* (من Version) مش النهارده بتوقيت القاهرة
-    // بيظهر 0، ولو النهارده بيظهر الرقم اللي في ERPNext. لو Version مش متاح (صلاحيات) بنبص على تاريخ modified
-    // بتاع الـ doc نفسه (وده بيتغير مع أي خانة، حتى ground)
-    // ground = طرحات على الأرض: عمره ما بيتصفر، دايما الرقم اللي في ERPNext
-    // الكلام اللي على اليمين = اسم الخانة (fieldname) في ERPNext بالظبط
-    // لو ERPNext وقع بيفضل آخر رقم نجح، ولو مفيش أرقام data.batches تحت
-    // Batches = Single DocType "Kiln Board" (Track Changes must be on). out_* reset to 0 unless the last
-    // Version that changed an out_* field is from today (Africa/Cairo); ground_* are never reset
+    // الطرحات اليوم (تحت الأفران) - كل حاجة بتتحدث كل refreshSeconds
+    // خروج طرحات = سجلات "Kiln Exit": سجل لكل طرحة، فيه نوع الفحم (charcoal_type: برتقال / مانجا / جازورينا)
+    // والفرن (kiln) ووقت الخروج (exit_time). بنعد بس اللي exit_time بتاعها النهارده بتوقيت القاهرة،
+    // فالعداد بيتصفر لوحده أول كل يوم من غير ما حد يعمل حاجة. السجلات الملغية (Cancelled) مش بتتعد
+    // طرحات على الأرض = الخانات ground_orange / ground_mango / ground_casuarina في الـ Single DocType "Kiln Board"
+    // ودي عمرها ما بتتصفر - دايما الرقم اللي في ERPNext (خانات out_* القديمة مش بتُستخدم خلاص)
+    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على الاتنين، وإلا الكارت يكتب "غير متصل"
+    // لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش رقم قديم الكارت كله يكتب "غير متصل" (مش أصفار)
+    // Batches: exits = today's (Africa/Cairo) "Kiln Exit" records, so they reset daily on their own;
+    // ground = ground_* fields of the Single DocType "Kiln Board", never reset. On failure the last good
+    // result stays with a "غير متصل" badge, else the card shows "غير متصل" (never fake zeros)
     batches: {
       source: "erp",
-      doctype: "Kiln Board",
-      out: { orange: "out_orange", mango: "out_mango", casuarina: "out_casuarina" }, // خروج طرحات
-      ground: { orange: "ground_orange", mango: "ground_mango", casuarina: "ground_casuarina" }, // طرحات على الأرض
+      exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
+      groundDoctype: "Kiln Board", // طرحات على الأرض
     } as ConfigErpBatches,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
@@ -321,13 +322,13 @@ export const dashboardConfig = {
       { name: "فرن 6", status: "stopped" as const },
     ] as ConfigKiln[],
 
-    // الطرحات اليوم (تحت الأفران في الصفحة الرئيسية) - بتُستخدم بس لو erp.batches يدوي أو ERPNext مش بيرد
-    // Today's batches (under the kilns card) - used only when erp.batches is manual or ERPNext is unreachable
+    // الطرحات اليوم (تحت الأفران في الصفحة الرئيسية) - بتُستخدم بس لو erp.batches يدوي (source: "manual")
+    // Today's batches (under the kilns card) - used only when erp.batches is manual
     // الإجمالي بيتحسب لوحده - totals are calculated automatically
     batches: {
       out: { orange: 0, mango: 0, casuarina: 0 }, // خروج طرحات: برتقال / مانجا / جازورينا
       ground: { orange: 0, mango: 0, casuarina: 0 }, // طرحات على الأرض: برتقال / مانجا / جازورينا
-    } as Batches,
+    } as Pick<Batches, "out" | "ground">,
 
     // ============================================================
     // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)
@@ -565,8 +566,10 @@ export const dashboardConfig = {
     // الطرحات اليوم - بطاقة الطرحات تحت الأفران
     // Today's batches - batches card under the kilns
     batches: {
-      tileFontSize: 36, // حجم رقم كل نوع (برتقال / مانجا / جازورينا) - per-type number font size
-      totalFontSize: 20, // حجم رقم الإجمالي - total number font size
+      tileFontSize: 30, // حجم رقم كل نوع (برتقال / مانجا / جازورينا) - per-type number font size
+      totalFontSize: 30, // حجم رقم الإجمالي - total number font size
+      exitRowHeight: 30, // ارتفاع كل سطر في قايمة الطرحات اللي خرجت (أصغر = سطور أكتر) - exit list row height (px)
+      exitFontSize: 14, // حجم الكلام في قايمة الطرحات اللي خرجت - exit list font size
     },
 
     // رصيد المخازن (الصفحة 2) - stock page (page 2)

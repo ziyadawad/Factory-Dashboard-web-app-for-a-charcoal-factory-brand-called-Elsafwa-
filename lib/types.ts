@@ -139,10 +139,24 @@ export interface BatchCounts {
   casuarina: number; // جازورينا
 }
 
-// out = خروج طرحات النهارده، ground = طرحات على الأرض - today's batches out, batches on the ground
+// طرحة خرجت النهارده (سجل Kiln Exit) - one batch that left a kiln today (a Kiln Exit record)
+export interface BatchExit {
+  id: string;
+  time: string; // "10:45" بتوقيت القاهرة - Cairo time
+  kiln: string; // "فرن 3"
+  type: keyof BatchCounts | null; // null = نوع مش معروف - unknown charcoal type
+  typeLabel: string; // زي ما هو في ERPNext - as written in ERPNext
+}
+
+// out = خروج طرحات النهارده (من exits)، ground = طرحات على الأرض، exits = طرحات النهارده الأحدث الأول
+// offline = ERPNext مش بيرد والأرقام دي آخر نتيجة نجحت
+// out = today's exits per type, ground = batches on the ground, exits = today's exits newest first,
+// offline = ERPNext failed and these are the last good values
 export interface Batches {
   out: BatchCounts;
   ground: BatchCounts;
+  exits: BatchExit[];
+  offline: boolean;
 }
 
 export interface DashboardData {
@@ -151,7 +165,7 @@ export interface DashboardData {
   kilns: Kilns;
   floorWorkers: FloorWorkers;
   treasury: Treasury;
-  batches: Batches;
+  batches: Batches | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   updatedAt: string;
   erpOffline: boolean; // true when an ERPNext request failed on this refresh
 }
@@ -163,15 +177,14 @@ export type ConfigErpField = { source: "manual" } | { source: "erp"; account: st
 // قسم كامل من ERPNext ولا يدوي - a whole section from ERPNext or manual
 export type ConfigErpSource = { source: "erp" | "manual" };
 
-// الطرحات: doctype = الـ Single DocType، و out / ground = اسم الخانة (fieldname) لكل نوع خشب
-// Batches: doctype = the Single DocType; out / ground = the fieldname of each wood type
+// الطرحات: exitsDoctype = سجل لكل طرحة خرجت، groundDoctype = الـ Single DocType اللي فيه طرحات على الأرض
+// Batches: exitsDoctype = one record per batch out; groundDoctype = the Single DocType with batches on the ground
 export type ConfigErpBatches =
   | { source: "manual" }
   | {
       source: "erp";
-      doctype: string;
-      out: Record<keyof BatchCounts, string>;
-      ground: Record<keyof BatchCounts, string>;
+      exitsDoctype: string;
+      groundDoctype: string;
     };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
