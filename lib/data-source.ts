@@ -284,7 +284,8 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
       details: (row.details ?? "").trim(),
     };
     // الصفوف جاية الأحدث الأول، فأول صرف = آخر صرف - rows come newest first, so the first spending is the latest
-    if (fund.recent.length < 3) fund.recent.push(operation);
+    // آخر العمليات = صرف وإيداع بس (الرصيد الافتتاحي مش بيظهر فيها) - last operations: صرف / إيداع only
+    if (type !== "opening" && fund.recent.length < 3) fund.recent.push(operation);
     // الرصيد الافتتاحي بيزود الرصيد بس (مش صرف ولا إيداع) - the opening balance only adds to the balance
     if (type === "opening") {
       fund.balance += operation.amount;

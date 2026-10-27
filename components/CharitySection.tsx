@@ -82,10 +82,17 @@ function OperationRow({ op }: { op: CharityOperation }) {
 }
 
 // كارت الصندوق (خزنة) - one fund's "safe" card
+// ارتفاع السطر لكلمة "الرصيد" وسطر "الرصيد الافتتاحي" - line height of the label and the opening line
+const BALANCE_LINE_HEIGHT = 1.3;
+
 function FundCard({ fund }: { fund: CharityFund }) {
   const sizes = dashboardConfig.sizes.charityPage;
-  const empty = fund.recent.length === 0;
-  const last = fund.lastOut;
+  const big = dashboardConfig.sizes.page3;
+  // الطول اللي بياخده "الرصيد" و"الرصيد الافتتاحي" + هامش، والرقم بياخد من الباقي
+  // height taken by the label and the opening line (+ margin); the number scales with what is left
+  const reserved =
+    (big.balanceLabelFontSize + (fund.opening ? big.openingFontSize : 0)) * BALANCE_LINE_HEIGHT + 12;
+  const balanceFontSize = `min(${big.balanceMaxSize}px, ${big.balanceScale}cqi, calc((100cqh - ${reserved}px) * ${big.balanceHeightScale / 100}))`;
 
   return (
     <div className="bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)]">
@@ -107,69 +114,39 @@ function FundCard({ fund }: { fund: CharityFund }) {
         </div>
       </div>
 
-      {/* الرصيد وآخر صرف - balance and the latest spending */}
-      <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
-        <div
-          className="min-h-0 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center overflow-hidden"
-          style={{ containerType: "size" }}
+      {/* الرصيد بعرض الكارت كله - the balance, full card width */}
+      {/* container عشان الرقم يصغر مع عرض وطول المربع - container so the number scales with the box */}
+      <div
+        className="flex-1 min-h-0 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/30 flex flex-col items-center justify-center overflow-hidden"
+        style={{ containerType: "size" }}
+      >
+        <p
+          className="text-emerald-300/90 font-semibold"
+          style={{ fontSize: big.balanceLabelFontSize, lineHeight: BALANCE_LINE_HEIGHT }}
         >
-          <p className="text-emerald-300/90 font-semibold" style={{ fontSize: sizes.textFontSize }}>
-            الرصيد
-          </p>
+          الرصيد
+        </p>
+        <p
+          className={`font-extrabold leading-tight ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
+          style={{ fontSize: balanceFontSize }}
+        >
+          <Money value={fund.balance} />
+        </p>
+        {fund.opening && (
           <p
-            className={`font-extrabold leading-tight ${fund.balance < 0 ? "text-statusRed" : "text-white"}`}
-            style={{ fontSize: `min(${sizes.balanceMaxSize}px, 15cqi, 40cqh)` }}
+            className="text-slate-400 whitespace-nowrap"
+            style={{ fontSize: big.openingFontSize, lineHeight: BALANCE_LINE_HEIGHT }}
           >
-            <Money value={fund.balance} />
+            الرصيد الافتتاحي: <Money value={fund.opening.amount} className="text-slate-200 font-semibold" />{" "}
+            <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
           </p>
-          {fund.opening && (
-            <p className="text-slate-400 whitespace-nowrap" style={{ fontSize: sizes.openingFontSize }}>
-              الرصيد الافتتاحي: <Money value={fund.opening.amount} className="text-slate-200 font-semibold" />{" "}
-              <span className="text-slate-500">({formatDay(fund.opening.date)})</span>
-            </p>
-          )}
-        </div>
-
-        <div
-          className="min-h-0 rounded-xl bg-background/60 border border-cardBorder px-4 py-2 flex flex-col justify-center gap-0.5 overflow-hidden"
-          style={{ containerType: "size", fontSize: sizes.textFontSize }}
-        >
-          {/* "آخر صرف" والمبلغ في سطر واحد عشان الكارت يكفي في الشاشات الأقصر - one row, so short cards still fit */}
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-gray-400 font-semibold flex items-center gap-1.5 whitespace-nowrap">
-              <ArrowUpRight size={sizes.textFontSize} className="text-statusRed" />
-              آخر صرف
-            </p>
-            {last && (
-              <p
-                className="font-extrabold text-statusRed leading-tight"
-                style={{ fontSize: `min(${sizes.lastOutAmountMaxSize}px, 9cqi, 30cqh)` }}
-              >
-                <Money value={last.amount} />
-              </p>
-            )}
-          </div>
-          {last ? (
-            <>
-              <p className="text-gray-300 truncate">
-                <span className="whitespace-nowrap">{formatDay(last.date)}</span>
-                <span className="text-gray-500"> · </span>
-                لـ: <span className="text-white font-semibold">{toEnglishDigits(last.beneficiary) || "—"}</span>
-              </p>
-              {last.details && (
-                <p className="charity-details text-gray-400 leading-snug">{toEnglishDigits(last.details)}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-gray-500">{empty ? "لا توجد عمليات" : "لا يوجد صرف"}</p>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* آخر 3 عمليات - the last 3 operations */}
+      {/* آخر 3 عمليات صرف/إيداع (من غير الرصيد الافتتاحي) - the last 3 صرف / إيداع (no opening balance) */}
       <div className="shrink-0 flex flex-col gap-1">
         <p className="text-gray-400 font-semibold text-sm">آخر العمليات</p>
-        {empty ? (
+        {fund.recent.length === 0 ? (
           <div
             className="flex items-center justify-center rounded-lg border border-dashed border-cardBorder text-gray-500"
             style={{ height: sizes.recentRowHeight * 3 + 8, fontSize: sizes.recentFontSize }}

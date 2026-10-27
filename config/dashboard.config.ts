@@ -637,13 +637,22 @@ export const dashboardConfig = {
       summaryNumberFontSize: 34, // حجم أرقام الشريط اللي فوق - summary numbers font size
       fundNameFontSize: 26, // حجم اسم الصندوق - fund name font size
       fundIconSize: 26, // حجم أيقونة الخزنة جنب اسم الصندوق - vault icon size
-      balanceMaxSize: 84, // أكبر حجم لرقم الرصيد الكبير - max balance number size (px)
-      openingFontSize: 15, // حجم سطر "الرصيد الافتتاحي" تحت الرصيد - "الرصيد الافتتاحي" line under the balance
-      lastOutAmountMaxSize: 38, // أكبر حجم لمبلغ "آخر صرف" - max "آخر صرف" amount size (px)
-      textFontSize: 16, // حجم الكلام العادي (التاريخ، صُرفت لـ، التفاصيل) - normal text size
       monthOutFontSize: 18, // حجم "صرف الشهر" فوق على الشمال - "صرف الشهر" chip font size
       recentRowHeight: 32, // ارتفاع كل سطر في "آخر العمليات" - last operations row height (px)
       recentFontSize: 15, // حجم الكلام في "آخر العمليات" - last operations font size
+    },
+
+    // كروت الصناديق في الصفحة 3 - مربع "الرصيد" بعرض الكارت كله - page 3 fund cards: full-width balance box
+    // رقم الرصيد = أصغر قيمة بين: الـ Max بالبكسل، و Scale% من عرض المربع، و HeightScale% من الطول اللي فاضل
+    // بعد كلمة "الرصيد" وسطر "الرصيد الافتتاحي" - فعمره ما بيخرج برا المربع لا بالعرض ولا بالطول (حتى في الشاشات الأقصر)
+    // Balance size = min(MaxSize px, Scale% of the box width, HeightScale% of the height left after the label
+    // and the opening line), so it never overflows
+    page3: {
+      balanceMaxSize: 120, // أكبر حجم لرقم الرصيد بالبكسل - max balance number size (px)
+      balanceScale: 10, // الرقم = 10% من عرض المربع لو أصغر من الـ Max (أكبر = رقم أعرض) - balance size as % of box width
+      balanceHeightScale: 75, // والرقم مش أكتر من 75% من الطول الفاضل (أكتر من 80 ممكن يخرج برا) - at most 75% of the height left (above 80 may overflow)
+      balanceLabelFontSize: 18, // حجم كلمة "الرصيد" فوق الرقم - "الرصيد" label above the number
+      openingFontSize: 16, // حجم سطر "الرصيد الافتتاحي" تحت الرقم - "الرصيد الافتتاحي" line under the number
     },
   },
 
