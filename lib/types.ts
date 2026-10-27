@@ -148,13 +148,12 @@ export interface BatchExit {
   typeLabel: string; // زي ما هو في ERPNext - as written in ERPNext
 }
 
-// out = خروج طرحات النهارده (من exits)، ground = طرحات على الأرض، exits = طرحات النهارده الأحدث الأول
+// out = خروج طرحات النهارده (من exits)، exits = طرحات النهارده الأحدث الأول
 // offline = ERPNext مش بيرد والأرقام دي آخر نتيجة نجحت
-// out = today's exits per type, ground = batches on the ground, exits = today's exits newest first,
+// out = today's exits per type, exits = today's exits newest first,
 // offline = ERPNext failed and these are the last good values
 export interface Batches {
   out: BatchCounts;
-  ground: BatchCounts;
   exits: BatchExit[];
   offline: boolean;
 }
@@ -177,14 +176,12 @@ export type ConfigErpField = { source: "manual" } | { source: "erp"; account: st
 // قسم كامل من ERPNext ولا يدوي - a whole section from ERPNext or manual
 export type ConfigErpSource = { source: "erp" | "manual" };
 
-// الطرحات: exitsDoctype = سجل لكل طرحة خرجت، groundDoctype = الـ Single DocType اللي فيه طرحات على الأرض
-// Batches: exitsDoctype = one record per batch out; groundDoctype = the Single DocType with batches on the ground
+// الطرحات: exitsDoctype = سجل لكل طرحة خرجت - Batches: exitsDoctype = one record per batch out
 export type ConfigErpBatches =
   | { source: "manual" }
   | {
       source: "erp";
       exitsDoctype: string;
-      groundDoctype: string;
     };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)

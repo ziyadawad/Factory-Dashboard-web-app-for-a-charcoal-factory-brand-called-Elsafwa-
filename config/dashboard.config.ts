@@ -61,17 +61,13 @@ export const dashboardConfig = {
     // خروج طرحات = سجلات "Kiln Exit": سجل لكل طرحة، فيه نوع الفحم (charcoal_type: برتقال / مانجا / جازورينا)
     // والفرن (kiln) ووقت الخروج (exit_time). بنعد بس اللي exit_time بتاعها النهارده بتوقيت القاهرة،
     // فالعداد بيتصفر لوحده أول كل يوم من غير ما حد يعمل حاجة. السجلات الملغية (Cancelled) مش بتتعد
-    // طرحات على الأرض = الخانات ground_orange / ground_mango / ground_casuarina في الـ Single DocType "Kiln Board"
-    // ودي عمرها ما بتتصفر - دايما الرقم اللي في ERPNext (خانات out_* القديمة مش بتُستخدم خلاص)
-    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على الاتنين، وإلا الكارت يكتب "غير متصل"
+    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على Kiln Exit، وإلا الكارت يكتب "غير متصل"
     // لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش رقم قديم الكارت كله يكتب "غير متصل" (مش أصفار)
-    // Batches: exits = today's (Africa/Cairo) "Kiln Exit" records, so they reset daily on their own;
-    // ground = ground_* fields of the Single DocType "Kiln Board", never reset. On failure the last good
-    // result stays with a "غير متصل" badge, else the card shows "غير متصل" (never fake zeros)
+    // Batches: today's (Africa/Cairo) "Kiln Exit" records, so they reset daily on their own. On failure the
+    // last good result stays with a "غير متصل" badge, else the card shows "غير متصل" (never fake zeros)
     batches: {
       source: "erp",
       exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
-      groundDoctype: "Kiln Board", // طرحات على الأرض
     } as ConfigErpBatches,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
@@ -327,8 +323,7 @@ export const dashboardConfig = {
     // الإجمالي بيتحسب لوحده - totals are calculated automatically
     batches: {
       out: { orange: 0, mango: 0, casuarina: 0 }, // خروج طرحات: برتقال / مانجا / جازورينا
-      ground: { orange: 0, mango: 0, casuarina: 0 }, // طرحات على الأرض: برتقال / مانجا / جازورينا
-    } as Pick<Batches, "out" | "ground">,
+    } as Pick<Batches, "out">,
 
     // ============================================================
     // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)

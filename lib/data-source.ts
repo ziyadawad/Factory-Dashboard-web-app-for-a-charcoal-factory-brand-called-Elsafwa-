@@ -155,13 +155,6 @@ function floorWorkers(today: TodayAttendance | null): FloorWorkers {
 
 type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
 
-// خانات طرحات على الأرض في Kiln Board - the ground_* fields of the Kiln Board Single DocType
-const GROUND_FIELDS: Record<keyof BatchCounts, string> = {
-  orange: "ground_orange",
-  mango: "ground_mango",
-  casuarina: "ground_casuarina",
-};
-
 // charcoal_type في Kiln Exit ← نوع الطرحة (بنقبل كذا طريقة كتابة) - charcoal_type -> type (a few spellings)
 const CHARCOAL_TYPES: Record<string, keyof BatchCounts> = {
   برتقال: "orange",
@@ -172,42 +165,28 @@ const CHARCOAL_TYPES: Record<string, keyof BatchCounts> = {
   كازورينا: "casuarina",
 };
 
-// خانة رقم من الـ Single doc: فاضية = 0، مش موجودة أو مش رقم = غلط (عشان منعرضش أصفار غلط)
-// An Int field of the Single doc: empty = 0; missing or not a number = error (never show fake zeros)
-function groundFrom(doctype: string, doc: Record<string, unknown>): BatchCounts {
-  const read = (field: string) => {
-    if (!(field in doc)) throw new ErpError(`${doctype}: field "${field}" is missing`);
-    const value = doc[field] ?? 0;
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new ErpError(`${doctype}: field "${field}" is ${JSON.stringify(doc[field])}, expected a number`);
-    }
-    return value;
-  };
-  return { orange: read(GROUND_FIELDS.orange), mango: read(GROUND_FIELDS.mango), casuarina: read(GROUND_FIELDS.casuarina) };
-}
-
 type KilnExitRow = { name: string; charcoal_type: string | null; kiln: string | null; exit_time: string | null };
 
-// الطرحات: خروج طرحات = سجلات Kiln Exit اللي exit_time بتاعها النهارده (فبتتصفر لوحدها كل يوم)،
-// وطرحات على الأرض = خانات ground_* في Kiln Board (عمرها ما بتتصفر)
+// الطرحات: سجلات Kiln Exit اللي exit_time بتاعها النهارده (فبتتصفر لوحدها كل يوم)
 // exit_time بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
-// Batches: exits = Kiln Exit records whose exit_time is today (so they reset daily); ground = Kiln Board
-// ground_* fields (never reset). exit_time is in the ERPNext server time zone (Cairo) like every other date
+// Batches: Kiln Exit records whose exit_time is today (so they reset daily).
+// exit_time is in the ERPNext server time zone (Cairo) like every other date
 async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
   const today = erpToday();
-  const [{ data: rows }, { data: board }] = await Promise.all([
-    erpGet<{ data: KilnExitRow[] }>(`/api/resource/${mapping.exitsDoctype}`, {
+  // "Kiln Exit" -> "Kiln%20Exit"، والـ params بتتعمل encode في erpGet - the params are encoded by erpGet
+  const { data: rows } = await erpGet<{ data: KilnExitRow[] }>(
+    `/api/resource/${encodeURIComponent(mapping.exitsDoctype)}`,
+    {
+      fields: JSON.stringify(["name", "charcoal_type", "kiln", "exit_time"]),
       filters: JSON.stringify([
         ["exit_time", ">=", `${today} 00:00:00`],
-        ["exit_time", "<=", `${today} 23:59:59.999999`],
+        ["exit_time", "<=", `${today} 23:59:59`],
         ["docstatus", "!=", 2], // الملغي مش بيتعد - cancelled records don't count
       ]),
-      fields: JSON.stringify(["name", "charcoal_type", "kiln", "exit_time"]),
-      order_by: "exit_time desc, creation desc",
       limit_page_length: 0,
-    }),
-    erpGet<{ data: Record<string, unknown> }>(`/api/resource/${mapping.groundDoctype}/${mapping.groundDoctype}`),
-  ]);
+      order_by: "exit_time desc",
+    }
+  );
 
   const out: BatchCounts = { orange: 0, mango: 0, casuarina: 0 };
   const exits = rows.map((row) => {
@@ -223,7 +202,7 @@ async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
       typeLabel,
     };
   });
-  return { out, ground: groundFrom(mapping.groundDoctype, board), exits, offline: false };
+  return { out, exits, offline: false };
 }
 
 // آخر نتيجة نجحت للطرحات ويومها - last good batches result and the day it was loaded

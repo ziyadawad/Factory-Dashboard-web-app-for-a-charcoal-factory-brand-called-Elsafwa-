@@ -126,17 +126,11 @@ export default function BatchesSection({ data }: BatchesSectionProps) {
       </div>
 
       {data ? (
-        <div className="flex-1 min-h-0 flex flex-col gap-3">
-          <section className="flex-1 min-h-0 flex flex-col gap-2">
-            <h3 className="text-gray-300 font-bold text-sm shrink-0">خروج طرحات</h3>
-            <CountTiles counts={data.out} />
-            <ExitList exits={data.exits} />
-          </section>
-          <section className="shrink-0 flex flex-col gap-2 pt-3 border-t border-cardBorder">
-            <h3 className="text-gray-300 font-bold text-sm">طرحات على الأرض</h3>
-            <CountTiles counts={data.ground} />
-          </section>
-        </div>
+        <section className="flex-1 min-h-0 flex flex-col gap-2">
+          <h3 className="text-gray-300 font-bold text-sm shrink-0">خروج طرحات</h3>
+          <CountTiles counts={data.out} />
+          <ExitList exits={data.exits} />
+        </section>
       ) : (
         <div className="flex-1 min-h-0 flex items-center justify-center">
           <OfflineBadge />
