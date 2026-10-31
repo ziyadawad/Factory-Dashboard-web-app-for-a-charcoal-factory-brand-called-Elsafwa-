@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   Factory,
   Package,
-  Axe,
   Truck,
   Briefcase,
   ShieldCheck,
@@ -51,7 +50,6 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
     data.drivers,
     data.reps,
     data.guards,
-    workers.saw,
     workers.daily,
   ];
 
@@ -102,9 +100,9 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
     onResize: remeasure,
   };
 
-  // المساحة بين الأقسام اللي فوق بعض على قد عدد الأسماء - stacked groups share the height by name count
-  const stackRows = (groups: AttendanceGroup[]) =>
-    groups.map((group) => `minmax(0,${shownPeople(group).length + 4}fr)`).join(" ");
+  // الارتفاعات من sizes.page1 في الكونفج - heights from sizes.page1 in the config
+  const page1 = dashboardConfig.sizes.page1;
+  const stacked = page1.stackedRowHeights;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -118,7 +116,7 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
 
       <div
         className="flex-1 min-h-0 grid gap-2"
-        style={{ gridTemplateRows: `minmax(0,${sizes.factoryRowHeight}fr) minmax(0,1fr)` }}
+        style={{ gridTemplateRows: `minmax(0,${page1.factoryRowHeight}fr) minmax(0,${page1.bottomRowHeight}fr)` }}
       >
         {/* مصنع الإنتاج ومجموعاته التلاتة - production factory and its 3 sub-groups */}
         <div className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
@@ -136,18 +134,20 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
           </div>
         </div>
 
-        {/* تحت (من اليمين): تعبئة، سواقين ومناديب وغفر فوق بعض، والعمود التالت منشار فوق ويومية تحت
-            Bottom row (right to left): packing, drivers / reps / guards stacked, then saw on top of daily workers */}
+        {/* تحت (من اليمين): تعبئة، يومية، وسواقين ومناديب وغفر فوق بعض
+            Bottom area (right to left): packing, daily workers, then drivers / reps / guards stacked */}
         <div className="min-h-0 grid grid-cols-3 gap-2">
           <GroupBox group={workers.packing} icon={Package} {...boxProps} />
-          <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: stackRows([data.drivers, data.reps, data.guards]) }}>
+          <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
+          <div
+            className="min-h-0 grid gap-2"
+            style={{
+              gridTemplateRows: `minmax(0,${stacked.drivers}fr) minmax(0,${stacked.reps}fr) minmax(0,${stacked.guards}fr)`,
+            }}
+          >
             <GroupBox group={data.drivers} icon={Truck} {...boxProps} />
             <GroupBox group={data.reps} icon={Briefcase} {...boxProps} />
             <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} />
-          </div>
-          <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: stackRows([workers.saw, workers.daily]) }}>
-            <GroupBox group={workers.saw} icon={Axe} {...boxProps} />
-            <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
           </div>
         </div>
       </div>
@@ -242,11 +242,13 @@ function GroupBox({ group, icon, nested, sizes, chipFontSize, round, onOverflow,
     return () => observer.disconnect();
   }, [onResize]);
 
-  // بنقيس بعد الرسم: لو الأسماء أطول من المساحة نصغر الخط، ولو لسه كتير بتعمل scroll جوه القسم
-  // Measure after layout: on overflow shrink the shared font; still too many names scroll inside the box
+  // بنقيس بعد الرسم: لو الأسماء أطول من المساحة نصغر الخط، ولو لسه كتير بتعمل scroll جوه القسم.
+  // مجموعات مصنع الإنتاج بتعمل scroll على طول من غير ما تصغّر خط الباقيين
+  // Measure after layout: on overflow shrink the shared font; still too many names scroll inside the box.
+  // Factory sub-groups just scroll, without shrinking everyone else's font
   useIsomorphicLayoutEffect(() => {
     const el = chipsRef.current;
-    if (!el || el.scrollHeight <= el.clientHeight) return;
+    if (nested || !el || el.scrollHeight <= el.clientHeight) return;
     if (chipFontSize > sizes.minNameChipFontSize) onOverflow(chipFontSize, round);
   });
 

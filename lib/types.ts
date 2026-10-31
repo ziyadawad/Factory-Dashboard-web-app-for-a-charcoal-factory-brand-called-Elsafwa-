@@ -27,12 +27,11 @@ export interface ProductionFactory extends Omit<AttendanceGroup, "people"> {
   };
 }
 
-// حضور عمال: مصنع إنتاج + تعبئة + منشار + يومية (السواقين والمناديب والغفر برّه)
-// Workers attendance: factory + packing + saw + daily (drivers, reps and guards are separate)
+// حضور عمال: مصنع إنتاج + تعبئة + يومية (السواقين والمناديب والغفر برّه)
+// Workers attendance: factory + packing + daily (drivers, reps and guards are separate)
 export interface WorkersAttendance {
   productionFactory: ProductionFactory;
   packing: AttendanceGroup;
-  saw: AttendanceGroup;
   daily: AttendanceGroup;
   present: number;
   total: number;

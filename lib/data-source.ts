@@ -168,12 +168,11 @@ function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
   const groups = { production: group("production"), workshop: group("workshop"), operators: group("operators") };
   const productionFactory = { label: factoryLabel, groups, ...sumGroups(Object.values(groups)) };
   const packing = group("packing");
-  const saw = group("saw");
   const daily = group("daily");
-  const { total, present } = sumGroups([productionFactory, packing, saw, daily]);
+  const { total, present } = sumGroups([productionFactory, packing, daily]);
   return {
     management: group("management"),
-    workers: { productionFactory, packing, saw, daily, total, present },
+    workers: { productionFactory, packing, daily, total, present },
     drivers: group("drivers"),
     reps: group("reps"),
     guards: group("guards"),

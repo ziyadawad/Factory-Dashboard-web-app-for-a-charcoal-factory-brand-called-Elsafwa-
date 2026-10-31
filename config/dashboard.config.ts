@@ -37,7 +37,6 @@ export const dashboardConfig = {
       workshop: { label: "ورشة", codes: [[1027, 1029]] } as ConfigAttendanceSection, // مصنع إنتاج — ورشة
       operators: { label: "أوبريتر", codes: [[1040, 1045]] } as ConfigAttendanceSection, // مصنع إنتاج — أوبريتر
       packing: { label: "عمال تعبئة", codes: [[1030, 1039]] } as ConfigAttendanceSection, // عمال تعبئة
-      saw: { label: "عمال منشار", codes: [] } as ConfigAttendanceSection, // عمال منشار (مفيش أكواد لسه - بيظهر 0 / 0)
       daily: { label: "عمال يومية", codes: [[1055, 1060]] } as ConfigAttendanceSection, // عمال يومية (+ أي حاضر مالوش قسم)
       // كروت لوحدها برّه "حضور عمال" ومش داخلة في إجمالي العمال - separate cards, not in the workers total
       drivers: { label: "سواقين", codes: [[1046, 1048]] } as ConfigAttendanceSection, // سواقين
@@ -471,7 +470,6 @@ export const dashboardConfig = {
       nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
       minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
       subGroupTitleFontSize: 14, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
-      factoryRowHeight: 1.2, // ارتفاع صف مصنع الإنتاج بالنسبة لصف باقي الأقسام - factory row height vs the other groups' row
     },
 
     // الأفران - بطاقة الأفران
@@ -530,6 +528,15 @@ export const dashboardConfig = {
       sectionTotalFontSize: 24, // حجم رقم "إجمالي الخشب" فوق قسم الخشب - wood grand total font size
       variantNumberMaxSize: 32, // أكبر حجم لأرقام الأنواع (عادي/كامل/ناعم/خشن...) - biggest variant number size
       variantNumberScale: 36, // نسبة الرقم من عرض العمود (كل ما تزود الرقم يكبر، لو زاد أوي ممكن الأرقام تتداخل) - number size as % of the column width
+    },
+
+    // كارت "حضور عمال" في الصفحة 1 - the "حضور عمال" card on page 1
+    // ارتفاع مصنع الإنتاج والجزء اللي تحته بالنسبة لبعض (مش بكسل) - factory vs bottom area height, as ratios (not px)
+    page1: {
+      factoryRowHeight: 0.85, // مصنع إنتاج (عمال إنتاج / ورشة / أوبريتر) - كان 1.2، أقصر بحوالي 28% - factory row (was 1.2)
+      bottomRowHeight: 1.35, // تحت: تعبئة | يومية | سواقين ومناديب وغفر - bottom area: packing | daily | drivers, reps, guards
+      // سواقين / مناديب / غفر فوق بعض في العمود الشمال، كل واحد بنسبته - drivers / reps / guards stacked in the left column
+      stackedRowHeights: { drivers: 1, reps: 1, guards: 1 },
     },
 
     // الصدقات (الصفحة 3) - charity page (page 3)
