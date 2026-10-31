@@ -1,12 +1,15 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AttendanceGroup } from "@/lib/types";
 import { PieChart, Pie, Cell } from "recharts";
 import { Check, Palmtree, X } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { DATE_LOCALE, formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+
+// useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 interface AttendanceSectionProps {
   data: AttendanceGroup;
@@ -21,7 +24,7 @@ const LIST_COLORS = {
 };
 
 // "آخر تحديث: hh:mm" بتوقيت مصر - last update time in Egypt time
-export function formatUpdatedAt(iso: string) {
+function formatUpdatedAt(iso: string) {
   return new Date(iso).toLocaleTimeString(DATE_LOCALE, {
     hour: "2-digit",
     minute: "2-digit",
@@ -30,22 +33,24 @@ export function formatUpdatedAt(iso: string) {
   });
 }
 
-// قايمة أسامي: عنوان بأيقونة وتحته الأسامي كبسولات (الاسم الطويل بيتقص بـ …)
-// A titled list of name chips (long names end with …)
+// قايمة أسامي: عنوان بأيقونة وتحته الأسامي كبسولات بتنزل سطر جديد (الاسم الطويل بيتقص بـ …)
+// A titled list of name chips that wrap onto new lines (a too-long name ends with …)
 function NameList({
   title,
   icon,
   names,
   colors,
+  chipFontSize,
 }: {
   title: string;
   icon?: ReactNode;
   names: string[];
   colors: { label: string; chip: string };
+  chipFontSize: number;
 }) {
   const sizes = dashboardConfig.sizes.attendance;
   return (
-    <div>
+    <div className="shrink-0">
       <p
         className={`flex items-center gap-1 font-bold mb-1 ${colors.label}`}
         style={{ fontSize: `${sizes.listLabelFontSize}px` }}
@@ -54,13 +59,13 @@ function NameList({
         {title}
       </p>
       {names.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 min-w-0">
+        <div className="flex flex-wrap gap-1.5">
           {names.map((name, index) => (
             <span
               key={index}
-              className={`rounded-md whitespace-nowrap overflow-hidden text-ellipsis max-w-full ${colors.chip}`}
+              className={`rounded-md whitespace-nowrap max-w-full overflow-hidden text-ellipsis ${colors.chip}`}
               style={{
-                fontSize: `${sizes.chipFontSize}px`,
+                fontSize: `${chipFontSize}px`,
                 padding: `${sizes.chipPaddingY}px ${sizes.chipPaddingX}px`,
               }}
             >
@@ -69,7 +74,7 @@ function NameList({
           ))}
         </div>
       ) : (
-        <p className="text-gray-500" style={{ fontSize: `${sizes.chipFontSize}px` }}>
+        <p className="text-gray-500" style={{ fontSize: `${chipFontSize}px` }}>
           لا يوجد
         </p>
       )}
@@ -84,16 +89,50 @@ export default function AttendanceSection({ data, updatedAt }: AttendanceSection
   const sizes = dashboardConfig.sizes.attendance;
   const namesWith = (status: string) => data.people.filter((p) => p.status === status).map((p) => p.name);
 
+  // لو الأسامي مش واخدة مكانها في الكارت خط الكبسولات بيصغر (لحد minChipFontSize)
+  // The chip font shrinks (down to minChipFontSize) until everything fits in the card height
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [chipFontSize, setChipFontSize] = useState(sizes.chipFontSize);
+  const namesKey = JSON.stringify(data.people);
+  useIsomorphicLayoutEffect(() => setChipFontSize(sizes.chipFontSize), [sizes.chipFontSize, namesKey]);
+  useIsomorphicLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const used = Array.from(el.children).reduce((sum, child) => sum + (child as HTMLElement).offsetHeight, 0);
+    if (used > el.clientHeight && chipFontSize > sizes.minChipFontSize) setChipFontSize(chipFontSize - 1);
+  });
+
+  // نقيس تاني لما الخط يحمّل أو طول الكارت يتغير - re-measure when web fonts load or the card height changes
+  useEffect(() => {
+    let active = true;
+    document.fonts?.ready.then(() => active && setChipFontSize(sizes.chipFontSize));
+    const el = contentRef.current;
+    let observer: ResizeObserver | undefined;
+    if (el && typeof ResizeObserver !== "undefined") {
+      let height = el.clientHeight;
+      observer = new ResizeObserver(() => {
+        if (el.clientHeight === height) return;
+        height = el.clientHeight;
+        setChipFontSize(sizes.chipFontSize);
+      });
+      observer.observe(el);
+    }
+    return () => {
+      active = false;
+      observer?.disconnect();
+    };
+  }, [sizes.chipFontSize]);
+
+  // النسبة = حاضر ÷ (الإجمالي − إجازة) - percentage = present / (total − on leave)
+  const counted = data.total - data.leave;
   const chartData =
-    data.total - data.leave > 0
+    counted > 0
       ? [
           { name: "حاضر", value: data.present, color: "#22C55E" },
           { name: "غائب", value: absent, color: "#EF4444" },
         ]
       : [{ name: "لا يوجد", value: 1, color: "#374151" }];
 
-  // النسبة = حاضر ÷ (الإجمالي − إجازة) - percentage = present / (total − on leave)
-  const counted = data.total - data.leave;
   const presentPercentage = counted > 0 ? ((data.present / counted) * 100).toFixed(0) : "0";
 
   // Fixed donut dimensions with 2px margin to prevent clipping
@@ -103,14 +142,14 @@ export default function AttendanceSection({ data, updatedAt }: AttendanceSection
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
-      <div className="mb-2 shrink-0 flex items-baseline justify-between gap-2">
+      {/* العنوان وتحته "آخر تحديث" - title, with the last update time on its own line */}
+      <div className="mb-2 shrink-0">
         <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور الإدارة</h2>
-        <p className="text-gray-400 text-sm whitespace-nowrap">آخر تحديث: {formatUpdatedAt(updatedAt)}</p>
+        <p className="text-gray-400 text-sm mt-1 whitespace-nowrap">آخر تحديث: {formatUpdatedAt(updatedAt)}</p>
       </div>
 
-      {/* المحتوى متوزع على طول الكارت، والأسامي بس بتعمل scroll لو كتير
-          Content spread over the card height; only the names scroll when there are many */}
-      <div className="flex-1 min-h-0 flex flex-col justify-evenly gap-3">
+      {/* المحتوى متوزع بالتساوي على طول الكارت - content spread evenly over the card height */}
+      <div ref={contentRef} className="flex-1 min-h-0 flex flex-col justify-evenly">
         <div
           className="relative overflow-visible flex-shrink-0 self-center"
           style={{ width: `${donutSize}px`, height: `${donutSize}px` }}
@@ -173,28 +212,30 @@ export default function AttendanceSection({ data, updatedAt }: AttendanceSection
           </div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto thin-scroll flex flex-col gap-3">
+        {/* الأسامي: الحاضرين والغائبين (والإجازة رمادي لو فيه) - names: present, absent (and on leave in gray) */}
+        <NameList
+          title="الحاضرين"
+          icon={<Check className="w-4 h-4" strokeWidth={3} />}
+          names={namesWith("present")}
+          colors={LIST_COLORS.present}
+          chipFontSize={chipFontSize}
+        />
+        <NameList
+          title="الغائبين"
+          icon={<X className="w-4 h-4" strokeWidth={3} />}
+          names={namesWith("absent")}
+          colors={LIST_COLORS.absent}
+          chipFontSize={chipFontSize}
+        />
+        {data.leave > 0 && (
           <NameList
-            title="الحاضرين"
-            icon={<Check className="w-4 h-4" strokeWidth={3} />}
-            names={namesWith("present")}
-            colors={LIST_COLORS.present}
+            title="إجازة"
+            icon={<Palmtree className="w-4 h-4" strokeWidth={2.5} />}
+            names={namesWith("leave")}
+            colors={LIST_COLORS.leave}
+            chipFontSize={chipFontSize}
           />
-          <NameList
-            title="الغائبين"
-            icon={<X className="w-4 h-4" strokeWidth={3} />}
-            names={namesWith("absent")}
-            colors={LIST_COLORS.absent}
-          />
-          {data.leave > 0 && (
-            <NameList
-              title="إجازة"
-              icon={<Palmtree className="w-4 h-4" strokeWidth={2.5} />}
-              names={namesWith("leave")}
-              colors={LIST_COLORS.leave}
-            />
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

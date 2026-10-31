@@ -406,15 +406,6 @@ export const dashboardConfig = {
 
     // الكروت - البطاقات اللي بتظهر البيانات
     // Cards - the cards showing data
-    // صفحة الحضور بتترسم على مقاس ثابت وبتكبر/تصغر مرة واحدة على قد الشاشة
-    // The attendance page is drawn at a fixed size and scaled once to fit the screen
-    attendanceCanvas: {
-      width: 1920, // عرض الشاشة اللي الصفحة متصممة عليها - design width (px)
-      height: 1080, // طول الشاشة اللي الصفحة متصممة عليها (مع الهيدر) - design height including the header (px)
-      headerMinWidth: 1280, // شاشة أضيق من كده: الهيدر بيتصغّر على قد العرض في الصفحة دي - narrower: the header is shrunk to fit here
-      portraitMaxWidth: 900, // موبايل بالطول لو العرض أقل من كده: الكروت في عمود واحد - phone portrait below this width: one column
-    },
-
     cards: {
       cardPadding: 16, // المسافة داخل البطاقة من الحواف - padding inside card
       gap: 16, // المسافة بين البطاقات - gap between cards
@@ -465,7 +456,8 @@ export const dashboardConfig = {
       countLabelFontSize: 18, // حجم كلمة "حاضر" و "غائب" - "حاضر" / "غائب" label font size
       countPaddingY: 14, // المسافة فوق وتحت جوه مربع حاضر/غائب (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
       listLabelFontSize: 16, // حجم كلمة "الحاضرين" / "الغائبين" / "لم يسجّلوا بعد" - list label font size
-      chipFontSize: 16, // حجم الأسامي جوه الكبسولات (لو كتير بتعمل scroll جوه الكارت) - name chip font size (many names scroll)
+      chipFontSize: 16, // حجم الأسامي جوه الكبسولات - name chip font size
+      minChipFontSize: 13, // لو الأسامي مش واخدة مكانها الخط بيصغر لحد كده، والأسامي عمرها ما بتستخبى - smallest chip size; names are never hidden
       chipPaddingX: 10, // المسافة يمين وشمال جوه الكبسولة - name chip horizontal padding
       chipPaddingY: 3, // المسافة فوق وتحت جوه الكبسولة - name chip vertical padding
     },
@@ -473,14 +465,13 @@ export const dashboardConfig = {
     // عمال الأرضية - بطاقة عمال الأرضية
     // Floor Workers - floor workers card
     floorWorkers: {
-      groupTitleFontSize: 17, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
+      groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
       minGroupTitleFontSize: 11, // أصغر حجم لاسم القسم لو مش واخد مكانه (الاسم عمره ما بيتقص) - smallest group name size; names are never cut
-      groupNumberFontSize: 28, // حجم رقم الحاضرين في كل قسم - present count font size per group
-      groupTotalFontSize: 18, // حجم "/ الإجمالي" جنب رقم الحاضرين - "/ total" next to the present count
-      nameChipFontSize: 14, // حجم أسماء العمال (لو كتير بتعمل scroll جوه الكارت) - worker name chip font size (many names scroll)
-      subGroupTitleFontSize: 15, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
+      groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
+      nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
+      minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
+      subGroupTitleFontSize: 14, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
       factoryRowHeight: 1.2, // ارتفاع صف مصنع الإنتاج بالنسبة لصف باقي الأقسام - factory row height vs the other groups' row
-      separateCardsHeight: 200, // ارتفاع كروت السواقين والمناديب والغفر تحت حضور عمال (بكسل) - drivers / reps / guards cards height (px)
     },
 
     // الأفران - بطاقة الأفران
