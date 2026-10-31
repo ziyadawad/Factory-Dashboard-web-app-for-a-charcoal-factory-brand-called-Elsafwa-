@@ -11,6 +11,7 @@ import {
   Wrench,
   Cog,
   CalendarDays,
+  X,
   LucideIcon,
 } from "lucide-react";
 import { Attendance, AttendanceGroup } from "@/lib/types";
@@ -35,8 +36,9 @@ const FACTORY_GROUPS: { key: FactoryGroupKey; icon: LucideIcon }[] = [
   { key: "operators", icon: Cog },
 ];
 
-// الأسامي اللي بتظهر: الحاضرين والإجازة (رمادي) - names shown: present, and on leave (gray)
+// الحاضرين والإجازة (رمادي) فوق، والغايبين (أحمر) تحت - present and on leave (gray) on top, absent (red) below
 const shownPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status !== "absent");
+const absentPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status === "absent");
 
 export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) {
   const sizes = dashboardConfig.sizes.floorWorkers;
@@ -75,7 +77,7 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
   );
 
   // لما الأسماء تتغير نقيس تاني - re-measure when any names change
-  const allNamesKey = allGroups.map((group) => shownPeople(group).map((p) => p.name).join("|")).join("||");
+  const allNamesKey = allGroups.map((group) => group.people.map((p) => `${p.status}:${p.name}`).join("|")).join("||");
   const prevAllNamesKey = useRef(allNamesKey);
   useIsomorphicLayoutEffect(() => {
     if (prevAllNamesKey.current === allNamesKey) return;
@@ -102,7 +104,8 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
 
   // الارتفاعات من sizes.page1 في الكونفج - heights from sizes.page1 in the config
   const page1 = dashboardConfig.sizes.page1;
-  const stacked = page1.stackedRowHeights;
+  const middle = page1.middleColumn;
+  const left = page1.leftColumn;
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
@@ -134,20 +137,23 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
           </div>
         </div>
 
-        {/* تحت (من اليمين): تعبئة، يومية، وسواقين ومناديب وغفر فوق بعض
-            Bottom area (right to left): packing, daily workers, then drivers / reps / guards stacked */}
+        {/* تحت (من اليمين): تعبئة | يومية فوق وغفر تحت | سواقين فوق ومناديب تحت
+            Bottom area (right to left): packing | daily above guards | drivers above reps */}
         <div className="min-h-0 grid grid-cols-3 gap-2">
           <GroupBox group={workers.packing} icon={Package} {...boxProps} />
-          <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
           <div
             className="min-h-0 grid gap-2"
-            style={{
-              gridTemplateRows: `minmax(0,${stacked.drivers}fr) minmax(0,${stacked.reps}fr) minmax(0,${stacked.guards}fr)`,
-            }}
+            style={{ gridTemplateRows: `minmax(0,${middle.daily}fr) minmax(0,${middle.guards}fr)` }}
+          >
+            <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
+            <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} />
+          </div>
+          <div
+            className="min-h-0 grid gap-2"
+            style={{ gridTemplateRows: `minmax(0,${left.drivers}fr) minmax(0,${left.reps}fr)` }}
           >
             <GroupBox group={data.drivers} icon={Truck} {...boxProps} />
             <GroupBox group={data.reps} icon={Briefcase} {...boxProps} />
-            <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} />
           </div>
         </div>
       </div>
@@ -223,6 +229,7 @@ interface GroupBoxProps {
 
 function GroupBox({ group, icon, nested, sizes, chipFontSize, round, onOverflow, onResize }: GroupBoxProps) {
   const shown = shownPeople(group);
+  const absent = absentPeople(group);
   const sectionRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
@@ -269,26 +276,55 @@ function GroupBox({ group, icon, nested, sizes, chipFontSize, round, onOverflow,
         numberFontSize={sizes.groupNumberFontSize}
       />
 
-      {shown.length === 0 ? (
+      {group.total === 0 ? (
         <p className="text-gray-400" style={{ fontSize: `${sizes.nameChipFontSize}px` }}>
           لا يوجد
         </p>
       ) : (
-        <div
-          ref={chipsRef}
-          className="flex-1 min-h-0 flex flex-wrap content-start gap-1 min-w-0 overflow-y-auto thin-scroll"
-        >
-          {shown.map((person, index) => (
-            <span
-              key={index}
-              className={`rounded-md max-w-full whitespace-nowrap overflow-hidden text-ellipsis ${
-                person.status === "leave" ? "bg-gray-500/15 text-gray-300" : "bg-brandOrange/15 text-white"
-              }`}
-              style={chipStyle}
-            >
-              {toEnglishDigits(person.name)}
-            </span>
-          ))}
+        // الحاضرين (والإجازة رمادي) وتحتهم "غائب" بالأحمر، وكله بيعمل scroll جوه القسم
+        // Present (on leave in gray), then the red "غائب" list; all of it scrolls inside the box
+        <div ref={chipsRef} className="flex-1 min-h-0 min-w-0 overflow-y-auto thin-scroll">
+          {shown.length > 0 ? (
+            <div className="flex flex-wrap content-start gap-1 min-w-0">
+              {shown.map((person, index) => (
+                <span
+                  key={index}
+                  className={`rounded-md max-w-full whitespace-nowrap overflow-hidden text-ellipsis ${
+                    person.status === "leave" ? "bg-gray-500/15 text-gray-300" : "bg-brandOrange/15 text-white"
+                  }`}
+                  style={chipStyle}
+                >
+                  {toEnglishDigits(person.name)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400" style={{ fontSize: `${chipFontSize}px` }}>
+              لا يوجد
+            </p>
+          )}
+          {absent.length > 0 && (
+            <>
+              <p
+                className="flex items-center gap-0.5 font-bold text-statusRed mt-1.5 mb-0.5"
+                style={{ fontSize: `${chipFontSize}px` }}
+              >
+                <X className="w-3 h-3" strokeWidth={3} />
+                غائب
+              </p>
+              <div className="flex flex-wrap content-start gap-1 min-w-0">
+                {absent.map((person, index) => (
+                  <span
+                    key={index}
+                    className="rounded-md max-w-full whitespace-nowrap overflow-hidden text-ellipsis bg-statusRed/15 text-statusRed"
+                    style={chipStyle}
+                  >
+                    {toEnglishDigits(person.name)}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

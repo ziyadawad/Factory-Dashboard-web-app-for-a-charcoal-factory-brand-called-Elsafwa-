@@ -533,10 +533,12 @@ export const dashboardConfig = {
     // كارت "حضور عمال" في الصفحة 1 - the "حضور عمال" card on page 1
     // ارتفاع مصنع الإنتاج والجزء اللي تحته بالنسبة لبعض (مش بكسل) - factory vs bottom area height, as ratios (not px)
     page1: {
-      factoryRowHeight: 0.85, // مصنع إنتاج (عمال إنتاج / ورشة / أوبريتر) - كان 1.2، أقصر بحوالي 28% - factory row (was 1.2)
-      bottomRowHeight: 1.35, // تحت: تعبئة | يومية | سواقين ومناديب وغفر - bottom area: packing | daily | drivers, reps, guards
-      // سواقين / مناديب / غفر فوق بعض في العمود الشمال، كل واحد بنسبته - drivers / reps / guards stacked in the left column
-      stackedRowHeights: { drivers: 1, reps: 1, guards: 1 },
+      factoryRowHeight: 1, // مصنع إنتاج (عمال إنتاج / ورشة / أوبريتر) - كبّره عشان الحاضرين والغايبين ياخدوا مكانهم - factory row
+      bottomRowHeight: 1.2, // تحت: تعبئة | يومية وغفر | سواقين ومناديب - bottom area: packing | daily + guards | drivers + reps
+      // العمود اللي في النص: عمال يومية فوق (حوالي 60%) وغفر تحت (حوالي 40%) - middle column: daily on top, guards below
+      middleColumn: { daily: 0.6, guards: 0.4 },
+      // العمود الشمال: سواقين فوق (حوالي 40%) ومناديب تحت لحد الآخر (حوالي 60%) - left column: drivers on top, reps below
+      leftColumn: { drivers: 0.4, reps: 0.6 },
     },
 
     // الصدقات (الصفحة 3) - charity page (page 3)
