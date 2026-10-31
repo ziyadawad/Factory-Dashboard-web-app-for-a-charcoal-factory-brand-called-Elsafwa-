@@ -120,8 +120,10 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     SectionPerson[]
   >;
   const statuses = employeeStatuses(rows);
-  const placed = new Set<string>();
+  // المستبعدين مش بيظهروا في أي حتة - excluded employees never show anywhere
+  const placed = new Set<string>(dashboardConfig.attendance.excludedEmployees);
   for (const employee of rows.employees) {
+    if (placed.has(employee.name)) continue;
     const code = deviceCode(employee.attendance_device_id);
     const status = statuses.get(employee.name) ?? "absent";
     const key = code === null ? undefined : keys.find((k) => sectionHasCode(sections[k], code));

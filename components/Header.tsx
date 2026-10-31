@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
-import { HandHeart, House, LucideIcon, Maximize2, Warehouse } from "lucide-react";
+import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -23,6 +23,14 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
   stock: Warehouse,
   charity: HandHeart,
 };
+
+// يفتح أو يقفل ملء الشاشة (لو المتصفح رفض مفيش حاجة بتحصل) - enter or leave fullscreen (ignored if the browser refuses)
+function toggleFullscreen() {
+  const request = document.fullscreenElement
+    ? document.exitFullscreen()
+    : document.documentElement.requestFullscreen();
+  request?.catch((error) => console.log("Fullscreen error:", error));
+}
 
 export default function Header({ isConnected, nav, page, pageNumber, pageCount }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
@@ -88,15 +96,26 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
     };
   }, []);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
-    }
-  };
+  // ملء الشاشة: الأيقونة بتتظبط من fullscreenchange (حتى لو خرجت بـ Esc)، وزرار F بيفتح/يقفل
+  // Fullscreen: the icon follows fullscreenchange (also when leaving with Esc); the F key toggles it
+  useEffect(() => {
+    const update = () => setIsFullscreen(!!document.fullscreenElement);
+    update();
+    document.addEventListener("fullscreenchange", update);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F" && e.code !== "KeyF") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      e.preventDefault();
+      toggleFullscreen();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   const PageIcon = page ? PAGE_ICONS[page.id] : undefined;
 
@@ -163,15 +182,18 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
           </div>
         )}
 
-        {!isFullscreen && (
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors"
-            title="ملء الشاشة"
-          >
+        {/* زرار ملء الشاشة دايما ظاهر - the fullscreen button is always shown */}
+        <button
+          onClick={toggleFullscreen}
+          className="p-2 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors"
+          title={isFullscreen ? "خروج من ملء الشاشة (F)" : "ملء الشاشة (F)"}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-5 h-5 text-gray-300" />
+          ) : (
             <Maximize2 className="w-5 h-5 text-gray-300" />
-          </button>
-        )}
+          )}
+        </button>
 
         {nav}
       </div>

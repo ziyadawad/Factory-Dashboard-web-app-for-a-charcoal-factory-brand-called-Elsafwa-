@@ -43,6 +43,13 @@ export const dashboardConfig = {
       reps: { label: "مناديب", codes: [[1049, 1054]] } as ConfigAttendanceSection, // مناديب
       guards: { label: "غفر", codes: [[1061, 1063]] } as ConfigAttendanceSection, // غفر
     },
+    // مستبعدين من الحضور خالص (مش حاضر ولا غائب ولا في أي إجمالي) - اكتب Employee ID من ERPNext
+    // Excluded from attendance entirely (not present, not absent, in no total) - ERPNext Employee IDs
+    excludedEmployees: [
+      "HR-EMP-00197", // عيد صقر (كود 1027)
+      "HR-EMP-00201", // فاطمة محمد هاشم (كود 1057)
+      "احمد حمدي ابراهيم", // احمد حمدي ابراهيم (كود 1059)
+    ],
     factoryLabel: "مصنع إنتاج", // اسم الكارت اللي فيه عمال إنتاج والورشة والأوبريتر - factory card name
   },
 
@@ -55,7 +62,9 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 3, // كل كام ثانية الداشبورد يجيب بيانات جديدة من السيستم - how often the dashboard fetches new data
+    refreshSeconds: 2, // كل كام ثانية الشاشة تسأل السيرفر عن بيانات جديدة (كل الصفحات) - how often every page polls the server
+    // السيرفر بيكلم ERPNext مرة واحدة بالكتير كل الثواني دي، وفي النص بيرجع آخر نتيجة - the server calls ERPNext at most once per this many seconds
+    cacheSeconds: 5,
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -414,10 +423,10 @@ export const dashboardConfig = {
     // عرض كروت الصف العلوي (نسب من عرض الصف) - top row card widths (fr ratios)
     // مجموعهم لازم يفضل 4 عشان الأفران تفضل بنفس العرض - keep the sum at 4 so the kilns card keeps its width
     topRowColumns: {
-      treasury: 0.75, // رصيد الخزنة (أضيق) - treasury (narrower)
+      treasury: 0.62, // رصيد الخزنة (أضيق) - treasury (narrower)
       management: 0.68, // حضور الإدارة (أضيق) - management attendance (narrower)
-      workers: 1.57, // حضور عمال (أعرض، خد شوية من الإدارة عشان الأسامي الكبيرة) - workers attendance (wider)
-      kilns: 1, // الأفران (نفس العرض) - kilns (same width)
+      workers: 1.85, // حضور عمال (الأعرض، خد شوية من الخزنة والأفران عشان الأسامي الكبيرة) - workers attendance (widest)
+      kilns: 0.85, // الأفران والطرحات - kilns and batches
     },
 
     // الخزنة - بطاقة رصيد الخزنة
@@ -529,36 +538,40 @@ export const dashboardConfig = {
     // كارت "حضور عمال" في الصفحة 1 - the "حضور عمال" card on page 1
     // ارتفاع مصنع الإنتاج والجزء اللي تحته بالنسبة لبعض (مش بكسل) - factory vs bottom area height, as ratios (not px)
     page1: {
-      // مصنع إنتاج طوله على قد الأسامي، بس مايزيدش عن النسبة دي من طول الكارت (الباقي للأقسام اللي تحت)
-      // The factory row is as tall as its names, but at most this % of the card height (the rest is the bottom area)
-      factoryMaxHeightPercent: 42,
-      // العمود اللي في النص: عمال يومية فوق وغفر تحت (نص ونص) - middle column: daily on top, guards below
-      middleColumn: { daily: 0.55, guards: 0.45 },
-      // العمود الشمال: سواقين فوق (حوالي 45%) ومناديب تحت (حوالي 55%) - left column: drivers on top, reps below
-      leftColumn: { drivers: 0.45, reps: 0.55 },
+      // الطول بيتقسم على قد الأسامي (حاضر + غائب) في كل قسم، ومفيش scroll خالص:
+      // لو قسم لسه مش واخد مكانه، خط الأسامي فيه هو بس بيصغر لحد minWorkerChipFontSize، والأسامي عمرها ما بتستخبى
+      // Heights follow each section's names (present + absent), no scroll anywhere: if a section still doesn't
+      // fit, only that section's chip font shrinks, down to minWorkerChipFontSize; names are never hidden
+      minWorkerChipFontSize: 15, // أصغر حجم لأسامي العمال - smallest worker name size (px)
 
       // مقاسات الكلام جوه "حضور عمال" (بكسل) - text sizes inside "حضور عمال" (px)
       workerChipFontSize: 20, // حجم أسامي العمال (حاضر وغائب) - لو كتير بتعمل scroll جوه الكارت - worker name chips (present and absent)
       workerChipPaddingX: 10, // المسافة يمين وشمال جوه الكبسولة - chip horizontal padding
       workerChipPaddingY: 2, // المسافة فوق وتحت جوه الكبسولة - chip vertical padding
+      workerChipLineHeight: 1.3, // ارتفاع سطر الكبسولة بالنسبة لحجم الخط (أصغر = سطور أكتر) - chip line height vs font size
       workerTitleFontSize: 20, // اسم القسم (مصنع إنتاج، عمال تعبئة، سواقين...) - section name
       workerSubTitleFontSize: 18, // اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - factory sub-group name
       workerNumberFontSize: 26, // رقم الحاضرين في كل قسم - present count per section
       workerTotalFontSize: 17, // "/ الإجمالي" جنب رقم الحاضرين - "/ total" next to the present count
-      workerAbsentLabelFontSize: 16, // كلمة "غائب" فوق الأسامي الحمرا - the red "غائب" label
+      workerAbsentLabelFontSize: 16, // كلمة "غائب" في أول سطر الأسامي الحمرا - the red "غائب" label
+      workerBoxPadding: 10, // المسافة جوه كل قسم (تعبئة، يومية، سواقين...) - padding inside each section box
+      workerNestedBoxPadding: 8, // المسافة جوه أقسام مصنع الإنتاج - padding inside the factory sub-boxes
 
       // شاشة أضيق من compactMaxWidth (زي 1366): نفس المقاسات اللي فوق بس أصغر شوية عشان الأسامي ماتتقصش
       // Screens narrower than compactMaxWidth (e.g. 1366): the same sizes as above, a bit smaller so names aren't cut
       compactMaxWidth: 1599,
       compact: {
-        workerChipFontSize: 15,
-        workerChipPaddingX: 6,
-        workerChipPaddingY: 1,
-        workerTitleFontSize: 16,
-        workerSubTitleFontSize: 15,
-        workerNumberFontSize: 22,
-        workerTotalFontSize: 14,
+        workerChipFontSize: 17,
+        workerChipPaddingX: 4,
+        workerChipPaddingY: 0,
+        workerChipLineHeight: 1.2,
+        workerTitleFontSize: 15,
+        workerSubTitleFontSize: 14,
+        workerNumberFontSize: 20,
+        workerTotalFontSize: 13,
         workerAbsentLabelFontSize: 13,
+        workerBoxPadding: 6,
+        workerNestedBoxPadding: 5,
       },
     },
 

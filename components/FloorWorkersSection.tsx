@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Factory,
   Package,
@@ -33,6 +33,9 @@ const FACTORY_GROUPS: { key: FactoryGroupKey; icon: LucideIcon }[] = [
   { key: "operators", icon: Cog },
 ];
 
+// useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 type WorkerSizes = typeof dashboardConfig.sizes.page1.compact;
 
 // مقاسات الكلام: العادية، أو الأصغر على الشاشات الضيقة (بكسل ثابت من الكونفج)
@@ -50,16 +53,31 @@ function useWorkerSizes(): WorkerSizes {
   return compact ? page1.compact : page1;
 }
 
+// صفين طولهم على قد المحتوى (من غير ما يعدّوا مكان الكارت) - two rows sized by their content, never past the card
+const CONTENT_ROWS_2 = "minmax(0,auto) minmax(0,auto)";
+
 // الحاضرين والإجازة (رمادي) فوق، والغايبين (أحمر) تحت - present and on leave (gray) on top, absent (red) below
 const shownPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status !== "absent");
 const absentPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status === "absent");
 
 export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) {
-  // المقاسات والارتفاعات من sizes.page1 في الكونفج - sizes and heights from sizes.page1 in the config
-  const page1 = dashboardConfig.sizes.page1;
+  // مقاسات الكلام من sizes.page1 في الكونفج - text sizes from sizes.page1 in the config
   const text = useWorkerSizes();
-  const middle = page1.middleColumn;
-  const left = page1.leftColumn;
+
+  // كل ما الشاشة يتغير مقاسها أو الخط يحمّل، كل قسم بيرجع لحجم خطه الأصلي ويقيس تاني
+  // On resize or when web fonts load, every section goes back to its normal chip size and measures again
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const remeasure = () => active && setRound((r) => r + 1);
+    document.fonts?.ready.then(remeasure);
+    window.addEventListener("resize", remeasure);
+    return () => {
+      active = false;
+      window.removeEventListener("resize", remeasure);
+    };
+  }, []);
+  const boxProps = { text, round };
 
   const workers = data.workers;
   const factory = workers.productionFactory;
@@ -74,18 +92,15 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
         </p>
       </div>
 
-      {/* مصنع الإنتاج طوله على قد الأسامي (لحد factoryMaxHeightPercent)، والباقي للأقسام اللي تحت
-          The factory row is as tall as its names (up to factoryMaxHeightPercent); the rest goes to the bottom area */}
-      <div
-        className="flex-1 min-h-0 grid gap-2"
-        style={{ gridTemplateRows: `fit-content(${page1.factoryMaxHeightPercent}%) minmax(0,1fr)` }}
-      >
+      {/* الطول على قد الأسامي: كل صف/قسم بياخد طول أساميه، والمساحة الزيادة بتتوزع بالتساوي
+          Heights follow the names: each row / section gets its content height, extra space is shared equally */}
+      <div className="flex-1 min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
         {/* مصنع الإنتاج ومجموعاته التلاتة - production factory and its 3 sub-groups */}
         <div className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <GroupHeader label={factory.label} icon={Factory} group={factory} titleFontSize={text.workerTitleFontSize} text={text} />
           <div className="flex-1 min-h-0 grid grid-cols-3 gap-2">
             {FACTORY_GROUPS.map(({ key, icon }) => (
-              <GroupBox key={key} group={factory.groups[key]} icon={icon} text={text} nested />
+              <GroupBox key={key} group={factory.groups[key]} icon={icon} {...boxProps} nested />
             ))}
           </div>
         </div>
@@ -93,20 +108,14 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
         {/* تحت (من اليمين): تعبئة | يومية فوق وغفر تحت | سواقين فوق ومناديب تحت
             Bottom area (right to left): packing | daily above guards | drivers above reps */}
         <div className="min-h-0 grid grid-cols-3 gap-2">
-          <GroupBox group={workers.packing} icon={Package} text={text} />
-          <div
-            className="min-h-0 grid gap-2"
-            style={{ gridTemplateRows: `minmax(0,${middle.daily}fr) minmax(0,${middle.guards}fr)` }}
-          >
-            <GroupBox group={workers.daily} icon={CalendarDays} text={text} />
-            <GroupBox group={data.guards} icon={ShieldCheck} text={text} />
+          <GroupBox group={workers.packing} icon={Package} {...boxProps} />
+          <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
+            <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
+            <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} />
           </div>
-          <div
-            className="min-h-0 grid gap-2"
-            style={{ gridTemplateRows: `minmax(0,${left.drivers}fr) minmax(0,${left.reps}fr)` }}
-          >
-            <GroupBox group={data.drivers} icon={Truck} text={text} />
-            <GroupBox group={data.reps} icon={Briefcase} text={text} />
+          <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
+            <GroupBox group={data.drivers} icon={Truck} {...boxProps} />
+            <GroupBox group={data.reps} icon={Briefcase} {...boxProps} />
           </div>
         </div>
       </div>
@@ -172,14 +181,25 @@ function GroupHeader({
 }
 
 // كبسولة اسم - a name chip
-function NameChip({ name, className, text }: { name: string; className: string; text: WorkerSizes }) {
+function NameChip({
+  name,
+  className,
+  text,
+  fontSize,
+}: {
+  name: string;
+  className: string;
+  text: WorkerSizes;
+  fontSize: number;
+}) {
   return (
     <span
+      data-chip
       className={`rounded-md max-w-full whitespace-nowrap overflow-hidden text-ellipsis font-bold ${className}`}
       style={{
-        fontSize: `${text.workerChipFontSize}px`,
+        fontSize: `${fontSize}px`,
         padding: `${text.workerChipPaddingY}px ${text.workerChipPaddingX}px`,
-        lineHeight: 1.3,
+        lineHeight: text.workerChipLineHeight,
       }}
     >
       {toEnglishDigits(name)}
@@ -187,28 +207,48 @@ function NameChip({ name, className, text }: { name: string; className: string; 
   );
 }
 
-// قسم: العنوان، الحاضرين (والإجازة رمادي)، وتحتهم "غائب" بالأحمر. الأسامي الكتير بتعمل scroll جوه القسم
-// A section box: header, present (on leave in gray), then the red "غائب" list; many names scroll inside the box
+// قسم: العنوان، الحاضرين (والإجازة رمادي)، وتحتهم "غائب" بالأحمر. مفيش scroll: لو الأسامي مش واخدة مكانها
+// خط القسم ده بس بيصغر لحد minWorkerChipFontSize
+// A section box: header, present (on leave in gray), then the red "غائب" list. No scroll: if the names don't
+// fit, only this box's chip font shrinks, down to minWorkerChipFontSize
 function GroupBox({
   group,
   icon,
   text,
+  round,
   nested,
 }: {
   group: AttendanceGroup;
   icon: LucideIcon;
   text: WorkerSizes;
+  round: number;
   nested?: boolean;
 }) {
+  const minFontSize = dashboardConfig.sizes.page1.minWorkerChipFontSize;
   const shown = shownPeople(group);
   const absent = absentPeople(group);
-  const textStyle = { fontSize: `${text.workerChipFontSize}px` };
+  const chipsRef = useRef<HTMLDivElement>(null);
+
+  // نبدأ بالحجم العادي كل ما الأسامي أو المقاس يتغير، ونصغر خطوة خطوة لحد ما كله يبان
+  // Start at the normal size whenever the names or the screen change, then shrink step by step until all fit
+  const [fontSize, setFontSize] = useState(text.workerChipFontSize);
+  const namesKey = group.people.map((p) => `${p.status}:${p.name}`).join("|");
+  useIsomorphicLayoutEffect(() => setFontSize(text.workerChipFontSize), [text.workerChipFontSize, namesKey, round]);
+  useIsomorphicLayoutEffect(() => {
+    const el = chipsRef.current;
+    if (!el || fontSize <= minFontSize) return;
+    const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-chip]"));
+    const overflows = el.scrollHeight > el.clientHeight + 1 || chips.some((chip) => chip.scrollWidth > chip.clientWidth + 1);
+    if (overflows) setFontSize(Math.max(minFontSize, fontSize - 1));
+  });
+  const textStyle = { fontSize: `${fontSize}px` };
 
   return (
     <div
       className={`rounded-xl min-w-0 min-h-0 flex flex-col overflow-hidden ${
-        nested ? "bg-card border border-cardBorder p-2" : "bg-background p-2.5"
+        nested ? "bg-card border border-cardBorder" : "bg-background"
       }`}
+      style={{ padding: `${nested ? text.workerNestedBoxPadding : text.workerBoxPadding}px` }}
     >
       <GroupHeader
         label={group.label}
@@ -223,7 +263,7 @@ function GroupBox({
           لا يوجد
         </p>
       ) : (
-        <div className="flex-1 min-h-0 min-w-0 overflow-y-auto thin-scroll">
+        <div ref={chipsRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
           {shown.length > 0 ? (
             <div className="flex flex-wrap content-start gap-1 min-w-0">
               {shown.map((person, index) => (
@@ -232,29 +272,43 @@ function GroupBox({
                   name={person.name}
                   className={person.status === "leave" ? "bg-gray-500/15 text-gray-300" : "bg-brandOrange/15 text-white"}
                   text={text}
+                  fontSize={fontSize}
                 />
               ))}
             </div>
           ) : (
-            <p className="text-gray-400" style={textStyle}>
-              لا يوجد
-            </p>
+            absent.length === 0 && (
+              <p className="text-gray-400" style={textStyle}>
+                لا يوجد
+              </p>
+            )
           )}
+          {/* "غائب" في أول سطر الأسامي الحمرا (مش سطر لوحده)، ولو مفيش حد حاضر "لا يوجد" قبلها في نفس السطر
+              The "غائب" label starts the red names row; with nobody present, "لا يوجد" comes first on that row */}
           {absent.length > 0 && (
-            <>
-              <p
-                className="flex items-center gap-0.5 font-bold text-statusRed mt-1.5 mb-0.5"
+            <div className={`flex flex-wrap items-center content-start gap-1 min-w-0 ${shown.length > 0 ? "mt-1" : ""}`}>
+              {shown.length === 0 && (
+                <span className="text-gray-400 whitespace-nowrap ml-2" style={textStyle}>
+                  لا يوجد
+                </span>
+              )}
+              <span
+                className="flex items-center gap-0.5 font-bold text-statusRed whitespace-nowrap"
                 style={{ fontSize: `${text.workerAbsentLabelFontSize}px` }}
               >
                 <X className="w-4 h-4" strokeWidth={3} />
                 غائب
-              </p>
-              <div className="flex flex-wrap content-start gap-1 min-w-0">
-                {absent.map((person, index) => (
-                  <NameChip key={index} name={person.name} className="bg-statusRed/15 text-statusRed" text={text} />
+              </span>
+              {absent.map((person, index) => (
+                  <NameChip
+                    key={index}
+                    name={person.name}
+                    className="bg-statusRed/15 text-statusRed"
+                    text={text}
+                    fontSize={fontSize}
+                  />
                 ))}
-              </div>
-            </>
+            </div>
           )}
         </div>
       )}
