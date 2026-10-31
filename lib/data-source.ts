@@ -13,15 +13,17 @@ import {
   ConfigWoodSubType,
   ConfigWoodType,
   ConfigErpStockItem,
-  ConfigWorker,
+  ConfigAttendanceSection,
   KilnStatus,
   Attendance,
+  AttendanceGroup,
+  AttendancePerson,
   DashboardData,
-  FloorWorkers,
-  WorkerGroup,
+  PersonStatus,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { ErpError, erpCall, erpGet, erpPost, erpToday } from "./erp";
+import { toEnglishDigits } from "./format";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
 // Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
@@ -30,129 +32,151 @@ function toVariant(variant: ConfigVariant) {
   return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
 }
 
-// مفتاح الشخص: ID الموظف، ولو مفيش الاسم - a person's key: employee ID, else the name
-const personKey = (worker: ConfigWorker) => worker.employeeId || worker.name.replace(/\s+/g, " ").trim();
+// ===== الحضور - attendance (ERPNext only, sections by device code) =====
 
-// كل شخص مرة واحدة (لو اتكرر يبقى حاضر لو أي نسخة منه حاضرة) - each person once (present if any copy is)
-function uniqueWorkers(workers: ConfigWorker[]): ConfigWorker[] {
-  const byKey = new Map<string, ConfigWorker>();
-  for (const worker of workers) {
-    const key = personKey(worker);
-    const seen = byKey.get(key);
-    byKey.set(key, seen ? { ...seen, present: seen.present || worker.present } : worker);
-  }
-  return Array.from(byKey.values());
-}
+type AttendanceSectionKey = keyof typeof dashboardConfig.attendance.sections;
 
-function toWorkerGroup(label: string, members: ConfigWorker[]): WorkerGroup {
-  const people = uniqueWorkers(members);
-  return {
-    label,
-    total: people.length,
-    presentNames: people.filter((p) => p.present).map((p) => p.name.trim()),
-  };
-}
-
-function countPeople(members: ConfigWorker[]) {
-  const people = uniqueWorkers(members);
-  return { present: people.filter((p) => p.present).length, total: people.length };
-}
-
-// حضور النهارده من ERPNext: active = IDs الموظفين Active، recorded = فيه أي تسجيل في الشركة، present = IDs الحاضرين
-// Today's attendance from ERPNext: active = Active employee IDs, recorded = anything recorded company-wide,
-// present = present employee IDs
-type TodayAttendance = { active: string[]; recorded: boolean; present: string[] };
-
-// ERPNext عمره ما رد: محدش بيظهر (الكونفج مش بديل للأشخاص) - ERPNext never answered: nobody shows (no config fallback)
-const NO_ATTENDANCE: TodayAttendance = { active: [], recorded: true, present: [] };
+// بيانات النهارده الخام من ERPNext - today's raw ERPNext rows
+export type TodayAttendanceRows = {
+  employees: {
+    name: string;
+    employee_name: string | null;
+    attendance_device_id: string | null;
+    department: string | null;
+    designation: string | null;
+  }[];
+  attendance: { employee: string; employee_name: string | null; status: string }[];
+  checkins: { employee: string; time: string; log_type: string | null }[];
+};
 
 const PRESENT_STATUSES = ["Present", "Half Day", "Work From Home"];
 
-// حاضر = Attendance (Draft أو Submitted) حاضر أو أي Checkin النهارده - present = a present Attendance or any check-in
-async function loadTodayAttendance(): Promise<TodayAttendance> {
+// قراية بس: الموظفين Active وحضور النهارده (Submitted) والبصمات من أول اليوم لآخره بتوقيت مصر
+// Read-only: Active employees, today's submitted Attendance and today's check-ins (Africa/Cairo day)
+export async function loadTodayAttendance(): Promise<TodayAttendanceRows> {
   const today = erpToday();
   const [employees, attendance, checkins] = await Promise.all([
-    erpGet<{ data: { name: string }[] }>("/api/resource/Employee", {
+    erpGet<{ data: TodayAttendanceRows["employees"] }>("/api/resource/Employee", {
       filters: JSON.stringify([["status", "=", "Active"]]),
-      fields: JSON.stringify(["name"]),
+      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation"]),
       limit_page_length: 0,
     }),
-    erpGet<{ data: { employee: string; status: string }[] }>("/api/resource/Attendance", {
-      filters: JSON.stringify([["attendance_date", "=", today], ["docstatus", "<", 2]]),
-      fields: JSON.stringify(["employee", "status"]),
+    erpGet<{ data: TodayAttendanceRows["attendance"] }>("/api/resource/Attendance", {
+      filters: JSON.stringify([["attendance_date", "=", today], ["docstatus", "=", 1]]),
+      fields: JSON.stringify(["employee", "employee_name", "status"]),
       limit_page_length: 0,
     }),
-    erpGet<{ data: { employee: string }[] }>("/api/resource/Employee Checkin", {
+    erpGet<{ data: TodayAttendanceRows["checkins"] }>("/api/resource/Employee Checkin", {
       filters: JSON.stringify([["time", ">=", `${today} 00:00:00`], ["time", "<=", `${today} 23:59:59`]]),
-      fields: JSON.stringify(["employee"]),
+      fields: JSON.stringify(["employee", "time", "log_type"]),
       limit_page_length: 0,
     }),
   ]);
-  const present = new Set(checkins.data.map((checkin) => checkin.employee));
-  for (const record of attendance.data) if (PRESENT_STATUSES.includes(record.status)) present.add(record.employee);
-  return {
-    active: employees.data.map((employee) => employee.name),
-    recorded: attendance.data.length + checkins.data.length > 0,
-    present: Array.from(present),
-  };
+  return { employees: employees.data, attendance: attendance.data, checkins: checkins.data };
 }
 
-// حالة النهارده على الأعضاء: null = يدوي. غير كده بيفضل بس اللي employeeId بتاعه Active في ERPNext،
-// والحضور من ERPNext بس (لو مفيش تسجيل خالص محدش حاضر)
-// Apply today's status: null = manual. Otherwise only members whose employeeId is Active in ERPNext stay,
-// and presence comes from ERPNext only (nothing recorded = nobody present)
-function withToday(members: ConfigWorker[], today: TodayAttendance | null): ConfigWorker[] {
-  if (!today) return members;
-  const active = new Set(today.active);
-  return members
-    .filter((member) => member.employeeId && active.has(member.employeeId))
-    .map((member) => ({ ...member, present: today.recorded && today.present.includes(member.employeeId!) }));
+// الكود نص في ERPNext: trim وبعدين رقم (null لو فاضي أو مش رقم) - the code is text: trim, then a number
+export function deviceCode(raw: string | number | null | undefined): number | null {
+  const text = toEnglishDigits(String(raw ?? "")).trim();
+  return /^\d+$/.test(text) ? Number(text) : null;
 }
 
-// حضور الإدارة - management attendance
-function managementAttendance(today: TodayAttendance | null): Attendance {
-  const people = uniqueWorkers(withToday(dashboardConfig.data.attendance.members, today));
-  const present = people.filter((p) => p.present).length;
-  const notRecorded = !!today && !today.recorded;
+function sectionHasCode(section: ConfigAttendanceSection, code: number) {
+  return section.codes.some((entry) => (Array.isArray(entry) ? code >= entry[0] && code <= entry[1] : code === entry));
+}
+
+// أول اسمين - first two words of the name
+function shortName(fullName: string) {
+  return toEnglishDigits(fullName).replace(/\s+/g, " ").trim().split(" ").slice(0, 2).join(" ");
+}
+
+// حالة كل موظف عنده تسجيل النهارده: البصمة أصدق من Absent
+// Status of everyone recorded today (a check-in beats Absent); missing = absent
+export function employeeStatuses(rows: TodayAttendanceRows): Map<string, PersonStatus> {
+  const statuses = new Map<string, PersonStatus>();
+  for (const record of rows.attendance) {
+    const status: PersonStatus = PRESENT_STATUSES.includes(record.status)
+      ? "present"
+      : record.status === "On Leave"
+        ? "leave"
+        : "absent";
+    const previous = statuses.get(record.employee);
+    if (previous === "present" || (previous === "leave" && status === "absent")) continue;
+    statuses.set(record.employee, status);
+  }
+  for (const checkin of rows.checkins) statuses.set(checkin.employee, "present");
+  return statuses;
+}
+
+type SectionPerson = AttendancePerson & { id: string };
+
+// كل موظف في قسمه بالكود، والحاضر اللي مالوش قسم بيروح اليومية
+// Each employee into its section by code; anyone present without a section goes to daily
+export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSectionKey, SectionPerson[]> {
+  const sections = dashboardConfig.attendance.sections;
+  const keys = Object.keys(sections) as AttendanceSectionKey[];
+  const result = Object.fromEntries(keys.map((key) => [key, [] as SectionPerson[]])) as Record<
+    AttendanceSectionKey,
+    SectionPerson[]
+  >;
+  const statuses = employeeStatuses(rows);
+  const placed = new Set<string>();
+  for (const employee of rows.employees) {
+    const code = deviceCode(employee.attendance_device_id);
+    const status = statuses.get(employee.name) ?? "absent";
+    const key = code === null ? undefined : keys.find((k) => sectionHasCode(sections[k], code));
+    const target = key ?? (status === "present" ? "daily" : undefined);
+    if (!target) continue;
+    placed.add(employee.name);
+    result[target].push({ id: employee.name, name: shortName(employee.employee_name || employee.name), status });
+  }
+  // حاضر النهارده بس مش في قايمة الـ Active - present today but not in the Active list
+  const attendanceNames = new Map(rows.attendance.map((record) => [record.employee, record.employee_name]));
+  for (const [id, status] of Array.from(statuses)) {
+    if (status !== "present" || placed.has(id)) continue;
+    result.daily.push({ id, name: shortName(attendanceNames.get(id) || id), status });
+  }
+  return result;
+}
+
+const STATUS_ORDER: Record<PersonStatus, number> = { present: 0, leave: 1, absent: 2 };
+
+function toGroup(label: string, people: SectionPerson[]): AttendanceGroup {
+  const sorted = [...people].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
   return {
-    present,
-    absent: notRecorded ? 0 : people.length - present,
+    label,
     total: people.length,
-    presentNames: notRecorded ? [] : people.filter((p) => p.present).map((p) => p.name.trim()),
-    absentNames: notRecorded ? [] : people.filter((p) => !p.present).map((p) => p.name.trim()),
-    allNames: people.map((p) => p.name.trim()),
-    notRecorded,
+    present: people.filter((p) => p.status === "present").length,
+    leave: people.filter((p) => p.status === "leave").length,
+    people: sorted.map(({ name, status }) => ({ name, status })),
   };
 }
 
-// عمال الأرضية - floor workers (each list gets today's status first)
-function floorWorkers(today: TodayAttendance | null): FloorWorkers {
-  const workers = dashboardConfig.data.workers;
-  const factory = workers.productionFactory;
-  const production = withToday(factory.groups.production.members, today);
-  const workshop = withToday(factory.groups.workshop.members, today);
-  const operators = withToday(factory.groups.operators.members, today);
-  const packing = withToday(workers.packing.members, today);
-  const saw = withToday(workers.saw.members, today);
-  const drivers = withToday(workers.drivers.members, today);
-  const factoryMembers = [...production, ...workshop, ...operators];
-  const allMembers = [...factoryMembers, ...packing, ...saw, ...drivers];
+function sumGroups(groups: { total: number; present: number; leave: number }[]) {
   return {
-    productionFactory: {
-      label: factory.label,
-      groups: {
-        production: toWorkerGroup(factory.groups.production.label, production),
-        workshop: toWorkerGroup(factory.groups.workshop.label, workshop),
-        operators: toWorkerGroup(factory.groups.operators.label, operators),
-      },
-      ...countPeople(factoryMembers),
-    },
-    packing: toWorkerGroup(workers.packing.label, packing),
-    saw: toWorkerGroup(workers.saw.label, saw),
-    drivers: toWorkerGroup(workers.drivers.label, drivers),
-    daily: toWorkerGroup(workers.daily.label, allMembers.filter((worker) => worker.daily)),
-    ...countPeople(allMembers),
-    notRecorded: !!today && !today.recorded,
+    total: groups.reduce((sum, g) => sum + g.total, 0),
+    present: groups.reduce((sum, g) => sum + g.present, 0),
+    leave: groups.reduce((sum, g) => sum + g.leave, 0),
+  };
+}
+
+// كل كروت الحضور (null = ERPNext عمره ما رد: الكروت فاضية) - every attendance card (null = ERPNext never answered)
+function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
+  const { sections, factoryLabel } = dashboardConfig.attendance;
+  const split = rows ? splitBySection(rows) : null;
+  const group = (key: AttendanceSectionKey) => toGroup(sections[key].label, split?.[key] ?? []);
+  const groups = { production: group("production"), workshop: group("workshop"), operators: group("operators") };
+  const productionFactory = { label: factoryLabel, groups, ...sumGroups(Object.values(groups)) };
+  const packing = group("packing");
+  const saw = group("saw");
+  const daily = group("daily");
+  const { total, present } = sumGroups([productionFactory, packing, saw, daily]);
+  return {
+    management: group("management"),
+    workers: { productionFactory, packing, saw, daily, total, present },
+    drivers: group("drivers"),
+    reps: group("reps"),
+    guards: group("guards"),
   };
 }
 
@@ -661,13 +685,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         icon: item.icon,
       }))
     ),
-    // طلب حضور واحد للإدارة والعمال - one attendance request for management and workers
-    erpSection(
-      "attendance",
-      erp.attendance.source === "erp" || erp.workers.source === "erp",
-      loadTodayAttendance,
-      results
-    ),
+    // طلب حضور واحد لكل الكروت - one attendance request for every card
+    erpSection("attendance", true, loadTodayAttendance, results),
     batchesSection(results),
     erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
     charitySection(results),
@@ -685,7 +704,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const stoppedCount = kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
-    attendance: managementAttendance(erp.attendance.source === "erp" ? today ?? NO_ATTENDANCE : null),
+    attendance: buildAttendance(today),
     stock: { packaged, sacks, rawMaterials: { wood, packaging } },
     kilns: {
       working: workingCount,
@@ -698,7 +717,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: kiln.status,
       })),
     },
-    floorWorkers: floorWorkers(erp.workers.source === "erp" ? today ?? NO_ATTENDANCE : null),
     treasury: {
       balance,
       incomingToday,

@@ -39,6 +39,12 @@ body {
 }
 
 @layer utilities {
+  /* scroll رفيع جوه الكروت - thin scrollbar inside cards */
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #232B40 transparent;
+  }
+
   .text-balance {
     text-wrap: balance;
   }

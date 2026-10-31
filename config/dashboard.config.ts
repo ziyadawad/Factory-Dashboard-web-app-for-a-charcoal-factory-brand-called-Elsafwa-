@@ -16,10 +16,37 @@ import type {
   ConfigErpBatches,
   ConfigErpCharity,
   ConfigErpStockMap,
-  ConfigWorker,
+  ConfigAttendanceSection,
 } from "@/lib/types";
 
 export const dashboardConfig = {
+  // ============================================================
+  // الحضور: كل قسم بأكواد البصمة (Attendance Device ID في ERPNext)
+  // Attendance: each section by device code (ERPNext Employee "Attendance Device ID")
+  // - اكتب الكود لوحده (193) أو من لحد كده [1001, 1014] (الاتنين داخلين)
+  // - اسم وحضور كل موظف من ERPNext: حاضر = بصمة النهارده أو Present / Half Day / Work From Home،
+  //   إجازة = On Leave (مش بتتحسب في النسبة)، غائب = Absent أو مفيش لا بصمة ولا حضور
+  // - أي حد حاضر النهارده وكوده مش هنا (أو مالوش كود) بيتحط لوحده في "عمال يومية"
+  // - Active employees only; anyone present today whose code isn't listed (or has none) goes to "عمال يومية"
+  // ============================================================
+  attendance: {
+    sections: {
+      management: { label: "الإدارة", codes: [193, [1001, 1014]] } as ConfigAttendanceSection, // حضور الإدارة
+      // مصنع إنتاج - 3 كروت فرعية جوه "حضور عمال" - production factory, 3 sub-cards inside the workers card
+      production: { label: "عمال إنتاج", codes: [[1015, 1026]] } as ConfigAttendanceSection, // مصنع إنتاج — عمال إنتاج
+      workshop: { label: "ورشة", codes: [[1027, 1029]] } as ConfigAttendanceSection, // مصنع إنتاج — ورشة
+      operators: { label: "أوبريتر", codes: [[1040, 1045]] } as ConfigAttendanceSection, // مصنع إنتاج — أوبريتر
+      packing: { label: "عمال تعبئة", codes: [[1030, 1039]] } as ConfigAttendanceSection, // عمال تعبئة
+      saw: { label: "عمال منشار", codes: [] } as ConfigAttendanceSection, // عمال منشار (مفيش أكواد لسه - بيظهر 0 / 0)
+      daily: { label: "عمال يومية", codes: [[1055, 1060]] } as ConfigAttendanceSection, // عمال يومية (+ أي حاضر مالوش قسم)
+      // كروت لوحدها برّه "حضور عمال" ومش داخلة في إجمالي العمال - separate cards, not in the workers total
+      drivers: { label: "سواقين", codes: [[1046, 1048]] } as ConfigAttendanceSection, // سواقين
+      reps: { label: "مناديب", codes: [[1049, 1054]] } as ConfigAttendanceSection, // مناديب
+      guards: { label: "غفر", codes: [[1061, 1063]] } as ConfigAttendanceSection, // غفر
+    },
+    factoryLabel: "مصنع إنتاج", // اسم الكارت اللي فيه عمال إنتاج والورشة والأوبريتر - factory card name
+  },
+
   // ============================================================
   // الربط مع ERPNext - كل رقم بنختار هو جاي منين
   // ERPNext link - choose where each number comes from
@@ -38,17 +65,8 @@ export const dashboardConfig = {
       incomingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // الوارد النهارده
       outgoingToday: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // المنصرف النهارده
     },
-    // الحضور: كل شخص ليه employeeId في data.attendance و data.workers تحت
-    // حاضر = Attendance النهارده (Draft أو Submitted) بحالة Present / Half Day / Work From Home، أو أي Employee Checkin النهارده
-    // غايب = Attendance بحالة Absent / On Leave، أو مفيش أي تسجيل ليه
-    // بيظهر ويتعد بس اللي employeeId بتاعه موظف Active في ERPNext. اللي مالوش employeeId أو مش Active مش بيظهر خالص
-    // (لا في الإجمالي ولا حاضر ولا غايب) لحد ما يتضاف في ERPNext - القايمة في docs/missing-employees.md
-    // لو ERPNext وقع بيفضل آخر حضور نجح ظاهر مع علامة "غير متصل"
-    // لو مفيش ولا تسجيل حضور في الشركة كلها النهارده: الكروت بتكتب "لم يتم تسجيل الحضور بعد" (ومحدش بيظهر غايب)
-    // Attendance: only members whose employeeId is an Active ERPNext Employee are shown or counted;
-    // present / absent comes from ERPNext only (the config present flag is not used)
-    attendance: { source: "erp" } as ConfigErpSource, // حضور الإدارة
-    workers: { source: "erp" } as ConfigErpSource, // عمال الأرضية (ومعاهم عمال اليومية)
+    // الحضور دايما من ERPNext - التقسيم بالأكواد في attendance.sections فوق
+    // Attendance always comes from ERPNext - sections by device code in attendance.sections above
 
     // الأفران = كل Workstation اسمه بيبدأ بـ "فرن" (مترتبين بالرقم)، فلو اتضاف "فرن 7" في ERPNext بيظهر لوحده
     // الحالة: Production = شغالة، Maintenance / Problem = صيانة، أي حاجة تانية (Off / Idle / Setup / فاضي) = متوقفة
@@ -207,122 +225,6 @@ export const dashboardConfig = {
       balance: 460607, // الرصيد الحالي بالجنيه - current balance in EGP
       incomingToday: 156729, // الوارد النهارده بالجنيه - money in today (EGP)
       outgoingToday: 12300, // المنصرف النهارده بالجنيه - money out today (EGP)
-    },
-
-    // حضور الإدارة - العمال في الإدارة
-    // Management attendance - office workers
-    // كل واحد { name, employeeId, present }: name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext،
-    // present = يدوي (بيستخدم بس لو الحضور manual). اللي مالوش employeeId Active في ERPNext مش بيظهر
-    // Each person { name, employeeId, present }; present is used only when attendance is manual
-    attendance: {
-      members: [
-        { name: "حماده شاهين", employeeId: "حماده شحات محمد شاهين", present: true },
-        { name: "يوسف عاطف", employeeId: "يوسف عاطف", present: true },
-        { name: "ناجى احمد بصير", employeeId: "ناجى احمد بصير على", present: true },
-        { name: "زياد مصطفى عوض", employeeId: "HR-EMP-00193", present: true },
-        { name: "ايناس اسماعيل", employeeId: "ايناس إسماعيل عوض", present: true }, // محتمل: الإيناس الوحيدة بس الاسم التاني مختلف
-        { name: "مى منسى", present: true }, // مش لاقيينها في ERPNext - not found in ERPNext
-        { name: "فاطمه طلال", employeeId: "فاطمه طلال الصافورى", present: false },
-        { name: "ايه احمد", employeeId: "ايه احمد", present: true },
-        { name: "عايد عرموش", employeeId: "عايد عرموش", present: true },
-        { name: "طه على طه", employeeId: "طه علي طه", present: true },
-      ] as ConfigWorker[],
-    },
-
-    // عمال الأرضية - العمال على الأرض مقسمين حسب القسم
-    // Floor workers - workers on the floor divided by department
-    // كل مجموعة فيها members: كل عامل { name, employeeId, present }
-    // - name = الاسم اللي بيظهر، employeeId = ID الموظف في ERPNext (لو لسه مش معروف سيبه)
-    // - present = حاضر النهارده (true) ولا لأ (false)
-    // - daily: true = عامل يومية: بيظهر في قسمه وكمان في خانة "عمال يومية"، ومتكتبوش مرتين
-    // الإجمالي = عدد الأعضاء اللي ليهم employeeId Active في ERPNext، والحاضر من ERPNext (بيتحسبوا لوحدهم)
-    // الشخص بيتعد مرة واحدة في إجمالي مصنع الإنتاج وإجمالي الكارت (بالـ employeeId، ولو مفيش بالاسم)
-    // Each person is listed ONCE; totals count each person once (by employeeId, else by name)
-    workers: {
-      // مصنع الإنتاج - متقسم 3 مجموعات، والرقم اللي في عنوانه بيتحسب لوحده
-      // Production factory - split into 3 sub-groups; its header count is calculated
-      productionFactory: {
-        label: "مصنع إنتاج", // اسم القسم الكبير - section name
-        groups: {
-          production: {
-            // عمال الإنتاج - production workers
-            label: "عمال إنتاج", // اسم المجموعة - group name
-            members: [
-              { name: "الطيب", employeeId: "الطيب مصطفى محمد عبدالظاهر", present: true }, // محتمل: الوحيد اللي اسمه الأول الطيب (وظيفته مشرف انتاج)
-              { name: "شعبان", employeeId: "شعبان السيد بيومى", present: true },
-              { name: "محمود عابدين", employeeId: "محمود عابدين", present: true },
-              { name: "فايز زكى", employeeId: "فايز  ذكى", present: true },
-              // عامل يومية – بيظهر في خانة اليومية وفي قسمه
-              { name: "عبدالناصر", employeeId: "عبدالناصر عبداللطيف", present: true, daily: true },
-              { name: "عبدالظاهر", employeeId: "عبدالظاهر الطيب مصطفى", present: true }, // اتنقل من المنشار
-              // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينه في ERPNext لسه)
-              { name: "هاشم نادر", present: true, daily: true },
-            ] as ConfigWorker[],
-          },
-          workshop: {
-            // الورشة - workshop workers
-            label: "ورشة", // اسم المجموعة - group name
-            members: [
-              { name: "محمد عصام", employeeId: "محمد عصام صقر", present: true },
-              // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينه في ERPNext لسه)
-              { name: "احمد حمدى", present: true, daily: true },
-            ] as ConfigWorker[],
-          },
-          operators: {
-            // الأوبريتر - machine operators
-            label: "أوبريتر", // اسم المجموعة - group name
-            members: [
-              { name: "محمد حسين", employeeId: "محمد حسين محمود حسن", present: true },
-              { name: "محمد الطيب", employeeId: "محمد الطيب", present: true },
-              { name: "حسن فضيل", employeeId: "حسن محمد فضيل", present: true },
-            ] as ConfigWorker[],
-          },
-        },
-      },
-      packing: {
-        // عمال التعبئة - packing workers
-        label: "عمال تعبئة", // اسم المجموعة - group name
-        members: [
-          { name: "طارق", employeeId: "طارق قاسم حسن منصور", present: true },
-          { name: "رضا", employeeId: "رضا احمد سيد", present: true },
-          { name: "زهراء", employeeId: "زهرة محمد الحسينى", present: true }, // محتمل: زهرة هي الوحيدة
-          { name: "دنيا", employeeId: "دنيا حسن محمود", present: true },
-          { name: "زينب", employeeId: "زينب احمد فريد", present: true },
-          { name: "هويدا", employeeId: "هويدا السيد ابراهيم", present: true },
-          { name: "ملك", employeeId: "ملك سعيد فتحي", present: true },
-          { name: "جيهان", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
-          { name: "جومانه", employeeId: "جومانا سعيد فتحي", present: true },
-          { name: "سماح", employeeId: "سماح سعيد عامر", present: true },
-          // عامل يومية – بيظهر في خانة اليومية وفي قسمه (مش لاقيينها في ERPNext لسه)
-          { name: "وفاء فكرى", present: true, daily: true },
-        ] as ConfigWorker[],
-      },
-      saw: {
-        // عمال المنشار - saw workers
-        label: "عمال منشار", // اسم المجموعة - group name
-        members: [
-          { name: "محمد حسن", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
-        ] as ConfigWorker[],
-      },
-      drivers: {
-        // السواقين - drivers
-        label: "سواقين", // اسم المجموعة - group name
-        members: [
-          { name: "محمود القرش", employeeId: "محمود محمد عبده القرش", present: true },
-          { name: "حماده فهمى", employeeId: "حماده فهمى إسماعيل", present: true },
-          { name: "عبدالمقصود", employeeId: "محمد عبدالمقصود محمد", present: true }, // محتمل: السواق الوحيد اللي فيه عبدالمقصود
-          { name: "اسلام", employeeId: "اسلام محمد عوض", present: true }, // محتمل: الإسلام الوحيد (وظيفته مندوب)
-          { name: "كريم", employeeId: "كريم مدحت عوض", present: true },
-          { name: "اليمنى", employeeId: "مصطفى خالد اليمني", present: true }, // محتمل: الوحيد اللي اسمه اليمني (وظيفته مندوب)
-          { name: "محمود عز", present: true }, // مش لاقيينه في ERPNext - not found in ERPNext
-          { name: "ابراهيم وصفى", employeeId: "إبراهيم محمد وصفى", present: true },
-        ] as ConfigWorker[],
-      },
-      // عمال اليومية - أعضاءها هما اللي daily: true في كل الأقسام فوق (متكتبش أسماء هنا)
-      // Daily workers - its members are everyone marked daily: true above (don't list names here)
-      daily: {
-        label: "عمال يومية", // اسم المجموعة - group name
-      },
     },
 
     // الأفران - حالة كل فرن (بتُستخدم بس لو erp.kilns يدوي أو ERPNext مش بيرد)
@@ -504,6 +406,15 @@ export const dashboardConfig = {
 
     // الكروت - البطاقات اللي بتظهر البيانات
     // Cards - the cards showing data
+    // صفحة الحضور بتترسم على مقاس ثابت وبتكبر/تصغر مرة واحدة على قد الشاشة
+    // The attendance page is drawn at a fixed size and scaled once to fit the screen
+    attendanceCanvas: {
+      width: 1920, // عرض الشاشة اللي الصفحة متصممة عليها - design width (px)
+      height: 1080, // طول الشاشة اللي الصفحة متصممة عليها (مع الهيدر) - design height including the header (px)
+      headerMinWidth: 1280, // شاشة أضيق من كده: الهيدر بيتصغّر على قد العرض في الصفحة دي - narrower: the header is shrunk to fit here
+      portraitMaxWidth: 900, // موبايل بالطول لو العرض أقل من كده: الكروت في عمود واحد - phone portrait below this width: one column
+    },
+
     cards: {
       cardPadding: 16, // المسافة داخل البطاقة من الحواف - padding inside card
       gap: 16, // المسافة بين البطاقات - gap between cards
@@ -554,8 +465,7 @@ export const dashboardConfig = {
       countLabelFontSize: 18, // حجم كلمة "حاضر" و "غائب" - "حاضر" / "غائب" label font size
       countPaddingY: 14, // المسافة فوق وتحت جوه مربع حاضر/غائب (كل ما تكبر المربع يطول) - vertical padding (bigger = taller box)
       listLabelFontSize: 16, // حجم كلمة "الحاضرين" / "الغائبين" / "لم يسجّلوا بعد" - list label font size
-      chipFontSize: 16, // حجم الأسامي جوه الكبسولات - name chip font size
-      minChipFontSize: 13, // لو الأسامي مش واخدة مكانها الخط بيصغر لحد كده، والأسامي عمرها ما بتستخبى - smallest chip size; names are never hidden
+      chipFontSize: 16, // حجم الأسامي جوه الكبسولات (لو كتير بتعمل scroll جوه الكارت) - name chip font size (many names scroll)
       chipPaddingX: 10, // المسافة يمين وشمال جوه الكبسولة - name chip horizontal padding
       chipPaddingY: 3, // المسافة فوق وتحت جوه الكبسولة - name chip vertical padding
     },
@@ -563,13 +473,14 @@ export const dashboardConfig = {
     // عمال الأرضية - بطاقة عمال الأرضية
     // Floor Workers - floor workers card
     floorWorkers: {
-      groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
+      groupTitleFontSize: 17, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
       minGroupTitleFontSize: 11, // أصغر حجم لاسم القسم لو مش واخد مكانه (الاسم عمره ما بيتقص) - smallest group name size; names are never cut
-      groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
-      nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
-      minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
-      subGroupTitleFontSize: 14, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
+      groupNumberFontSize: 28, // حجم رقم الحاضرين في كل قسم - present count font size per group
+      groupTotalFontSize: 18, // حجم "/ الإجمالي" جنب رقم الحاضرين - "/ total" next to the present count
+      nameChipFontSize: 14, // حجم أسماء العمال (لو كتير بتعمل scroll جوه الكارت) - worker name chip font size (many names scroll)
+      subGroupTitleFontSize: 15, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
       factoryRowHeight: 1.2, // ارتفاع صف مصنع الإنتاج بالنسبة لصف باقي الأقسام - factory row height vs the other groups' row
+      separateCardsHeight: 200, // ارتفاع كروت السواقين والمناديب والغفر تحت حضور عمال (بكسل) - drivers / reps / guards cards height (px)
     },
 
     // الأفران - بطاقة الأفران

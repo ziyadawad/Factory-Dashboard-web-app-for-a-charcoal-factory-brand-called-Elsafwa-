@@ -1,13 +1,50 @@
 export type KilnStatus = "working" | "maintenance" | "stopped";
 
-export interface Attendance {
-  present: number;
-  absent: number;
+// حالة الشخص النهارده - a person's status today
+export type PersonStatus = "present" | "absent" | "leave";
+
+export interface AttendancePerson {
+  name: string; // أول اسمين من employee_name - first two words of employee_name
+  status: PersonStatus;
+}
+
+// قسم حضور: total = كل اللي فيه، leave = إجازة (مش داخلين في النسبة)
+// An attendance section: total = everyone in it, leave = on leave (left out of the percentage)
+export interface AttendanceGroup {
+  label: string;
   total: number;
-  presentNames: string[];
-  absentNames: string[];
-  allNames: string[]; // كل الإدارة (بتظهر لما الحضور لسه متسجلش) - everyone, shown while nothing is recorded
-  notRecorded?: boolean; // مفيش أي تسجيل حضور النهارده في ERPNext - nothing recorded today yet
+  present: number;
+  leave: number;
+  people: AttendancePerson[]; // الحاضرين الأول - present first
+}
+
+// مصنع الإنتاج: 3 مجموعات - production factory with 3 sub-groups (its totals = their sum)
+export interface ProductionFactory extends Omit<AttendanceGroup, "people"> {
+  groups: {
+    production: AttendanceGroup; // عمال إنتاج
+    workshop: AttendanceGroup; // ورشة
+    operators: AttendanceGroup; // أوبريتر
+  };
+}
+
+// حضور عمال: مصنع إنتاج + تعبئة + منشار + يومية (السواقين والمناديب والغفر برّه)
+// Workers attendance: factory + packing + saw + daily (drivers, reps and guards are separate)
+export interface WorkersAttendance {
+  productionFactory: ProductionFactory;
+  packing: AttendanceGroup;
+  saw: AttendanceGroup;
+  daily: AttendanceGroup;
+  present: number;
+  total: number;
+}
+
+// كل كروت الحضور - every attendance card
+export interface Attendance {
+  management: AttendanceGroup;
+  workers: WorkersAttendance;
+  drivers: AttendanceGroup;
+  reps: AttendanceGroup;
+  guards: AttendanceGroup;
 }
 
 // نوع واحد جوه الكارت (عادي/كامل، ناعم/خشن/مكمورة...) - one type inside a stock card
@@ -93,38 +130,6 @@ export interface Kilns {
   kilns: Kiln[];
 }
 
-export interface WorkerGroup {
-  label: string;
-  total: number;
-  presentNames: string[];
-}
-
-// مصنع الإنتاج: 3 مجموعات - production factory with 3 sub-groups
-// present / total بيعدوا كل شخص مرة واحدة - present / total count each person once
-export interface ProductionFactory {
-  label: string;
-  groups: {
-    production: WorkerGroup; // عمال إنتاج
-    workshop: WorkerGroup; // ورشة
-    operators: WorkerGroup; // أوبريتر
-  };
-  present: number;
-  total: number;
-}
-
-// daily = عمال اليومية (برضه موجودين في أقسامهم) - daily workers (also listed in their own group)
-// present / total = إجمالي الكارت، كل شخص مرة واحدة - card totals, each person once
-export interface FloorWorkers {
-  productionFactory: ProductionFactory;
-  packing: WorkerGroup;
-  saw: WorkerGroup;
-  drivers: WorkerGroup;
-  daily: WorkerGroup;
-  present: number;
-  total: number;
-  notRecorded?: boolean; // مفيش أي تسجيل حضور النهارده في ERPNext - nothing recorded today yet
-}
-
 // تغيير اليوم = incomingToday - outgoingToday (calculated in the UI)
 export interface Treasury {
   balance: number;
@@ -197,7 +202,6 @@ export interface DashboardData {
   attendance: Attendance;
   stock: Stock;
   kilns: Kilns;
-  floorWorkers: FloorWorkers;
   treasury: Treasury;
   batches: Batches | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   charity: Charity | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
@@ -244,12 +248,11 @@ export interface ConfigPage {
   durationSeconds: number; // مدة الصفحة في التقليب التلقائي - seconds on screen when auto rotating
 }
 
-// عامل في الكونفج - a worker in the config (listed once, in their department group)
-export interface ConfigWorker {
-  name: string;
-  employeeId?: string; // ID الموظف في ERPNext
-  present: boolean;
-  daily?: boolean; // عامل يومية: بيظهر كمان في خانة عمال يومية
+// قسم حضور في الكونفج: أكواد البصمة (attendance_device_id) - رقم لوحده أو [من، لحد]
+// An attendance section in the config: device codes, a single number or an inclusive [from, to] range
+export interface ConfigAttendanceSection {
+  label: string;
+  codes: (number | [number, number])[];
 }
 
 export interface ConfigKiln {
