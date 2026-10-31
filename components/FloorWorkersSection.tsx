@@ -238,7 +238,7 @@ function GroupBox({
     const el = chipsRef.current;
     if (!el || fontSize <= minFontSize) return;
     const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-chip]"));
-    const overflows = el.scrollHeight > el.clientHeight + 1 || chips.some((chip) => chip.scrollWidth > chip.clientWidth + 1);
+    const overflows = el.scrollHeight > el.clientHeight || chips.some((chip) => chip.scrollWidth > chip.clientWidth);
     if (overflows) setFontSize(Math.max(minFontSize, fontSize - 1));
   });
   const textStyle = { fontSize: `${fontSize}px` };
@@ -277,29 +277,22 @@ function GroupBox({
               ))}
             </div>
           ) : (
-            absent.length === 0 && (
-              <p className="text-gray-400" style={textStyle}>
-                لا يوجد
-              </p>
-            )
+            <p className="text-gray-400" style={textStyle}>
+              لا يوجد
+            </p>
           )}
-          {/* "غائب" في أول سطر الأسامي الحمرا (مش سطر لوحده)، ولو مفيش حد حاضر "لا يوجد" قبلها في نفس السطر
-              The "غائب" label starts the red names row; with nobody present, "لا يوجد" comes first on that row */}
+          {/* "✕ غائب" في سطر لوحده والأسامي الحمرا تحتها - the "✕ غائب" label on its own line, red names under it */}
           {absent.length > 0 && (
-            <div className={`flex flex-wrap items-center content-start gap-1 min-w-0 ${shown.length > 0 ? "mt-1" : ""}`}>
-              {shown.length === 0 && (
-                <span className="text-gray-400 whitespace-nowrap ml-2" style={textStyle}>
-                  لا يوجد
-                </span>
-              )}
-              <span
-                className="flex items-center gap-0.5 font-bold text-statusRed whitespace-nowrap"
+            <>
+              <p
+                className="flex items-center gap-0.5 font-bold text-statusRed whitespace-nowrap mt-1 mb-0.5"
                 style={{ fontSize: `${text.workerAbsentLabelFontSize}px` }}
               >
                 <X className="w-4 h-4" strokeWidth={3} />
                 غائب
-              </span>
-              {absent.map((person, index) => (
+              </p>
+              <div className="flex flex-wrap content-start gap-1 min-w-0">
+                {absent.map((person, index) => (
                   <NameChip
                     key={index}
                     name={person.name}
@@ -308,7 +301,8 @@ function GroupBox({
                     fontSize={fontSize}
                   />
                 ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}

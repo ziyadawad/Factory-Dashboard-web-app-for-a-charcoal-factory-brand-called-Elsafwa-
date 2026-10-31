@@ -49,6 +49,7 @@ export const dashboardConfig = {
       "HR-EMP-00197", // عيد صقر (كود 1027)
       "HR-EMP-00201", // فاطمة محمد هاشم (كود 1057)
       "احمد حمدي ابراهيم", // احمد حمدي ابراهيم (كود 1059)
+      "محمد عبدالمقصود محمد", // محمد عبدالمقصود محمد - سواق (كود 1046)
     ],
     factoryLabel: "مصنع إنتاج", // اسم الكارت اللي فيه عمال إنتاج والورشة والأوبريتر - factory card name
   },
@@ -435,18 +436,23 @@ export const dashboardConfig = {
     treasury: {
       // الأرقام بتصغر لوحدها لو الكارت ضيق: الحجم = أصغر قيمة بين الـ Max والـ Scale% من عرض الكارت
       // Numbers shrink automatically on narrow cards: size = min(MaxSize px, Scale% of the card width)
-      balanceMaxSize: 84, // أكبر حجم لرقم الرصيد الكبير بالبكسل - max balance number size (px)
-      balanceScale: 17, // رقم الرصيد = 17% من عرض الكارت لو أصغر من الـ Max - balance size as % of card width
+      // رقم الرصيد = min(balanceMaxSize px, balanceScale cqi) - cqi = 1% من عرض كارت الخزنة نفسه
+      // balance size = min(balanceMaxSize px, balanceScale cqi), cqi = 1% of the treasury card width
+      balanceMaxSize: 92, // أكبر حجم لرقم الرصيد الكبير بالبكسل - max balance number size (px)
+      balanceScale: 19, // رقم الرصيد = 19% من عرض الكارت (كان 17) - balance size as % of card width (was 17)
+      balanceBaseLength: 10, // لو الرقم أطول من 10 حروف (زي 1,262,928.63) بيصغر بالنسبة عشان مايعدّيش الكارت - longer numbers shrink to stay inside
       currencyFontSize: 28, // حجم "ج.م" اللي تحت الرصيد - "ج.م" under the balance
       changeMaxSize: 26, // أكبر حجم لرقم تغيير اليوم (+144,429 ج.م) وأيقونته - max today's change badge size (px)
       changeScale: 7, // شارة التغيير = 7% من عرض الكارت لو أصغر من الـ Max - change badge size as % of card width
       changePaddingX: 20, // المسافة يمين وشمال جوه شارة التغيير - change badge horizontal padding
       changePaddingY: 10, // المسافة فوق وتحت جوه شارة التغيير - change badge vertical padding
-      flowLabelMaxSize: 20, // أكبر حجم لكلمة "وارد اليوم" و "منصرف اليوم" - max incoming / outgoing label size (px)
-      flowLabelScale: 12, // الكلمة = 12% من عرض المربع لو أصغر من الـ Max - label size as % of box width
-      flowIconSize: 22, // حجم السهم اللي جنب "وارد اليوم" و "منصرف اليوم" - incoming / outgoing arrow icon size
-      flowMaxSize: 38, // أكبر حجم لرقم الوارد والمنصرف بالبكسل - max incoming / outgoing number size (px)
-      flowScale: 21, // رقم الوارد/المنصرف = 21% من عرض المربع لو أصغر من الـ Max - number size as % of box width
+      // "وارد اليوم" / "منصرف اليوم": الأحجام بالنسبة لعرض المربع بتاعها (cqi)، والسهم على قد الكلمة
+      // incoming / outgoing: sizes relative to their own box width (cqi); the arrow follows the label size
+      flowLabelMaxSize: 22, // أكبر حجم لكلمة "وارد اليوم" و "منصرف اليوم" - max incoming / outgoing label size (px)
+      flowLabelScale: 14, // الكلمة = 14% من عرض المربع (كان 12) - label size as % of box width (was 12)
+      flowMaxSize: 44, // أكبر حجم لرقم الوارد والمنصرف بالبكسل - max incoming / outgoing number size (px)
+      flowScale: 24, // رقم الوارد/المنصرف = 24% من عرض المربع (كان 21) - number size as % of box width (was 21)
+      flowBaseLength: 7, // لو الرقم أطول من 7 حروف (زي 1,156,729) بيصغر بالنسبة - longer numbers shrink to stay inside
       flowCurrencyFontSize: 16, // حجم "ج.م" تحت رقم الوارد والمنصرف - "ج.م" under incoming / outgoing
       flowPadding: 10, // المسافة جوه مربع الوارد/المنصرف من كل ناحية - incoming / outgoing box padding (all sides)
       footerFontSize: 18, // حجم "رصيد الخزنة الحالي" اللي تحت - "رصيد الخزنة الحالي" footer
