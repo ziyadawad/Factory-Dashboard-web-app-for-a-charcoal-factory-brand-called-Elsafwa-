@@ -22,10 +22,6 @@ const NUMBER_LINE_HEIGHT = 1.1;
 // أصغر حجم لاسم الكارت لو مش واخد المساحة - smallest card name font size when it doesn't fit
 const MIN_NAME_FONT_SIZE = 12;
 
-// حجم "الحد الأدنى" وأصغر حجم ليه لو الكارت ضيق - "الحد الأدنى" font size and its smallest size in narrow cards
-const MINIMUM_LABEL_FONT_SIZE = 12;
-const MIN_MINIMUM_LABEL_FONT_SIZE = 9;
-
 // لون "#RRGGBB" بشفافية (0 لـ 1) - "#RRGGBB" color with an opacity (0 to 1)
 function withAlpha(hex: string, alpha: number) {
   const value = Math.round(alpha * 255).toString(16).padStart(2, "0");
@@ -37,9 +33,14 @@ interface StockSectionProps {
   className?: string;
 }
 
-// النوع بيبقى منخفض بس لو فيه حد أدنى متحدد - a type is low only when a minimum is set
+// الرقم ناقص لما يكون أقل من الحد الأدنى بتاعه (config/stock-min.ts) - بالحد 0 بس الرصيد السالب
+// A number is low when it is LESS than its minimum (config/stock-min.ts); with 0 only negative stock
+function isBelow(quantity: number, minimum: number) {
+  return quantity < minimum;
+}
+
 function isLow(variant: StockVariant) {
-  return variant.minimumThreshold > 0 && variant.quantity <= variant.minimumThreshold;
+  return isBelow(variant.quantity, variant.minimumThreshold);
 }
 
 function sumQuantities(variants: StockVariant[]) {
@@ -110,19 +111,16 @@ function QuantityNumber({
   );
 }
 
-// شريط التقدم وتحته "الحد الأدنى" (لو متحدد) - progress bar with "الحد الأدنى" under it (when set)
+// شريط التقدم: مليان زي ما هو، ولو الرقم ناقص بيقلب أحمر وطوله = الكمية ÷ الحد الأدنى
+// الحد الأدنى نفسه عمره ما بيظهر - the minimum itself is never shown
+// Progress bar: full as before; when low it turns red and its length = quantity / minimum
 function ProgressBar({ variant }: { variant: StockVariant }) {
   const low = isLow(variant);
-  const showMinimum = variant.minimumThreshold > 0 || dashboardConfig.page2.showZeroMinimum;
-  const progressPercentage =
-    variant.minimumThreshold > 0
-      ? Math.min((variant.quantity / (variant.minimumThreshold * 2)) * 100, 100)
-      : 100;
-  const [minimumRef, minimumFontSize] = useFitFontSize<HTMLParagraphElement>(
-    MINIMUM_LABEL_FONT_SIZE,
-    MIN_MINIMUM_LABEL_FONT_SIZE,
-    String(variant.minimumThreshold)
-  );
+  const progressPercentage = !low
+    ? 100
+    : variant.minimumThreshold > 0
+      ? Math.max(0, Math.min((variant.quantity / variant.minimumThreshold) * 100, 100))
+      : 0;
 
   return (
     <div>
@@ -134,11 +132,6 @@ function ProgressBar({ variant }: { variant: StockVariant }) {
           style={{ width: `${progressPercentage}%` }}
         />
       </div>
-      {showMinimum && (
-        <p ref={minimumRef} className="text-gray-500 mt-1 whitespace-nowrap" style={{ fontSize: `${minimumFontSize}px` }}>
-          الحد الأدنى: {formatNumber(variant.minimumThreshold)}
-        </p>
-      )}
     </div>
   );
 }
@@ -182,7 +175,6 @@ function VariantColumn({
         >
           {toEnglishDigits(variant.label)}
         </span>
-        {low && <span className="text-statusRed font-bold text-xs shrink-0">منخفض</span>}
       </div>
       <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} fitColumn />
       <ProgressBar variant={variant} />
@@ -236,6 +228,7 @@ function VariantsCard({
   numberFontSize: maxNumberFontSize,
   showTotal = true,
   showTotalUnit = false,
+  totalMinimum = 0,
 }: {
   name: string;
   unit: string;
@@ -246,13 +239,17 @@ function VariantsCard({
   numberFontSize?: number;
   showTotal?: boolean;
   showTotalUnit?: boolean;
+  // الحد الأدنى للإجمالي - minimum for the card total
+  totalMinimum?: number;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const totalSizes = dashboardConfig.sizes.page2;
   const single = variants.length === 1 && !showTotal;
   const baseNumberFontSize = maxNumberFontSize ?? (single ? sizes.singleNumberFontSize : sizes.numberFontSize);
-  const anyLow = variants.some(isLow);
   const total = sumQuantities(variants);
+  // الإجمالي ناقص (بس لو الكارت فيه إجمالي) - the total is low (only on cards that show a total)
+  const totalLow = showTotal && isBelow(total, totalMinimum);
+  const anyLow = variants.some(isLow) || totalLow;
   const { count: totalCount } = useCountUp(total, 500);
   // رقم الإجمالي بيصغر لو مش واخد مكانه (العرض بس) - the total number shrinks to fit (width only)
   const [totalRef, totalFontSize] = useFitFontSize<HTMLParagraphElement>(
@@ -303,13 +300,23 @@ function VariantsCard({
   });
 
   return (
+    // ناقص: إطار أحمر ولمعة حمرا خفيفة بتنبض بهدوء - low: red border with a soft, slowly pulsing red glow
     <div
-      className={`bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${anyLow ? "border-statusRed" : ""}`}
+      className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${anyLow ? "border-statusRed animate-low-stock" : ""}`}
       style={{
         gridTemplateRows: showTotal ? "auto 1fr auto" : "auto 1fr",
         ...(anyLow ? {} : { borderColor: withAlpha(accent, 0.3) }),
       }}
     >
+      {/* "⚠ محتاج نزوّد" متعلّقة على الإطار اللي فوق، فمش بتاخد مكان ولا بتغطي الاسم
+          The badge hangs on the top border, so it takes no space and never covers the name */}
+      {anyLow && (
+        <span className="absolute -top-2.5 left-2 z-10 flex items-center gap-1 whitespace-nowrap rounded-full border border-statusRed bg-background px-2 text-[11px] leading-[18px] font-bold text-statusRed">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          محتاج نزوّد
+        </span>
+      )}
+
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <CardIcon image={image} icon={icon} name={name} />
@@ -321,7 +328,6 @@ function VariantsCard({
             {toEnglishDigits(name)}
           </h3>
         </div>
-        {anyLow && <AlertTriangle className="w-5 h-5 text-statusRed shrink-0" />}
       </div>
 
       <div ref={variantsRef} className="min-w-0 flex items-center">
@@ -359,7 +365,7 @@ function VariantsCard({
           <p ref={totalRef} className="min-w-0 whitespace-nowrap text-left">
             <span
               className="font-numbers font-extrabold tabular-nums"
-              style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: accent }}
+              style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: totalLow ? "#EF4444" : accent }}
             >
               {formatNumber(totalCount)}
             </span>
@@ -510,6 +516,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
               icon={<Package className="w-8 h-8 text-gray-500" />}
               variants={product.variants}
               accent={colors.packaged}
+              totalMinimum={product.minimumThreshold}
             />
           ))}
         </SectionCard>
@@ -523,6 +530,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
               icon={sack.icon}
               variants={sack.variants}
               accent={colors.sacks}
+              totalMinimum={sack.minimumThreshold}
             />
           ))}
         </SectionCard>
@@ -566,6 +574,7 @@ export default function StockSection({ data, className }: StockSectionProps) {
               accent={colors.rawMaterials}
               showTotal={!!type.subTypes}
               showTotalUnit
+              totalMinimum={type.subTypes ? type.minimumThreshold : undefined}
               numberFontSize={type.subTypes ? sizes.subTypeNumberFontSize : undefined}
             />
           ))}

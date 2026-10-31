@@ -63,6 +63,20 @@ body {
     }
   }
   
+  /* كارت مخزن ناقص: لمعة حمرا خفيفة بتنبض ببطء (مش بتغير المقاس) - low-stock card: soft red glow, slow pulse (no size change) */
+  .animate-low-stock {
+    animation: low-stock 2.8s ease-in-out infinite;
+  }
+
+  @keyframes low-stock {
+    0%, 100% {
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.25);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.55);
+    }
+  }
+
   .animate-pulse-dot {
     animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }

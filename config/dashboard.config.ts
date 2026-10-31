@@ -266,8 +266,7 @@ export const dashboardConfig = {
     // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)
     // Stock (page 2) - packaged products, sacks and raw materials (wood + packaging)
     // كل الإجماليات بتتحسب لوحدها - every total is calculated automatically
-    // minimum = الحد الأدنى: لو أكبر من 0 والكمية وصلته أو أقل، الرقم بيقلب أحمر ويكتب "منخفض" والكارت بيبقى إطاره أحمر
-    // minimum: if > 0 and quantity <= minimum, the number turns red ("منخفض") and the card gets a red border
+    // الحد الأدنى لكل رقم في ملف config/stock-min.ts - every minimum is in config/stock-min.ts
     // ============================================================
     stock: {
       // المنتجات المعبأة - كل منتج متقسم أنواع (variants)، تقدر تزود نوع جديد بسطر جديد
@@ -278,9 +277,9 @@ export const dashboardConfig = {
           unit: "باكت", // وحدة القياس - unit
           image: "/products/quarter.png", // مسار الصورة (لو مش موجودة بتظهر أيقونة) - image path (icon shown if missing)
           variants: [
-            // label = اسم النوع، quantity = الكمية، minimum = الحد الأدنى - type name, quantity, minimum
-            { label: "عادي", quantity: 2007, minimum: 0 },
-            { label: "كامل", quantity: 500, minimum: 0 },
+            // label = اسم النوع، quantity = الكمية - type name, quantity
+            { label: "عادي", quantity: 2007 },
+            { label: "كامل", quantity: 500 },
           ] as ConfigVariant[],
         },
         {
@@ -288,8 +287,8 @@ export const dashboardConfig = {
           unit: "باكت",
           image: "/products/half.png",
           variants: [
-            { label: "عادي", quantity: 2474, minimum: 0 },
-            { label: "كامل", quantity: 600, minimum: 0 },
+            { label: "عادي", quantity: 2474 },
+            { label: "كامل", quantity: 600 },
           ] as ConfigVariant[],
         },
         {
@@ -297,8 +296,8 @@ export const dashboardConfig = {
           unit: "باكت",
           image: "/products/kilo.png",
           variants: [
-            { label: "عادي", quantity: 716, minimum: 0 },
-            { label: "كامل", quantity: 200, minimum: 0 },
+            { label: "عادي", quantity: 716 },
+            { label: "كامل", quantity: 200 },
           ] as ConfigVariant[],
         },
         {
@@ -306,8 +305,8 @@ export const dashboardConfig = {
           unit: "باكت",
           image: "/products/2kg.png",
           variants: [
-            { label: "عادي", quantity: 677, minimum: 0 },
-            { label: "كامل", quantity: 150, minimum: 0 },
+            { label: "عادي", quantity: 677 },
+            { label: "كامل", quantity: 150 },
           ] as ConfigVariant[],
         },
         {
@@ -316,7 +315,7 @@ export const dashboardConfig = {
           image: "/products/3kg.png",
           variants: [
             // نوع واحد بس - one type only
-            { label: "عادي", quantity: 573, minimum: 0 },
+            { label: "عادي", quantity: 573 },
           ] as ConfigVariant[],
         },
       ] as ConfigPackagedProduct[],
@@ -329,35 +328,35 @@ export const dashboardConfig = {
         wood: {
           unit: "طن", // وحدة القياس - unit
           types: [
-            { name: "برتقال", quantity: 120, minimum: 0 }, // name = النوع، quantity = الكمية، minimum = الحد الأدنى
-            { name: "مانجو", quantity: 80, minimum: 0 },
-            { name: "جوافة", quantity: 45, minimum: 0 },
+            { name: "برتقال", quantity: 120 }, // name = النوع، quantity = الكمية
+            { name: "مانجو", quantity: 80 },
+            { name: "جوافة", quantity: 45 },
             {
               name: "بلدي",
               // الأنواع الفرعية للبلدي - بلدي sub-types (بلدي total = their sum)
               subTypes: [
-                { name: "كازوارينا", quantity: 60, minimum: 0 },
-                { name: "توت", quantity: 30, minimum: 0 },
-                { name: "زيتون", quantity: 25, minimum: 0 },
+                { name: "كازوارينا", quantity: 60 },
+                { name: "توت", quantity: 30 },
+                { name: "زيتون", quantity: 25 },
               ] as ConfigWoodSubType[],
             },
-            { name: "بيت نار", quantity: 40, minimum: 0 },
+            { name: "بيت نار", quantity: 40 },
           ] as ConfigWoodType[],
         },
 
         // مواد التعبئة - كل مادة ليها رقم واحد، تقدر تزود مادة جديدة بسطر جديد
         // Packaging materials - one number each; add a material by adding a line
-        // name = اسم المادة، quantity = الكمية، unit = وحدة القياس، minimum = الحد الأدنى
+        // name = اسم المادة، quantity = الكمية، unit = وحدة القياس
         // icon = شكل الأيقونة: "plastic" (أكياس تعبئة)، "roll" (رول)، "bag" (كيس)، "tape" (بكر لاصق)
         // icon = icon shape: "plastic", "roll", "bag" or "tape"
         packaging: [
-          { name: "أكياس تعبئة", quantity: 850, unit: "كجم", minimum: 0, icon: "plastic" },
-          { name: "رولات ربع", quantity: 40, unit: "رول", minimum: 0, icon: "roll" },
-          { name: "رولات نص", quantity: 35, unit: "رول", minimum: 0, icon: "roll" },
-          { name: "أكياس كيلو", quantity: 5000, unit: "كيس", minimum: 0, icon: "bag" },
-          { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", minimum: 0, icon: "bag" },
-          { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", minimum: 0, icon: "bag" },
-          { name: "بكر لاصق", quantity: 0, unit: "عدد", minimum: 0, icon: "tape" },
+          { name: "أكياس تعبئة", quantity: 850, unit: "كجم", icon: "plastic" },
+          { name: "رولات ربع", quantity: 40, unit: "رول", icon: "roll" },
+          { name: "رولات نص", quantity: 35, unit: "رول", icon: "roll" },
+          { name: "أكياس كيلو", quantity: 5000, unit: "كيس", icon: "bag" },
+          { name: "أكياس 2 كيلو", quantity: 3000, unit: "كيس", icon: "bag" },
+          { name: "أكياس 3 كيلو", quantity: 2500, unit: "كيس", icon: "bag" },
+          { name: "بكر لاصق", quantity: 0, unit: "عدد", icon: "tape" },
         ] as ConfigPackagingItem[],
       },
 
@@ -368,26 +367,26 @@ export const dashboardConfig = {
           name: "شكاير برتقال", // اسم الشكاير - sack name
           unit: "شكارة", // وحدة القياس - unit
           variants: [
-            { label: "ناعم", quantity: 766, minimum: 0 }, // label = النوع، quantity = الكمية، minimum = الحد الأدنى
-            { label: "خشن", quantity: 520, minimum: 0 },
-            { label: "مكمورة", quantity: 0, minimum: 0 },
+            { label: "ناعم", quantity: 766 }, // label = النوع، quantity = الكمية
+            { label: "خشن", quantity: 520 },
+            { label: "مكمورة", quantity: 0 },
           ] as ConfigVariant[],
         },
         {
           name: "شكاير مانجو",
           unit: "شكارة",
           variants: [
-            { label: "ناعم", quantity: 80, minimum: 0 },
-            { label: "خشن", quantity: 204, minimum: 0 },
+            { label: "ناعم", quantity: 80 },
+            { label: "خشن", quantity: 204 },
           ] as ConfigVariant[],
         },
         {
           name: "شكاير كازوارينا",
           unit: "شكارة",
           variants: [
-            { label: "ناعم", quantity: 1058, minimum: 0 },
-            { label: "خشن", quantity: 82, minimum: 0 },
-            { label: "مكمورة", quantity: 330, minimum: 0 },
+            { label: "ناعم", quantity: 1058 },
+            { label: "خشن", quantity: 82 },
+            { label: "مكمورة", quantity: 330 },
           ] as ConfigVariant[],
         },
       ] as ConfigSack[],
@@ -619,10 +618,6 @@ export const dashboardConfig = {
   // ============================================================
 
   page2: {
-    // إظهار سطر "الحد الأدنى" لما يكون 0 (false = يظهر بس لو فيه حد أدنى متحدد)
-    // Show the "الحد الأدنى" line when the minimum is 0 (false = only when a real minimum is set)
-    showZeroMinimum: false,
-
     // لون كل قسم: الخط الجانبي والأيقونة والخلفية الخفيفة وإطار الكروت ورقم الإجمالي
     // Each section's accent color: side bar, icon, faint background, card borders and total numbers
     // اكتب اللون بالشكل ده "#RRGGBB" - use the "#RRGGBB" format

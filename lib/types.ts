@@ -61,6 +61,7 @@ export interface PackagedProduct {
   unit: string;
   image?: string;
   variants: StockVariant[];
+  minimumThreshold: number; // الحد الأدنى للإجمالي (من config/stock-min.ts) - minimum for the card total
 }
 
 export interface WoodSubType {
@@ -91,6 +92,7 @@ export interface SackItem {
   unit: string;
   icon?: string;
   variants: StockVariant[];
+  minimumThreshold: number; // الحد الأدنى للإجمالي (من config/stock-min.ts) - minimum for the card total
 }
 
 // مادة تعبئة (أكياس تعبئة، رولات، أكياس، بكر لاصق...) - packaging material, one quantity each
@@ -263,7 +265,6 @@ export interface ConfigKiln {
 export interface ConfigVariant {
   label: string;
   quantity: number;
-  minimum: number;
 }
 
 export interface ConfigPackagedProduct {
@@ -282,13 +283,11 @@ export interface ConfigSack {
 export interface ConfigWoodSubType {
   name: string;
   quantity: number;
-  minimum: number;
 }
 
 export interface ConfigWoodType {
   name: string;
   quantity?: number;
-  minimum?: number;
   subTypes?: ConfigWoodSubType[];
 }
 
@@ -296,6 +295,5 @@ export interface ConfigPackagingItem {
   name: string;
   quantity: number;
   unit: string;
-  minimum: number;
   icon?: string; // "plastic" | "roll" | "bag" | "tape"
 }

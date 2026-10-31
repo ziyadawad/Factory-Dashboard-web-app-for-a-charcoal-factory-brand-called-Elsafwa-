@@ -22,14 +22,20 @@ import {
   PersonStatus,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { stockMinimums } from "@/config/stock-min";
 import { ErpError, erpCall, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
 // Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
-// { label, quantity, minimum } من الكونفج -> شكل الـ API - config variant to the API shape
-function toVariant(variant: ConfigVariant) {
-  return { label: variant.label, quantity: variant.quantity, minimumThreshold: variant.minimum };
+// الحد الأدنى من config/stock-min.ts (لو مش مكتوب = 0) - a minimum from config/stock-min.ts (missing = 0)
+type MinimumTree = Record<string, number | { total?: number; variants?: Record<string, number>; subTypes?: Record<string, number> }>;
+function minimumOf(tree: MinimumTree, name: string, part?: { variant?: string; subType?: string }): number {
+  const entry = tree[name];
+  if (typeof entry === "number") return part ? 0 : entry;
+  if (!entry) return 0;
+  const value = part?.variant !== undefined ? entry.variants?.[part.variant] : part?.subType !== undefined ? entry.subTypes?.[part.subType] : entry.total;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 // ===== الحضور - attendance (ERPNext only, sections by device code) =====
@@ -629,9 +635,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         name: product.name,
         unit: product.unit,
         image: product.image,
+        minimumThreshold: minimumOf(stockMinimums.packaged, product.name),
         variants: await Promise.all(
           product.variants.map(async (variant: ConfigVariant) => ({
-            ...toVariant(variant),
+            label: variant.label,
+            minimumThreshold: minimumOf(stockMinimums.packaged, product.name, { variant: variant.label }),
             quantity: await stock.quantity(`packaged.${product.name}.${variant.label}`,
               erp.stock.packaged[product.name]?.[variant.label], variant.quantity, 0, erp.stock.excludedWarehouses),
           }))
@@ -643,9 +651,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         id: ["orange", "mango", "casuarina"][index] ?? `sack-${index + 1}`,
         name: sack.name,
         unit: sack.unit,
+        minimumThreshold: minimumOf(stockMinimums.sacks, sack.name),
         variants: await Promise.all(
           sack.variants.map(async (variant: ConfigVariant) => ({
-            ...toVariant(variant),
+            label: variant.label,
+            minimumThreshold: minimumOf(stockMinimums.sacks, sack.name, { variant: variant.label }),
             quantity: await stock.quantity(`sacks.${sack.name}.${variant.label}`,
               erp.stock.sacks[sack.name]?.[variant.label], variant.quantity),
           }))
@@ -661,17 +671,18 @@ export async function getDashboardData(): Promise<DashboardData> {
           name: type.name,
           ...(type.subTypes
             ? {
+                minimumThreshold: minimumOf(stockMinimums.wood, type.name),
                 subTypes: await Promise.all(
                   type.subTypes.map(async (sub: ConfigWoodSubType) => ({
                     name: sub.name,
                     quantity: await stock.quantity(`wood.${sub.name}`, erp.stock.wood[sub.name], sub.quantity, 1),
-                    minimumThreshold: sub.minimum,
+                    minimumThreshold: minimumOf(stockMinimums.wood, type.name, { subType: sub.name }),
                   }))
                 ),
               }
             : {
                 quantity: await stock.quantity(`wood.${type.name}`, erp.stock.wood[type.name], type.quantity ?? 0, 1),
-                minimumThreshold: type.minimum,
+                minimumThreshold: minimumOf(stockMinimums.wood, type.name),
               }),
         }))
       ),
@@ -682,7 +693,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         name: item.name,
         unit: await stock.unit(`packaging.${item.name}`, erp.stock.packaging[item.name], item.unit),
         quantity: await stock.quantity(`packaging.${item.name}`, erp.stock.packaging[item.name], item.quantity),
-        minimumThreshold: item.minimum,
+        minimumThreshold: minimumOf(stockMinimums.packaging, item.name),
         icon: item.icon,
       }))
     ),
