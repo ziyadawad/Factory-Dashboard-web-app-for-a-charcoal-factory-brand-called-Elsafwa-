@@ -209,6 +209,11 @@ export const dashboardConfig = {
 
   pages: {
     autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
+    // الصفحة كلها بتعمل reload كل كام دقيقة (عشان ترجع لوحدها بعد ما النت يقطع)، وبترجع لنفس الصفحة اللي كانت عليها
+    // لو النت مقطوع ساعتها بتستنى لحد ما يرجع وبعدين تعمل reload - 0 = مفيش reload
+    // Reload the whole page every N minutes (recovers from internet drops) and return to the same page;
+    // when offline at that moment it waits for the connection to come back. 0 = never
+    reloadMinutes: 5,
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
     // durationSeconds = الصفحة دي تفضل كام ثانية قبل ما تتقلب للي بعدها - seconds on screen before the next page
     // لو حد داس على الأسهم الصفحة بتتقلب والعداد بيبدأ من الأول - a manual switch restarts the timer
@@ -446,14 +451,17 @@ export const dashboardConfig = {
       changeScale: 7, // شارة التغيير = 7% من عرض الكارت لو أصغر من الـ Max - change badge size as % of card width
       changePaddingX: 20, // المسافة يمين وشمال جوه شارة التغيير - change badge horizontal padding
       changePaddingY: 10, // المسافة فوق وتحت جوه شارة التغيير - change badge vertical padding
-      // "وارد اليوم" / "منصرف اليوم": الأحجام بالنسبة لعرض المربع بتاعها (cqi)، والسهم على قد الكلمة
-      // incoming / outgoing: sizes relative to their own box width (cqi); the arrow follows the label size
-      flowLabelMaxSize: 22, // أكبر حجم لكلمة "وارد اليوم" و "منصرف اليوم" - max incoming / outgoing label size (px)
-      flowLabelScale: 14, // الكلمة = 14% من عرض المربع (كان 12) - label size as % of box width (was 12)
-      flowMaxSize: 44, // أكبر حجم لرقم الوارد والمنصرف بالبكسل - max incoming / outgoing number size (px)
-      flowScale: 24, // رقم الوارد/المنصرف = 24% من عرض المربع (كان 21) - number size as % of box width (was 21)
-      flowBaseLength: 7, // لو الرقم أطول من 7 حروف (زي 1,156,729) بيصغر بالنسبة - longer numbers shrink to stay inside
-      flowCurrencyFontSize: 16, // حجم "ج.م" تحت رقم الوارد والمنصرف - "ج.م" under incoming / outgoing
+      // "وارد اليوم" فوق و"منصرف اليوم" تحته، كل واحد بعرض الكارت. الأحجام = min(Max px, Scale cqi)
+      // و cqi = 1% من عرض كارت الخزنة نفسه، والسهم على قد الكلمة
+      // incoming on top of outgoing, each full card width; sizes = min(Max px, Scale cqi), cqi = 1% of the
+      // treasury card width; the arrow follows the label size
+      flowLabelMaxSize: 30, // أكبر حجم لكلمة "وارد اليوم" و "منصرف اليوم" - max incoming / outgoing label size (px)
+      flowLabelScale: 9, // الكلمة = 9% من عرض الكارت - label size as % of card width
+      flowMaxSize: 56, // أكبر حجم لرقم الوارد والمنصرف بالبكسل - max incoming / outgoing number size (px)
+      flowScale: 15, // رقم الوارد/المنصرف = 15% من عرض الكارت - number size as % of card width
+      flowBaseLength: 9, // لو الرقم أطول من 9 حروف (زي 12,156,729) بيصغر بالنسبة - longer numbers shrink to stay inside
+      flowCurrencyMaxSize: 26, // أكبر حجم لـ "ج.م" تحت رقم الوارد والمنصرف - max "ج.م" size under incoming / outgoing
+      flowCurrencyScale: 7, // "ج.م" = 7% من عرض الكارت - "ج.م" size as % of card width
       flowPadding: 10, // المسافة جوه مربع الوارد/المنصرف من كل ناحية - incoming / outgoing box padding (all sides)
       footerFontSize: 18, // حجم "رصيد الخزنة الحالي" اللي تحت - "رصيد الخزنة الحالي" footer
     },

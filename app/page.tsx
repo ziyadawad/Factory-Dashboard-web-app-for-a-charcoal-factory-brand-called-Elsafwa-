@@ -25,6 +25,28 @@ const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
 
 const PAGES = dashboardConfig.pages.list;
 
+// رقم الصفحة اللي كانت ظاهرة قبل الـ reload التلقائي - the page shown before the automatic reload
+const RELOAD_PAGE_KEY = "dashboard-page-index";
+
+function readReloadPage(): number | null {
+  try {
+    const saved = sessionStorage.getItem(RELOAD_PAGE_KEY);
+    sessionStorage.removeItem(RELOAD_PAGE_KEY);
+    const index = saved === null ? NaN : parseInt(saved, 10);
+    return index >= 0 && index < PAGES.length ? index : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveReloadPage(index: number) {
+  try {
+    sessionStorage.setItem(RELOAD_PAGE_KEY, String(index));
+  } catch {
+    // مفيش sessionStorage: الصفحة هتيجي من اللينك (?page=) - no sessionStorage: the URL's ?page= is used
+  }
+}
+
 // ?page=2 (رقم الصفحة) أو ?page=stock (اسمها) - page from the URL: 1-based number or page id
 function pageFromUrl(): number {
   const param = new URLSearchParams(window.location.search).get("page");
@@ -56,7 +78,32 @@ export default function Dashboard() {
   const [pageIndex, setPageIndex] = useState(0);
   // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
   const [switchCount, setSwitchCount] = useState(0);
-  useEffect(() => setPageIndex(pageFromUrl()), []);
+  useEffect(() => setPageIndex(readReloadPage() ?? pageFromUrl()), []);
+
+  // reload كل reloadMinutes، ولو النت مقطوع نستنى "online" عشان مانفتحش صفحة خطأ
+  // Reload every reloadMinutes; when offline wait for the "online" event so we never reload into an error page
+  const pageIndexRef = useRef(0);
+  pageIndexRef.current = pageIndex;
+  useEffect(() => {
+    const minutes = dashboardConfig.pages.reloadMinutes;
+    if (!(minutes > 0)) return;
+    const reload = () => {
+      saveReloadPage(pageIndexRef.current);
+      window.location.reload();
+    };
+    const whenOnline = () => {
+      window.removeEventListener("online", whenOnline);
+      reload();
+    };
+    const timer = setTimeout(() => {
+      if (navigator.onLine) reload();
+      else window.addEventListener("online", whenOnline);
+    }, minutes * 60 * 1000);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("online", whenOnline);
+    };
+  }, []);
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);

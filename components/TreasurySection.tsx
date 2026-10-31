@@ -73,7 +73,8 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 w-full">
+        {/* وارد اليوم فوق ومنصرف اليوم تحته، كل واحد بعرض الكارت - incoming on top, outgoing under it, full width */}
+        <div className="grid grid-cols-1 gap-2 w-full">
           <FlowBox
             label="وارد اليوم"
             value={data.incomingToday}
@@ -120,7 +121,7 @@ function FlowBox({
   return (
     <div
       className={`border rounded-xl text-center min-w-0 ${boxClass}`}
-      style={{ padding: `${sizes.flowPadding}px`, containerType: "inline-size" }}
+      style={{ padding: `${sizes.flowPadding}px` }}
     >
       {/* السهم على قد الكلمة - the arrow follows the label size */}
       <div
@@ -137,7 +138,7 @@ function FlowBox({
       >
         {formatNumber(count)}
       </p>
-      <p className="text-gray-400" style={{ fontSize: `${sizes.flowCurrencyFontSize}px` }}>
+      <p className="text-gray-400" style={{ fontSize: `min(${sizes.flowCurrencyMaxSize}px, ${sizes.flowCurrencyScale}cqi)` }}>
         ج.م
       </p>
     </div>
