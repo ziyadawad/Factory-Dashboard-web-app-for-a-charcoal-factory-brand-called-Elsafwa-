@@ -415,8 +415,8 @@ export const dashboardConfig = {
     // مجموعهم لازم يفضل 4 عشان الأفران تفضل بنفس العرض - keep the sum at 4 so the kilns card keeps its width
     topRowColumns: {
       treasury: 0.75, // رصيد الخزنة (أضيق) - treasury (narrower)
-      management: 0.75, // حضور الإدارة (أضيق) - management attendance (narrower)
-      workers: 1.5, // حضور عمال (أعرض) - workers attendance (wider)
+      management: 0.68, // حضور الإدارة (أضيق) - management attendance (narrower)
+      workers: 1.57, // حضور عمال (أعرض، خد شوية من الإدارة عشان الأسامي الكبيرة) - workers attendance (wider)
       kilns: 1, // الأفران (نفس العرض) - kilns (same width)
     },
 
@@ -464,12 +464,8 @@ export const dashboardConfig = {
     // عمال الأرضية - بطاقة عمال الأرضية
     // Floor Workers - floor workers card
     floorWorkers: {
-      groupTitleFontSize: 16, // حجم اسم القسم (عمال إنتاج، تعبئة...) - group name font size
       minGroupTitleFontSize: 11, // أصغر حجم لاسم القسم لو مش واخد مكانه (الاسم عمره ما بيتقص) - smallest group name size; names are never cut
-      groupNumberFontSize: 20, // حجم رقم الحاضرين في كل قسم - present count font size per group
-      nameChipFontSize: 12, // حجم أسماء العمال الحاضرين - present worker name chip font size
-      minNameChipFontSize: 10, // أصغر حجم للأسماء لو مش كافية المساحة - smallest chip font size when names don't fit
-      subGroupTitleFontSize: 14, // حجم اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - sub-group name font size
+      // باقي مقاسات "حضور عمال" في sizes.page1 تحت - the other "حضور عمال" sizes are in sizes.page1 below
     },
 
     // الأفران - بطاقة الأفران
@@ -533,12 +529,37 @@ export const dashboardConfig = {
     // كارت "حضور عمال" في الصفحة 1 - the "حضور عمال" card on page 1
     // ارتفاع مصنع الإنتاج والجزء اللي تحته بالنسبة لبعض (مش بكسل) - factory vs bottom area height, as ratios (not px)
     page1: {
-      factoryRowHeight: 1, // مصنع إنتاج (عمال إنتاج / ورشة / أوبريتر) - كبّره عشان الحاضرين والغايبين ياخدوا مكانهم - factory row
-      bottomRowHeight: 1.2, // تحت: تعبئة | يومية وغفر | سواقين ومناديب - bottom area: packing | daily + guards | drivers + reps
-      // العمود اللي في النص: عمال يومية فوق (حوالي 60%) وغفر تحت (حوالي 40%) - middle column: daily on top, guards below
-      middleColumn: { daily: 0.6, guards: 0.4 },
-      // العمود الشمال: سواقين فوق (حوالي 40%) ومناديب تحت لحد الآخر (حوالي 60%) - left column: drivers on top, reps below
-      leftColumn: { drivers: 0.4, reps: 0.6 },
+      // مصنع إنتاج طوله على قد الأسامي، بس مايزيدش عن النسبة دي من طول الكارت (الباقي للأقسام اللي تحت)
+      // The factory row is as tall as its names, but at most this % of the card height (the rest is the bottom area)
+      factoryMaxHeightPercent: 42,
+      // العمود اللي في النص: عمال يومية فوق وغفر تحت (نص ونص) - middle column: daily on top, guards below
+      middleColumn: { daily: 0.55, guards: 0.45 },
+      // العمود الشمال: سواقين فوق (حوالي 45%) ومناديب تحت (حوالي 55%) - left column: drivers on top, reps below
+      leftColumn: { drivers: 0.45, reps: 0.55 },
+
+      // مقاسات الكلام جوه "حضور عمال" (بكسل) - text sizes inside "حضور عمال" (px)
+      workerChipFontSize: 20, // حجم أسامي العمال (حاضر وغائب) - لو كتير بتعمل scroll جوه الكارت - worker name chips (present and absent)
+      workerChipPaddingX: 10, // المسافة يمين وشمال جوه الكبسولة - chip horizontal padding
+      workerChipPaddingY: 2, // المسافة فوق وتحت جوه الكبسولة - chip vertical padding
+      workerTitleFontSize: 20, // اسم القسم (مصنع إنتاج، عمال تعبئة، سواقين...) - section name
+      workerSubTitleFontSize: 18, // اسم المجموعة جوه مصنع الإنتاج (عمال إنتاج، ورشة، أوبريتر) - factory sub-group name
+      workerNumberFontSize: 26, // رقم الحاضرين في كل قسم - present count per section
+      workerTotalFontSize: 17, // "/ الإجمالي" جنب رقم الحاضرين - "/ total" next to the present count
+      workerAbsentLabelFontSize: 16, // كلمة "غائب" فوق الأسامي الحمرا - the red "غائب" label
+
+      // شاشة أضيق من compactMaxWidth (زي 1366): نفس المقاسات اللي فوق بس أصغر شوية عشان الأسامي ماتتقصش
+      // Screens narrower than compactMaxWidth (e.g. 1366): the same sizes as above, a bit smaller so names aren't cut
+      compactMaxWidth: 1599,
+      compact: {
+        workerChipFontSize: 15,
+        workerChipPaddingX: 6,
+        workerChipPaddingY: 1,
+        workerTitleFontSize: 16,
+        workerSubTitleFontSize: 15,
+        workerNumberFontSize: 22,
+        workerTotalFontSize: 14,
+        workerAbsentLabelFontSize: 13,
+      },
     },
 
     // الصدقات (الصفحة 3) - charity page (page 3)
