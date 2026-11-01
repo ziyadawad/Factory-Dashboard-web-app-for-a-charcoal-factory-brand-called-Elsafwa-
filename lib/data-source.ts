@@ -51,6 +51,7 @@ export type TodayAttendanceRows = {
     attendance_device_id: string | null;
     department: string | null;
     designation: string | null;
+    branch: string | null;
   }[];
   attendance: { employee: string; employee_name: string | null; status: string }[];
   checkins: { employee: string; time: string; log_type: string | null }[];
@@ -65,7 +66,7 @@ export async function loadTodayAttendance(): Promise<TodayAttendanceRows> {
   const [employees, attendance, checkins] = await Promise.all([
     erpGet<{ data: TodayAttendanceRows["employees"] }>("/api/resource/Employee", {
       filters: JSON.stringify([["status", "=", "Active"]]),
-      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation"]),
+      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation", "branch"]),
       limit_page_length: 0,
     }),
     erpGet<{ data: TodayAttendanceRows["attendance"] }>("/api/resource/Attendance", {
@@ -117,6 +118,27 @@ export function employeeStatuses(rows: TodayAttendanceRows): Map<string, PersonS
 
 type SectionPerson = AttendancePerson & { id: string };
 
+// توحيد الأسامي العربي: أ/إ/آ = ا، ة = ه، ى = ي، والمسافات - normalize Arabic names before matching
+export function normalizeArabic(text: string | null | undefined): string {
+  return String(text ?? "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// القسم من فرع الموظف (attendance.branchSections) - section from the employee's branch
+export function branchSection(branch: string | null | undefined): AttendanceSectionKey | undefined {
+  const name = normalizeArabic(branch);
+  if (!name) return undefined;
+  const sections = dashboardConfig.attendance.sections;
+  for (const [configBranch, key] of Object.entries(dashboardConfig.attendance.branchSections)) {
+    if (normalizeArabic(configBranch) === name && key in sections) return key as AttendanceSectionKey;
+  }
+  return undefined;
+}
+
 // كل موظف في قسمه بالكود، والحاضر اللي مالوش قسم بيروح اليومية
 // Each employee into its section by code; anyone present without a section goes to daily
 export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSectionKey, SectionPerson[]> {
@@ -133,7 +155,11 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     if (placed.has(employee.name)) continue;
     const code = deviceCode(employee.attendance_device_id);
     const status = statuses.get(employee.name) ?? "absent";
-    const key = code === null ? undefined : keys.find((k) => sectionHasCode(sections[k], code));
+    // 1) كود البصمة  2) الفرع (اللي مالوش كود: بس لو حاضر)  3) الحاضر اللي مالوش قسم → اليومية
+    // 1) device code 2) branch (no code: only when present) 3) present without a section -> daily
+    const byCode = code === null ? undefined : keys.find((k) => sectionHasCode(sections[k], code));
+    const byBranch = code !== null || status === "present" ? branchSection(employee.branch) : undefined;
+    const key = byCode ?? byBranch;
     const target = key ?? (status === "present" ? "daily" : undefined);
     if (!target) continue;
     placed.add(employee.name);
