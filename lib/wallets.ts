@@ -66,32 +66,69 @@ async function loadWallet(account: string, today: string, totals: Promise<Map<st
   } satisfies WalletNumbers;
 }
 
-// آخر أرقام نجحت لكل حساب (في ذاكرة السيرفر) - last good numbers per account (server memory)
+// آخر أرقام نجحت لكل رقم حساب (في ذاكرة السيرفر) - last good numbers per account number (server memory)
 const lastGood = new Map<string, { day: string; numbers: WalletNumbers }>();
 let cached: { at: number; value: Wallets } | null = null;
 let inFlight: Promise<{ value: Wallets; errors: string[] }> | null = null;
 
+// رقم الحساب ← اسمه الكامل في ERPNext (شركة wallets.company)، وآخر نتيجة نجحت لو الطلب فشل
+// account_number -> full ERPNext account name in wallets.company; the last good map if the request fails
+let lastResolved: Map<string, string> | null = null;
+
+async function resolveAccounts(): Promise<Map<string, string>> {
+  const numbers = config.accounts.map((a) => a.accountNumber).filter(Boolean);
+  if (numbers.length === 0) return new Map();
+  const { message } = await erpPost<{ message: { name: string; account_number: string }[] }>(
+    "/api/method/frappe.client.get_list",
+    {
+      doctype: "Account",
+      filters: [
+        ["account_number", "in", numbers],
+        ["company", "=", config.company],
+        ["is_group", "=", 0],
+      ],
+      fields: ["name", "account_number"],
+      limit_page_length: 0,
+    }
+  );
+  const map = new Map(message.map((row) => [String(row.account_number), row.name]));
+  lastResolved = map;
+  return map;
+}
+
 async function load(): Promise<{ value: Wallets; errors: string[] }> {
   const today = erpToday();
-  const accounts = config.accounts.map((a) => a.account).filter(Boolean);
+  const errors: string[] = [];
+  let resolved: Map<string, string> | null;
+  try {
+    resolved = await resolveAccounts();
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    resolved = lastResolved;
+  }
+  const accounts = resolved ? Array.from(resolved.values()) : [];
   const totals = accounts.length > 0 ? todayTotals(accounts, today) : Promise.resolve(new Map());
   totals.catch(() => undefined); // الغلط بيتسجل مع كل كارت - the error is reported per card
-  const errors: string[] = [];
 
   const list = await Promise.all(
-    config.accounts.map(async ({ name, account, kind }): Promise<WalletCard> => {
-      if (!account) return { name, kind, linked: false, offline: false, numbers: null };
+    config.accounts.map(async ({ label: name, accountNumber, kind }): Promise<WalletCard> => {
+      // مفيش رقم، أو الرقم مش موجود في ERPNext (لسه متعملش) - no number, or the account doesn't exist yet
+      if (!accountNumber || (resolved && !resolved.has(accountNumber))) {
+        return { name, kind, linked: false, offline: false, numbers: null };
+      }
       try {
+        const account = resolved?.get(accountNumber);
+        if (!account) throw new Error(`Account ${accountNumber}: could not be looked up`);
         const numbers = await loadWallet(account, today, totals);
-        lastGood.set(account, { day: today, numbers });
+        lastGood.set(accountNumber, { day: today, numbers });
         return { name, kind, linked: true, offline: false, numbers };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(message);
         // آخر أرقام نجحت النهارده بس (وارد/منصرف اليوم بيتصفروا كل يوم) - only today's last good numbers
-        const fallback = lastGood.get(account);
+        const fallback = lastGood.get(accountNumber);
         const numbers = fallback?.day === today ? fallback.numbers : null;
-        console.error(`[erp] wallet ${account} failed, showing ${numbers ? "last good value" : '"غير متصل"'}:`, message);
+        console.error(`[erp] wallet ${accountNumber} failed, showing ${numbers ? "last good value" : '"غير متصل"'}:`, message);
         return { name, kind, linked: true, offline: true, numbers };
       }
     })

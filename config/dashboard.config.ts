@@ -245,32 +245,30 @@ export const dashboardConfig = {
   // - الرصيد = رصيد الحساب النهارده بنفس طريقة كارت الخزنة في الصفحة 1 (get_balance_on)
   // - وارد اليوم = مجموع المدين، منصرف اليوم = مجموع الدائن من GL Entry للحساب النهارده (بتوقيت القاهرة)
   // - آخر حركة = آخر قيد GL Entry للحساب (مدين = وارد، دائن = منصرف)
-  // - account = اسم الحساب بالظبط زي ERPNext (Account ID). لو فاضي الكارت بيكتب "مش مربوط بحساب"
+  // - كل محفظة بتتربط برقم الحساب (account_number) في شركة company، مش بالاسم. لو الرقم لسه مش موجود في ERPNext
+  //   الكارت بيكتب "مش مربوط بحساب في ERPNext" ولما الحساب يتعمل بيتربط لوحده
   // - kind: "cash" = محفظة كاش (أيقونة محفظة وفلوس)، "fawry" = ماكينة دفع (أيقونة ماكينة وكارت)
   // - لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش الكارت يكتب "غير متصل" (مش أصفار)
   // Balance = get_balance_on as of today (same as the page 1 treasury card); today's in/out = GL Entry
-  // debit/credit today; last movement = the latest GL Entry. account = the exact ERPNext Account ID,
-  // empty = card shows "not linked". On failure the last good value stays with "غير متصل" (never fake zeros)
+  // debit/credit today; last movement = the latest GL Entry. Each wallet is linked by its ERPNext
+  // account_number in `company`; a number that doesn't exist yet shows "not linked" and links itself once
+  // created. On failure the last good value stays with "غير متصل" (never fake zeros)
   // ============================================================
   wallets: {
     cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    company: "ALSafwa Coal", // الشركة اللي بندوّر فيها على أرقام الحسابات - the company whose account numbers are used
     // بالترتيب اللي بتظهر بيه (يمين فوق ← شمال فوق، وبعدين الصف اللي تحت) - in display order (top row right to left, then the bottom row)
+    // label = الاسم اللي بيظهر على الشاشة بالظبط، accountNumber = رقم الحساب في دليل الحسابات
+    // label = the name shown on screen exactly, accountNumber = the account number in the Chart of Accounts
     accounts: [
-      // مفيش حساب اسمه "كاش أ. حمادة" - الأقرب: "1111 - كاش حمادة شاهين - AC" (اكتبه هنا لو هو)
-      // no exact match; closest: "1111 - كاش حمادة شاهين - AC"
-      { name: "كاش أ. حمادة", account: "", kind: "cash" },
-      { name: "كاش الحاج أشرف", account: "1112 - كاش الحاج اشرف - AC", kind: "cash" }, // كاش الحاج اشرف
-      // مفيش حساب بالاسم ده في دليل الحسابات - no such account in the Chart of Accounts
-      { name: "كاش زياد عوض", account: "", kind: "cash" },
-      // مفيش حساب بالاسم ده في دليل الحسابات - no such account in the Chart of Accounts
-      { name: "كاش يوسف عاطف", account: "", kind: "cash" },
-      // الـ ID "كاش كريم عوض" بس اسم الحساب (account_name) في ERPNext بقى "كاش محمود عوض"
-      // the ID is "كاش كريم عوض" but its account_name in ERPNext is now "كاش محمود عوض"
-      { name: "كاش كريم عوض", account: "1113 - كاش كريم عوض - AC", kind: "cash" },
-      // مفيش حساب اسمه "فوري" بالظبط - الأقرب: "1114 - ماكينة فوري - AC" (اكتبه هنا لو هو)
-      // no exact match; closest: "1114 - ماكينة فوري - AC"
-      { name: "فوري", account: "", kind: "fawry" },
-    ] as { name: string; account: string; kind: "cash" | "fawry" }[],
+      { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash" }, // 1111 - كاش حمادة شاهين - AC
+      { label: "كاش الحاج أشرف", accountNumber: "1112", kind: "cash" }, // 1112 - كاش الحاج اشرف - AC
+      { label: "كاش زياد عوض", accountNumber: "1119", kind: "cash" }, // 1119 - كاش زياد عوض - AC
+      // لسه مش متعمل في ERPNext - الكارت بيكتب "مش مربوط" لحد ما يتعمل - not created yet; shows "not linked" until it exists
+      { label: "كاش يوسف عاطف", accountNumber: "1120", kind: "cash" },
+      { label: "كاش كريم عوض", accountNumber: "1113", kind: "cash" }, // 1113 - كاش كريم عوض - AC (اسمه في ERPNext "كاش محمود عوض")
+      { label: "فوري", accountNumber: "1114", kind: "fawry" }, // 1114 - ماكينة فوري - AC
+    ] as { label: string; accountNumber: string; kind: "cash" | "fawry" }[],
   },
 
   // ============================================================

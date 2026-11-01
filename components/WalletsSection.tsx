@@ -114,7 +114,7 @@ function WalletCardView({ card, sizes }: { card: WalletCard; sizes: Sizes }) {
             مش مربوط بحساب في ERPNext
           </p>
           <p className="text-gray-500" style={{ fontSize: sizes.flowLabelFontSize - 3 }}>
-            اكتب اسم الحساب في wallets.accounts في الكونفج
+            اكتب رقم الحساب في wallets.accounts في الكونفج
           </p>
         </div>
       ) : !n ? (
