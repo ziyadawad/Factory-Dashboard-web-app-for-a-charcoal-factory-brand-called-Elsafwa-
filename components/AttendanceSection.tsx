@@ -7,6 +7,7 @@ import { Check, Palmtree, X } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { DATE_LOCALE, formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { OfflineBadge } from "./OfflineBadge";
 
 // useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
@@ -14,6 +15,7 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 interface AttendanceSectionProps {
   data: AttendanceGroup;
   updatedAt: string;
+  offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
 }
 
 // ألوان كل قايمة أسامي - colors of each name list
@@ -82,7 +84,7 @@ function NameList({
   );
 }
 
-export default function AttendanceSection({ data, updatedAt }: AttendanceSectionProps) {
+export default function AttendanceSection({ data, updatedAt, offline = false }: AttendanceSectionProps) {
   const absent = data.total - data.present - data.leave;
   const { count: presentCount } = useCountUp(data.present, 600);
   const { count: absentCount } = useCountUp(absent, 600);
@@ -144,7 +146,10 @@ export default function AttendanceSection({ data, updatedAt }: AttendanceSection
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       {/* العنوان وتحته "آخر تحديث" - title, with the last update time on its own line */}
       <div className="mb-2 shrink-0">
-        <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور الإدارة</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور الإدارة</h2>
+          {offline && <OfflineBadge />}
+        </div>
         <p className="text-gray-400 text-sm mt-1 whitespace-nowrap">آخر تحديث: {formatUpdatedAt(updatedAt)}</p>
       </div>
 

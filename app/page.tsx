@@ -12,6 +12,8 @@ import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
 import { DashboardData } from "@/lib/types";
+import { OfflineCard } from "@/components/OfflineBadge";
+import { useLastGood } from "@/lib/useLastGood";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 // لو الـ API رجّع error بنرمي عشان SWR يسيب آخر داتا سليمة - throw on an error status so SWR keeps the last good data
@@ -58,7 +60,7 @@ function pageFromUrl(): number {
 }
 
 export default function Dashboard() {
-  const { data, error } = useSWR<DashboardData>(
+  const { data: serverData, error } = useSWR<DashboardData>(
     "/api/dashboard",
     fetcher,
     {
@@ -67,6 +69,9 @@ export default function Dashboard() {
       dedupingInterval: REFRESH_MS / 2,
     }
   );
+
+  // كل كارت بيحتفظ بآخر قيمة نجحت لوحده - every card keeps its own last good value
+  const { view: data, cards } = useLastGood(serverData);
 
   const [flashSection, setFlashSection] = useState<string | null>(null);
   const prevDataRef = useRef<DashboardData | null>(null);
@@ -198,18 +203,38 @@ export default function Dashboard() {
             }}
           >
             <div className={flashClass("treasury")}>
-              <TreasurySection data={data.treasury} />
+              {cards.treasury.missing ? (
+                <OfflineCard title="رصيد الخزنة" />
+              ) : (
+                <TreasurySection data={data.treasury} offline={cards.treasury.offline} />
+              )}
             </div>
             <div className={flashClass("attendance")}>
-              <AttendanceSection data={data.attendance.management} updatedAt={data.updatedAt} />
+              {cards.attendance.missing ? (
+                <OfflineCard title="حضور الإدارة" />
+              ) : (
+                <AttendanceSection
+                  data={data.attendance.management}
+                  updatedAt={data.updatedAt}
+                  offline={cards.attendance.offline}
+                />
+              )}
             </div>
             <div className={flashClass("floorWorkers")}>
-              <FloorWorkersSection data={data.attendance} />
+              {cards.attendance.missing ? (
+                <OfflineCard title="حضور عمال" />
+              ) : (
+                <FloorWorkersSection data={data.attendance} offline={cards.attendance.offline} />
+              )}
             </div>
             {/* الأفران وتحتها الطرحات اليوم - kilns with today's batches below */}
             <div className="min-h-0 flex flex-col gap-4">
               <div className={`shrink-0 ${flashClass("kilns")}`}>
-                <KilnsSection data={data.kilns} />
+                {cards.kilns.missing ? (
+                  <OfflineCard title="الأفران" />
+                ) : (
+                  <KilnsSection data={data.kilns} offline={cards.kilns.offline} />
+                )}
               </div>
               <div className={`flex-1 ${flashClass("batches")}`}>
                 <BatchesSection data={data.batches} />

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BatchCounts, BatchExit, Batches } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { OfflineBadge } from "./OfflineBadge";
 
 interface BatchesSectionProps {
   data: Batches | null; // null = ERPNext مش بيرد ومفيش نتيجة قديمة - ERPNext down with no last good result
@@ -15,15 +16,6 @@ const TYPES: { key: keyof BatchCounts; label: string; text: string; border: stri
   { key: "mango", label: "مانجا", text: "text-brandYellow", border: "border-brandYellow/40", tint: "bg-brandYellow/10", dot: "bg-brandYellow" },
   { key: "casuarina", label: "جازورينا", text: "text-statusGreen", border: "border-statusGreen/40", tint: "bg-statusGreen/10", dot: "bg-statusGreen" },
 ];
-
-function OfflineBadge() {
-  return (
-    <div className="flex items-center gap-1.5 bg-statusRed/10 px-2.5 py-1 rounded-lg border border-statusRed/50">
-      <div className="w-2 h-2 rounded-full bg-statusRed" />
-      <span className="text-statusRed text-xs font-semibold">غير متصل</span>
-    </div>
-  );
-}
 
 // 3 مربعات ملونة + الإجمالي، والصفر رمادي - 3 colored tiles + total; zeros are gray
 function CountTiles({ counts }: { counts: BatchCounts }) {

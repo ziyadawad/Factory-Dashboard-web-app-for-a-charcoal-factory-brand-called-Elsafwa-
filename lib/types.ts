@@ -207,8 +207,15 @@ export interface DashboardData {
   batches: Batches | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   charity: Charity | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   updatedAt: string;
-  erpOffline: boolean; // true when an ERPNext request failed on this refresh
+  erpOffline: boolean; // true when every ERPNext request failed on this refresh
+  // حالة كل كارت: ok = جديد، stale = ERPNext فشل ودي آخر نتيجة نجحت، missing = فشل ومفيش نتيجة (الأرقام مش حقيقية)
+  // Per card: ok = fresh, stale = ERPNext failed and this is the last good value, missing = failed with nothing to show
+  sections: Record<SectionKey, SectionStatus>;
+  erpErrors: string[]; // رسايل أخطاء ERPNext في التحديث ده (من غير مفاتيح) - this refresh's ERPNext errors (no secrets)
 }
+
+export type SectionKey = "attendance" | "treasury" | "kilns";
+export type SectionStatus = "ok" | "stale" | "missing";
 
 // مصدر كل رقم: "erp" = من ERPNext، "manual" = من أرقام الكونفج
 // Where each number comes from: "erp" = ERPNext, "manual" = the config numbers

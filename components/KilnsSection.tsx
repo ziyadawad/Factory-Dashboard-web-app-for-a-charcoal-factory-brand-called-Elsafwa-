@@ -3,12 +3,14 @@
 import { Kilns } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { OfflineBadge } from "./OfflineBadge";
 
 interface KilnsSectionProps {
   data: Kilns;
+  offline?: boolean; // ERPNext فشل ودي آخر قايمة نجحت - ERPNext failed, this is the last good list
 }
 
-export default function KilnsSection({ data }: KilnsSectionProps) {
+export default function KilnsSection({ data, offline = false }: KilnsSectionProps) {
   const sizes = dashboardConfig.sizes.kilns;
 
   const getStatusColor = (status: string) => {
@@ -39,7 +41,10 @@ export default function KilnsSection({ data }: KilnsSectionProps) {
 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
-      <h2 className="text-xl font-bold text-white mb-2 shrink-0">الأفران</h2>
+      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+        <h2 className="text-xl font-bold text-white whitespace-nowrap">الأفران</h2>
+        {offline && <OfflineBadge />}
+      </div>
 
       <div className="grid grid-cols-3 gap-2 mb-2 shrink-0">
         <div className="bg-background rounded-xl py-2 text-center border border-statusGreen/30">

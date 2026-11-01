@@ -63,9 +63,9 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 2, // كل كام ثانية الشاشة تسأل السيرفر عن بيانات جديدة (كل الصفحات) - how often every page polls the server
+    refreshSeconds: 10, // كل كام ثانية الشاشة تسأل السيرفر عن بيانات جديدة (كل الصفحات) - how often every page polls the server
     // السيرفر بيكلم ERPNext مرة واحدة بالكتير كل الثواني دي، وفي النص بيرجع آخر نتيجة - the server calls ERPNext at most once per this many seconds
-    cacheSeconds: 5,
+    cacheSeconds: 10,
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة

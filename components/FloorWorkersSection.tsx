@@ -18,10 +18,12 @@ import { Attendance, AttendanceGroup } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { useFitFontSize } from "@/lib/useFitFontSize";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { OfflineBadge } from "./OfflineBadge";
 
 interface FloorWorkersSectionProps {
   // العمال + السواقين والمناديب والغفر (دول برّه إجمالي العمال) - workers + drivers, reps, guards (not in the workers total)
   data: Attendance;
+  offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
 }
 
 type FactoryGroupKey = keyof Attendance["workers"]["productionFactory"]["groups"];
@@ -60,7 +62,7 @@ const CONTENT_ROWS_2 = "minmax(0,auto) minmax(0,auto)";
 const shownPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status !== "absent");
 const absentPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status === "absent");
 
-export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) {
+export default function FloorWorkersSection({ data, offline = false }: FloorWorkersSectionProps) {
   // مقاسات الكلام من sizes.page1 في الكونفج - text sizes from sizes.page1 in the config
   const text = useWorkerSizes();
 
@@ -85,7 +87,10 @@ export default function FloorWorkersSection({ data }: FloorWorkersSectionProps) 
   return (
     <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
       <div className="flex items-baseline justify-between gap-2 mb-2 shrink-0">
-        <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور عمال</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-bold text-white whitespace-nowrap">حضور عمال</h2>
+          {offline && <OfflineBadge />}
+        </div>
         <p className="text-gray-400 text-sm whitespace-nowrap">
           الإجمالي: <span className="text-white font-bold tabular-nums">{formatNumber(workers.present)}</span> حاضر من{" "}
           <span className="text-white font-bold tabular-nums">{formatNumber(workers.total)}</span>

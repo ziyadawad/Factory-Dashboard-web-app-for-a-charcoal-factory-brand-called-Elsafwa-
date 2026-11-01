@@ -45,7 +45,27 @@ export async function erpPost<T = unknown>(path: string, body: Record<string, un
   });
 }
 
+// الأخطاء اللي تستاهل إعادة: مفيش رد / timeout / 429 / 5xx. الـ 401 و403 مش بيتعادوا (المفتاح أو الصلاحية غلط)
+// Worth a retry: no answer / timeout / 429 / 5xx. 401 and 403 are never retried (bad key or missing permission)
+const RETRY_DELAYS_MS = [400, 1200];
+
+class RetryableError extends ErpError {}
+
 async function erpRequest<T>(path: string, url: URL, init: RequestInit): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await erpAttempt<T>(path, url, init);
+    } catch (error) {
+      if (!(error instanceof RetryableError) || attempt >= RETRY_DELAYS_MS.length) {
+        throw error instanceof RetryableError ? new ErpError(error.message) : error;
+      }
+      console.warn(`[erp] ${error.message} - retry ${attempt + 1} in ${RETRY_DELAYS_MS[attempt]}ms`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+async function erpAttempt<T>(path: string, url: URL, init: RequestInit): Promise<T> {
   const { auth } = erpSettings();
   const started = Date.now();
   let response: Response;
@@ -61,23 +81,31 @@ async function erpRequest<T>(path: string, url: URL, init: RequestInit): Promise
       error instanceof Error && error.name === "TimeoutError"
         ? `no answer after ${TIMEOUT_MS / 1000}s`
         : String(error);
-    throw new ErpError(`ERPNext ${path}: request failed (${reason})`);
+    throw new RetryableError(`ERPNext ${path}: request failed (${reason})`);
   }
 
+  const retryable = response.status === 429 || response.status >= 500;
+  const Failure = retryable ? RetryableError : ErpError;
   const text = await response.text();
   let body: { exc_type?: string; exception?: string; message?: unknown } | undefined;
   try {
     body = JSON.parse(text);
   } catch {
     // مش JSON غالبا يبقى Cloudflare مش ERPNext - not JSON usually means Cloudflare, not ERPNext
-    throw new ErpError(
+    throw new Failure(
       `ERPNext ${path}: HTTP ${response.status}, response is not JSON (Cloudflare or wrong FACTORY_API_URL?)`
     );
   }
 
   if (!response.ok) {
     const detail = body?.exc_type || body?.exception || response.statusText;
-    throw new ErpError(`ERPNext ${path}: HTTP ${response.status} (${detail})`);
+    const hint =
+      response.status === 401
+        ? " - FACTORY_API_KEY / FACTORY_API_SECRET rejected (keys regenerated or API user disabled?)"
+        : response.status === 403
+          ? " - the API user has no read permission on this DocType"
+          : "";
+    throw new Failure(`ERPNext ${path}: HTTP ${response.status} (${detail})${hint}`);
   }
 
   console.log(`[erp] ${path} OK in ${Date.now() - started}ms at ${new Date().toISOString()}`);

@@ -20,6 +20,7 @@ import {
   AttendancePerson,
   DashboardData,
   PersonStatus,
+  SectionStatus,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { stockMinimums } from "@/config/stock-min";
@@ -260,7 +261,7 @@ async function batchesSection(results: ErpStatus[]): Promise<Batches | null> {
       `[erp] batches failed, showing ${fallback ? "last good value" : '"غير متصل"'}:`,
       error instanceof Error ? error.message : error
     );
-    results.push({ fromErp: true, failed: true });
+    results.push({ fromErp: true, failed: true, error: errorText(error) });
     return fallback && { ...fallback, offline: true };
   }
 }
@@ -368,7 +369,7 @@ async function charitySection(results: ErpStatus[]): Promise<Charity | null> {
       `[erp] charity failed, showing ${lastGoodCharityRows ? "last good value" : '"غير متصل"'}:`,
       error instanceof Error ? error.message : error
     );
-    results.push({ fromErp: true, failed: true });
+    results.push({ fromErp: true, failed: true, error: errorText(error) });
     return lastGoodCharityRows && { ...charityFrom(lastGoodCharityRows, funds, today), offline: true };
   }
 }
@@ -410,29 +411,32 @@ async function erpSection<T>(
   enabled: boolean,
   load: () => Promise<T>,
   results: ErpStatus[]
-): Promise<T | null> {
-  if (!enabled) return null;
+): Promise<{ value: T | null; status: SectionStatus }> {
+  if (!enabled) return { value: null, status: "ok" };
   try {
     const value = await load();
     lastGoodSection.set(key, value);
     results.push({ fromErp: true, failed: false });
-    return value;
+    return { value, status: "ok" };
   } catch (error) {
     const fallback = lastGoodSection.get(key) as T | undefined;
     console.error(
-      `[erp] ${key} failed, showing ${fallback !== undefined ? "last good" : "config"} value:`,
-      error instanceof Error ? error.message : error
+      `[erp] ${key} failed, showing ${fallback !== undefined ? "last good value" : '"غير متصل"'}:`,
+      errorText(error)
     );
-    results.push({ fromErp: true, failed: true });
-    return fallback ?? null;
+    results.push({ fromErp: true, failed: true, error: errorText(error) });
+    return fallback !== undefined ? { value: fallback, status: "stale" } : { value: null, status: "missing" };
   }
 }
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // آخر قيمة نجحت من ERPNext (في ذاكرة السيرفر) - last successful ERPNext value per number (server memory)
 const lastGood = new Map<string, number>();
 
 // fromErp = الرقم المفروض من ERPNext، failed = الطلب فشل - used to decide the "غير متصل" badge
-type ErpStatus = { fromErp: boolean; failed: boolean };
+// stale = فشل وفيه آخر قيمة نجحت، error = رسالة الغلط - stale = failed but a last good value exists
+type ErpStatus = { fromErp: boolean; failed: boolean; stale?: boolean; error?: string };
 type ErpResult = ErpStatus & { value: number };
 
 // رقم واحد: من ERPNext لو source = "erp"، ولو فشل آخر قيمة نجحت، ولو مفيش رقم الكونفج
@@ -457,7 +461,7 @@ async function erpNumber<F extends { source: "erp" }>(
       `[erp] ${key} failed, showing ${fallback !== undefined ? "last good" : "config"} value:`,
       error instanceof Error ? error.message : error
     );
-    return { value: fallback ?? manual, fromErp: true, failed: true };
+    return { value: fallback ?? manual, fromErp: true, failed: true, stale: fallback !== undefined, error: errorText(error) };
   }
 }
 
@@ -617,6 +621,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const firstWood = Object.values(erp.stock.wood).find((field) => field.source === "erp");
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
+  let treasuryStatus: SectionStatus = "ok";
   const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns, charity] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
@@ -627,6 +632,9 @@ export async function getDashboardData(): Promise<DashboardData> {
         async ({ account }) => (await totals(account)).credit),
     ]).then((numbers) => {
       results.push(...numbers);
+      const failed = numbers.filter((n) => n.failed);
+      if (failed.some((n) => !n.stale)) treasuryStatus = "missing";
+      else if (failed.length > 0) treasuryStatus = "stale";
       return numbers.map((n) => n.value);
     }),
     Promise.all(
@@ -710,13 +718,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   const erpOffline = erpNumbers.length > 0 && erpNumbers.every((n) => n.failed);
 
   // الأفران من ERPNext، ولو مفيش من الكونفج، والأعداد من القايمة - kilns from ERPNext (else config); counts from the list
-  const kilns = erpKilns ?? config.kilns;
+  const kilns = erpKilns.value ?? config.kilns;
   const workingCount = kilns.filter((k: ConfigKiln) => k.status === "working").length;
   const maintenanceCount = kilns.filter((k: ConfigKiln) => k.status === "maintenance").length;
   const stoppedCount = kilns.filter((k: ConfigKiln) => k.status === "stopped").length;
 
   return {
-    attendance: buildAttendance(today),
+    attendance: buildAttendance(today.value),
     stock: { packaged, sacks, rawMaterials: { wood, packaging } },
     kilns: {
       working: workingCount,
@@ -738,5 +746,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     charity,
     updatedAt: new Date().toISOString(),
     erpOffline,
+    sections: { attendance: today.status, treasury: treasuryStatus, kilns: erpKilns.status },
+    erpErrors: Array.from(new Set(results.flatMap((r) => (r.error ? [r.error] : [])))),
   };
 }

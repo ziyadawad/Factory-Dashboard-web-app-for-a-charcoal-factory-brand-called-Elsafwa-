@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, type LucideIcon 
 import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { OfflineBadge } from "./OfflineBadge";
 
 // حجم بالـ cqi على قد عدد الحروف: الرقم الأطول بيصغر عشان عمره ما يعدّي العرض
 // cqi size adjusted for the text length: a longer number gets smaller so it never gets wider than its box
@@ -14,9 +15,10 @@ function fitCqi(scale: number, baseLength: number, text: string) {
 
 interface TreasurySectionProps {
   data: Treasury;
+  offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
 }
 
-export default function TreasurySection({ data }: TreasurySectionProps) {
+export default function TreasurySection({ data, offline = false }: TreasurySectionProps) {
   const { count } = useCountUp(data.balance, 800);
   const formattedBalance = formatNumber(count);
   const sizes = dashboardConfig.sizes.treasury;
@@ -29,7 +31,10 @@ export default function TreasurySection({ data }: TreasurySectionProps) {
       className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden"
       style={{ containerType: "inline-size" }}
     >
-      <h2 className="text-xl font-bold text-white mb-2 shrink-0">رصيد الخزنة</h2>
+      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+        <h2 className="text-xl font-bold text-white whitespace-nowrap">رصيد الخزنة</h2>
+        {offline && <OfflineBadge />}
+      </div>
 
       {/* المحتوى متوزع بالتساوي على طول الكارت - content spread evenly over the card height */}
       <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-evenly">
