@@ -231,11 +231,11 @@ export const dashboardConfig = {
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
       { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "أرصدة المخازن", durationSeconds: 120 }, // الصفحة 2: المخازن - page 2
-      { id: "sales", title: "مبيعات المناديب", durationSeconds: 30 }, // الصفحة 3: مبيعات المناديب - page 3
-      { id: "distributors", title: "الموزعين", durationSeconds: 30 }, // الصفحة 4: الموزعين - page 4
-      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 30 }, // الصفحة 5: الخزن والمحافظ - page 5
-      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 6: صناديق الصدقات - page 6
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 2: المخازن - page 2
+      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 3: الخزن والمحافظ - page 3
+      { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 4: صناديق الصدقات - page 4
+      { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 5: مبيعات المناديب - page 5
+      { id: "distributors", title: "الموزعين", durationSeconds: 60 }, // الصفحة 6: الموزعين - page 6
     ] as ConfigPage[],
   },
 
@@ -257,12 +257,13 @@ export const dashboardConfig = {
   wallets: {
     cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
     company: "ALSafwa Coal", // الشركة اللي بندوّر فيها على أرقام الحسابات - the company whose account numbers are used
-    // بالترتيب اللي بتظهر بيه (يمين فوق ← شمال فوق، وبعدين الصف اللي تحت) - in display order (top row right to left, then the bottom row)
+    // بالترتيب اللي بتظهر بيه: 1 يمين فوق، 2 النص فوق، 3 شمال فوق، 4 يمين تحت، 5 النص تحت، 6 شمال تحت
+    // Display order (RTL): 1 top-right, 2 top-middle, 3 top-left, 4 bottom-right, 5 bottom-middle, 6 bottom-left
     // label = الاسم اللي بيظهر على الشاشة بالظبط، accountNumber = رقم الحساب في دليل الحسابات
     // label = the name shown on screen exactly, accountNumber = the account number in the Chart of Accounts
     accounts: [
-      { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash" }, // 1111 - كاش حمادة شاهين - AC
       { label: "كاش الحاج أشرف", accountNumber: "1112", kind: "cash" }, // 1112 - كاش الحاج اشرف - AC
+      { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash" }, // 1111 - كاش حمادة شاهين - AC
       { label: "كاش زياد عوض", accountNumber: "1119", kind: "cash" }, // 1119 - كاش زياد عوض - AC
       // لسه مش متعمل في ERPNext - الكارت بيكتب "مش مربوط" لحد ما يتعمل - not created yet; shows "not linked" until it exists
       { label: "كاش يوسف عاطف", accountNumber: "1120", kind: "cash" },
