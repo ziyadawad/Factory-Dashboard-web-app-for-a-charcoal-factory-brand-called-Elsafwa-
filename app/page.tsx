@@ -13,6 +13,7 @@ import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
 import DistributorsSection from "@/components/DistributorsSection";
+import WalletsSection from "@/components/WalletsSection";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -251,6 +252,8 @@ export default function Dashboard() {
         return <SalesRepsSection data={data.sales ?? null} />;
       case "distributors":
         return <DistributorsSection data={data.distributors ?? null} />;
+      case "wallets":
+        return <WalletsSection data={data.wallets ?? null} />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>

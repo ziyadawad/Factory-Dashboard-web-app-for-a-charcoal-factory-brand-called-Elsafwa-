@@ -234,6 +234,7 @@ export interface DistributorSales {
   name: string;
   linked: boolean; // false = مفيش Customer ID في الكونفج - no Customer ID in the config
   featured: boolean;
+  fullHeight: boolean; // عمود لوحده بطول الصفحة - its own full-height column
   monthPackets: number;
   monthAmount: number; // ج.م
   products: ProductPackets[];
@@ -250,8 +251,30 @@ export interface Distributors {
   offline: boolean;
 }
 
+// محفظة / خزنة (الصفحة 5) - one cash wallet / Fawry account (page 5)
+export interface WalletNumbers {
+  balance: number; // ج.م، رصيد النهارده - balance as of today
+  incomingToday: number; // مدين النهارده - today's debit
+  outgoingToday: number; // دائن النهارده - today's credit
+  // آخر قيد على الحساب - the latest GL entry
+  lastMove: { date: string; amount: number; direction: "in" | "out" } | null;
+}
+
+export interface WalletCard {
+  name: string;
+  kind: "cash" | "fawry";
+  linked: boolean; // false = مفيش حساب في الكونفج - no account in the config
+  offline: boolean; // true = ERPNext فشل ودي آخر أرقام نجحت (أو مفيش أرقام) - failed: last good numbers (or none)
+  numbers: WalletNumbers | null; // null = فشل ومفيش أرقام قديمة - failed with no last good numbers
+}
+
+export interface Wallets {
+  list: WalletCard[];
+}
+
 export interface DashboardData {
   attendance: Attendance;
+  wallets: Wallets;
   sales: SalesReps | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   distributors: Distributors | null; // null = ERPNext فشل ومفيش نتيجة قديمة
   stock: Stock;

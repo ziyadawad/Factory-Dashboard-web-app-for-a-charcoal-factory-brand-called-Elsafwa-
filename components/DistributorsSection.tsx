@@ -53,11 +53,15 @@ function LastOrder({ order, fontSize, lateDays }: { order: DistributorSales["las
   );
 }
 
-// كارت موزع (featured = الكارت الكبير) - one distributor's card (featured = the big one)
+// كارت موزع: featured = الكارت الكبير، tall = عمود لوحده بطول الصفحة، والباقي كروت صغيرة
+// One distributor's card: featured = the big one, tall = its own full-height column, else a small card
 function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: boolean; sizes: Sizes }) {
   const big = d.featured;
+  const tall = !big && d.fullHeight;
+  const centered = big || tall;
   const empty = d.invoiceCount === 0 && d.monthPackets === 0 && d.monthAmount === 0;
-  const info = big ? sizes.infoFontSize + 3 : sizes.infoFontSize;
+  const info = centered ? sizes.infoFontSize + 3 : sizes.infoFontSize;
+  const nameSize = big ? sizes.featuredNameFontSize : tall ? sizes.tallNameFontSize : sizes.nameFontSize;
 
   return (
     <div
@@ -70,12 +74,9 @@ function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: 
     >
       <div className="shrink-0 flex items-center gap-3 min-w-0">
         <div className={`shrink-0 p-1.5 rounded-xl ${big ? "bg-brandYellow/15 text-brandYellow" : "bg-sky-400/10 text-sky-300"}`}>
-          <Store size={big ? 30 : 22} />
+          <Store size={big ? 30 : tall ? 26 : 22} />
         </div>
-        <h3
-          className="font-extrabold text-white truncate leading-[1.75]"
-          style={{ fontSize: big ? sizes.featuredNameFontSize : sizes.nameFontSize }}
-        >
+        <h3 className="font-extrabold text-white truncate leading-[1.75]" style={{ fontSize: nameSize }}>
           {toEnglishDigits(d.name)}
         </h3>
         {big && (
@@ -104,7 +105,7 @@ function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: 
         // لسه مفيش سحب الشهر ده - nothing taken yet this month
         <div className="flex-1 min-h-0 flex flex-col justify-center" style={{ gap: sizes.cardGap }}>
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-cardBorder py-2">
-            <p className="text-gray-300 font-bold leading-[1.75]" style={{ fontSize: big ? sizes.featuredNameFontSize * 0.8 : sizes.nameFontSize * 0.85 }}>
+            <p className="text-gray-300 font-bold leading-[1.75]" style={{ fontSize: nameSize * (centered ? 0.8 : 0.85) }}>
               لسه مفيش سحب الشهر ده
             </p>
             <p className="text-gray-500" style={{ fontSize: info }}>
@@ -115,9 +116,9 @@ function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: 
         </div>
       ) : (
         <>
-          {/* سحب الشهر: الكبير الرقم في النص والمبلغ تحته، الصغير المبلغ جنب الرقم
-              this month: featured = centered with the amount below; small = amount next to the number */}
-          {big ? (
+          {/* سحب الشهر: الكبير وكارت العمود الرقم في النص والمبلغ تحته، الصغير المبلغ جنب الرقم
+              this month: featured / tall = centered with the amount below; small = amount next to the number */}
+          {centered ? (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center">
               <p className="text-gray-400 font-semibold leading-[1.5]" style={{ fontSize: sizes.labelFontSize + 4 }}>
                 سحب الشهر
@@ -125,14 +126,22 @@ function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: 
               <p className="whitespace-nowrap" style={{ lineHeight: 1.1 }}>
                 <Num
                   value={d.monthPackets}
-                  className="font-extrabold text-brandYellow"
-                  style={{ fontSize: sizes.featuredPacketsFontSize, textShadow: "0 0 22px rgba(255,193,7,0.35)" }}
+                  className={`font-extrabold ${big ? "text-brandYellow" : "text-white"}`}
+                  style={
+                    big
+                      ? { fontSize: sizes.featuredPacketsFontSize, textShadow: "0 0 22px rgba(255,193,7,0.35)" }
+                      : { fontSize: sizes.tallPacketsFontSize }
+                  }
                 />{" "}
                 <span className="text-gray-400 font-semibold" style={{ fontSize: 24 }}>
                   باكت
                 </span>
               </p>
-              <Money value={d.monthAmount} className="font-bold text-statusGreen leading-[1.5]" style={{ fontSize: sizes.featuredAmountFontSize }} />
+              <Money
+                value={d.monthAmount}
+                className="font-bold text-statusGreen leading-[1.5]"
+                style={{ fontSize: big ? sizes.featuredAmountFontSize : sizes.tallAmountFontSize }}
+              />
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col justify-center">
@@ -154,19 +163,19 @@ function DistributorCard({ d, offline, sizes }: { d: DistributorSales; offline: 
           <div className="shrink-0">
             <ProductChips
               products={d.products}
-              fontSize={big ? sizes.featuredChipFontSize : sizes.chipFontSize}
+              fontSize={big ? sizes.featuredChipFontSize : tall ? sizes.tallChipFontSize : sizes.chipFontSize}
               accent={big ? "text-brandYellow" : "text-sky-300"}
-              center={big}
+              center={centered}
             />
           </div>
 
-          <div className={`shrink-0 flex ${big ? "flex-col" : "items-stretch"}`} style={{ gap: sizes.cardGap }}>
+          <div className={`shrink-0 flex ${centered ? "flex-col" : "items-stretch"}`} style={{ gap: sizes.cardGap }}>
             <div className="shrink-0 rounded-xl border border-cardBorder bg-background/70 px-3 py-1 flex flex-col justify-center" style={{ fontSize: info }}>
               <p className="flex items-center gap-1.5 text-gray-400 font-semibold whitespace-nowrap leading-[1.6]">
                 <Receipt size={info} />
                 عدد الطلبيات
               </p>
-              <Num value={d.invoiceCount} className="font-extrabold text-white" style={{ fontSize: big ? 32 : info + 8, lineHeight: 1.2 }} />
+              <Num value={d.invoiceCount} className="font-extrabold text-white" style={{ fontSize: centered ? 32 : info + 8, lineHeight: 1.2 }} />
             </div>
             <div className="flex-1 min-w-0">
               <LastOrder order={d.lastOrder} fontSize={info} lateDays={sizes.lateDays} />
@@ -191,8 +200,16 @@ export default function DistributorsSection({ data }: { data: Distributors | nul
     );
   }
 
+  // الأعمدة من اليمين: الكبير، وبعده كل كارت fullHeight، والباقي فوق بعض في العمود الأخير
+  // Columns right to left: featured, then each fullHeight card, then the rest stacked in the last column
   const featured = data.list.find((d) => d.featured);
-  const others = data.list.filter((d) => d !== featured);
+  const tall = data.list.filter((d) => !d.featured && d.fullHeight);
+  const rest = data.list.filter((d) => !d.featured && !d.fullHeight);
+  const columns = [
+    ...(featured ? [`minmax(0,${sizes.featuredWidth}fr)`] : []),
+    ...tall.map(() => "minmax(0,1fr)"),
+    ...(rest.length > 0 ? ["minmax(0,1fr)"] : []),
+  ];
   const totalAmount = data.list.reduce((sum, d) => sum + d.monthAmount, 0);
 
   return (
@@ -214,25 +231,26 @@ export default function DistributorsSection({ data }: { data: Distributors | nul
         )}
       </SummaryStrip>
 
-      {/* الكبير على اليمين بطول الصفحة، والباقي 2×2 جنبه - featured on the right full height, the rest 2×2 */}
-      <div
-        ref={ref}
-        className="flex-1 min-h-0 grid gap-4"
-        style={{
-          gridTemplateColumns: `${featured ? `minmax(0,${sizes.featuredWidth}fr) ` : ""}minmax(0,1fr) minmax(0,1fr)`,
-          gridTemplateRows: "minmax(0,1fr) minmax(0,1fr)",
-        }}
-      >
+      <div ref={ref} className="flex-1 min-h-0 grid gap-4" style={{ gridTemplateColumns: columns.join(" ") }}>
         {featured && (
-          <div className="row-span-2 min-h-0">
+          <div className="min-h-0">
             <DistributorCard d={featured} offline={data.offline} sizes={sizes} />
           </div>
         )}
-        {others.map((d) => (
+        {tall.map((d) => (
           <div key={d.name} className="min-h-0">
             <DistributorCard d={d} offline={data.offline} sizes={sizes} />
           </div>
         ))}
+        {rest.length > 0 && (
+          <div className="min-h-0 grid gap-4" style={{ gridTemplateRows: `repeat(${rest.length}, minmax(0,1fr))` }}>
+            {rest.map((d) => (
+              <div key={d.name} className="min-h-0">
+                <DistributorCard d={d} offline={data.offline} sizes={sizes} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

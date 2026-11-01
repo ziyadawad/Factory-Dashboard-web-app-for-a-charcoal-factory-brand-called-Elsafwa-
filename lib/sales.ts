@@ -204,6 +204,7 @@ export function distributorsFrom(rows: DistributorRow[], today: string): Omit<Di
       name: distributor.name,
       linked: !!distributor.customer,
       featured: !!distributor.featured,
+      fullHeight: !!distributor.fullHeight,
       monthPackets: round(breakdown.reduce((sum, p) => sum + p.packets, 0)),
       monthAmount: money(thisMonth.reduce((sum, inv) => sum + inv.amount, 0)),
       products: breakdown.map((p) => ({ ...p, packets: round(p.packets) })),

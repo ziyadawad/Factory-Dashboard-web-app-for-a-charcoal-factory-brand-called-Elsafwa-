@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
-import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Warehouse } from "lucide-react";
+import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -23,6 +23,7 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
   stock: Warehouse,
   sales: Truck,
   distributors: Store,
+  wallets: Wallet,
   charity: HandHeart,
 };
 

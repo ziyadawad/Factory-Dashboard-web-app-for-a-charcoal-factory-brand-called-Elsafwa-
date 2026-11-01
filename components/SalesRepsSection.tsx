@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays, Crown, Target, TrendingUp, Truck } from "lucide-react";
+import { Cell, Pie, PieChart } from "recharts";
 import { RepSales, SalesReps } from "@/lib/types";
 import { formatDayName, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -8,6 +9,60 @@ import { OfflineBadge } from "./OfflineBadge";
 import { monthName, Num, Percent, ProductChips, SummaryStrip, useCompactRows } from "./SalesCommon";
 
 type Sizes = Omit<typeof dashboardConfig.sizes.salesPage, "compact">;
+
+// دايرة نسبة التارجت (نفس شكل دونت الحضور): برتقاني تحت التارجت، أخضر ولامع لو وصل، والنسبة الحقيقية في النص
+// Target ring (same style as the attendance donut): orange below target, glowing green at 100%+, the real % in the middle
+function TargetRing({ percent, reached, sizes }: { percent: number; reached: boolean; sizes: Sizes }) {
+  const size = sizes.donutSize;
+  const outerRadius = size / 2 - 2;
+  const innerRadius = outerRadius - sizes.donutThickness;
+  const filled = Math.min(100, Math.max(0, percent));
+  const color = reached ? "#22C55E" : "#FF7A00";
+  const chartData = [
+    { value: filled, color },
+    { value: 100 - filled, color: "#232B40" },
+  ].filter((part) => part.value > 0);
+  return (
+    <div
+      className="relative shrink-0"
+      style={{
+        width: size,
+        height: size,
+        filter: reached ? "drop-shadow(0 0 10px rgba(34,197,94,0.55))" : undefined,
+      }}
+    >
+      <PieChart width={size} height={size}>
+        <Pie
+          data={chartData}
+          cx="50%"
+          cy="50%"
+          innerRadius={innerRadius}
+          outerRadius={outerRadius}
+          startAngle={90}
+          endAngle={-270}
+          paddingAngle={chartData.length > 1 ? 5 : 0}
+          dataKey="value"
+          stroke="none"
+          isAnimationActive={false}
+        >
+          {chartData.map((part, index) => (
+            <Cell key={index} fill={part.color} />
+          ))}
+        </Pie>
+      </PieChart>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <Percent
+          value={percent}
+          className={`font-extrabold leading-tight ${reached ? "text-statusGreen" : "text-brandOrange"}`}
+          style={{ fontSize: sizes.donutPercentFontSize }}
+        />
+        <span className="text-gray-400 whitespace-nowrap leading-tight" style={{ fontSize: sizes.donutLabelFontSize }}>
+          من التارجت
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // كارت مندوب - one rep's card
 function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; sizes: Sizes }) {
@@ -64,7 +119,7 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
         </div>
       ) : (
         <>
-          {/* مبيعات الشهر وآخر يوم بيع - month packets and the last selling day */}
+          {/* مبيعات الشهر ودايرة التارجت وآخر يوم بيع - month packets, target ring and the last selling day */}
           <div className="flex-1 min-h-0 flex items-center gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-gray-400 font-semibold leading-[1.5]" style={{ fontSize: sizes.labelFontSize }}>
@@ -81,6 +136,7 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
                 </span>
               </p>
             </div>
+            <TargetRing percent={percent} reached={reached} sizes={sizes} />
             <div className="shrink-0 rounded-xl border border-cardBorder bg-background/70 px-3 py-1" style={{ fontSize: sizes.infoFontSize }}>
               <p className="flex items-center gap-1.5 text-gray-400 font-semibold whitespace-nowrap leading-[1.6]">
                 <CalendarDays size={sizes.infoFontSize} />

@@ -223,7 +223,7 @@ export const dashboardConfig = {
     // لو النت مقطوع ساعتها بتستنى لحد ما يرجع وبعدين تعمل reload - 0 = مفيش reload
     // Reload the whole page every N minutes (recovers from internet drops) and return to the same page;
     // when offline at that moment it waits for the connection to come back. 0 = never
-    reloadMinutes: 5,
+    reloadMinutes: 15,
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
     // durationSeconds = الصفحة دي تفضل كام ثانية قبل ما تتقلب للي بعدها - seconds on screen before the next page
     // لو حد داس على الأسهم الصفحة بتتقلب والعداد بيبدأ من الأول - a manual switch restarts the timer
@@ -234,8 +234,43 @@ export const dashboardConfig = {
       { id: "stock", title: "أرصدة المخازن", durationSeconds: 120 }, // الصفحة 2: المخازن - page 2
       { id: "sales", title: "مبيعات المناديب", durationSeconds: 30 }, // الصفحة 3: مبيعات المناديب - page 3
       { id: "distributors", title: "الموزعين", durationSeconds: 30 }, // الصفحة 4: الموزعين - page 4
-      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 5: صناديق الصدقات - page 5
+      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 30 }, // الصفحة 5: الخزن والمحافظ - page 5
+      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 6: صناديق الصدقات - page 6
     ] as ConfigPage[],
+  },
+
+  // ============================================================
+  // الخزن والمحافظ (الصفحة 5) - كاش / فودافون كاش / فوري، قراية بس من ERPNext
+  // Cash wallets / Vodafone Cash / Fawry (page 5), read-only from ERPNext
+  // - الرصيد = رصيد الحساب النهارده بنفس طريقة كارت الخزنة في الصفحة 1 (get_balance_on)
+  // - وارد اليوم = مجموع المدين، منصرف اليوم = مجموع الدائن من GL Entry للحساب النهارده (بتوقيت القاهرة)
+  // - آخر حركة = آخر قيد GL Entry للحساب (مدين = وارد، دائن = منصرف)
+  // - account = اسم الحساب بالظبط زي ERPNext (Account ID). لو فاضي الكارت بيكتب "مش مربوط بحساب"
+  // - kind: "cash" = محفظة كاش (أيقونة محفظة وفلوس)، "fawry" = ماكينة دفع (أيقونة ماكينة وكارت)
+  // - لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش الكارت يكتب "غير متصل" (مش أصفار)
+  // Balance = get_balance_on as of today (same as the page 1 treasury card); today's in/out = GL Entry
+  // debit/credit today; last movement = the latest GL Entry. account = the exact ERPNext Account ID,
+  // empty = card shows "not linked". On failure the last good value stays with "غير متصل" (never fake zeros)
+  // ============================================================
+  wallets: {
+    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    // بالترتيب اللي بتظهر بيه (يمين فوق ← شمال فوق، وبعدين الصف اللي تحت) - in display order (top row right to left, then the bottom row)
+    accounts: [
+      // مفيش حساب اسمه "كاش أ. حمادة" - الأقرب: "1111 - كاش حمادة شاهين - AC" (اكتبه هنا لو هو)
+      // no exact match; closest: "1111 - كاش حمادة شاهين - AC"
+      { name: "كاش أ. حمادة", account: "", kind: "cash" },
+      { name: "كاش الحاج أشرف", account: "1112 - كاش الحاج اشرف - AC", kind: "cash" }, // كاش الحاج اشرف
+      // مفيش حساب بالاسم ده في دليل الحسابات - no such account in the Chart of Accounts
+      { name: "كاش زياد عوض", account: "", kind: "cash" },
+      // مفيش حساب بالاسم ده في دليل الحسابات - no such account in the Chart of Accounts
+      { name: "كاش يوسف عاطف", account: "", kind: "cash" },
+      // الـ ID "كاش كريم عوض" بس اسم الحساب (account_name) في ERPNext بقى "كاش محمود عوض"
+      // the ID is "كاش كريم عوض" but its account_name in ERPNext is now "كاش محمود عوض"
+      { name: "كاش كريم عوض", account: "1113 - كاش كريم عوض - AC", kind: "cash" },
+      // مفيش حساب اسمه "فوري" بالظبط - الأقرب: "1114 - ماكينة فوري - AC" (اكتبه هنا لو هو)
+      // no exact match; closest: "1114 - ماكينة فوري - AC"
+      { name: "فوري", account: "", kind: "fawry" },
+    ] as { name: string; account: string; kind: "cash" | "fawry" }[],
   },
 
   // ============================================================
@@ -282,17 +317,17 @@ export const dashboardConfig = {
     ] as { name: string; van: string; warehouse: string; target?: number }[],
 
     // الموزعين: سحب كل موزع = فواتير البيع بتاعته (Customer). customer = الـ ID بتاع العميل في ERPNext بالظبط
-    // featured = الكارت الكبير على اليمين. لو customer فاضي الكارت بيكتب "مش مربوط"
-    // Distributors: what each one took = their Sales Invoices. customer = the exact ERPNext Customer ID; featured = big card
+    // الترتيب من اليمين: featured = العمود الأول (الكارت الكبير بطول الصفحة)، fullHeight = عمود لوحده بطول الصفحة،
+    // والباقي في العمود الأخير فوق بعض. لو customer فاضي الكارت بيكتب "مش مربوط"
+    // Distributors: what each one took = their Sales Invoices. customer = the exact ERPNext Customer ID.
+    // Columns right to left: featured (biggest, full height), fullHeight cards, then the rest stacked in the last column
     distributors: [
-      { name: "عمرو خاطر", customer: "عمرو خاطر", featured: true },
-      { name: "محمد عادل حمزه", customer: "محمد عادل حمزة" },
-      { name: "اسامه شبرا", customer: "اسامه شبرا" },
+      { name: "عمرو خاطر", customer: "عمرو خاطر", featured: true }, // العمود 1 - column 1
+      { name: "محمد عادل حمزه", customer: "محمد عادل حمزة", fullHeight: true }, // العمود 2 - column 2
+      { name: "اسامه شبرا", customer: "اسامه شبرا" }, // العمود 3 فوق - column 3 top
       // فيه كمان عميل "حماده العزباوي تعبئة" - لو عايز تجمعهم قولّي - there is also a "حماده العزباوي تعبئة" customer
-      { name: "حماده العزباوى", customer: "حماده العزباوي" },
-      // مفيش عميل بالاسم ده في ERPNext - اكتب الـ ID هنا (الأقرب: "احمد حسان - 1" في المنيا) - no match yet
-      { name: "احمد المنيا", customer: "" },
-    ] as { name: string; customer: string; featured?: boolean }[],
+      { name: "حماده العزباوى", customer: "حماده العزباوي" }, // العمود 3 تحت - column 3 bottom
+    ] as { name: string; customer: string; featured?: boolean; fullHeight?: boolean }[],
   },
 
   // ============================================================
@@ -683,10 +718,19 @@ export const dashboardConfig = {
       percentFontSize: 22, // حجم نسبة التارجت - target percentage size
       chipFontSize: 16, // حجم كبسولات المنتجات (ربع / نص / كيلو...) - product chips font size
       cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
+      // دايرة نسبة التارجت (زي دونت الحضور): برتقاني تحت التارجت، أخضر ولامع لو وصل - target ring (like the attendance donut)
+      donutSize: 150, // حجم الدايرة بالبكسل (عرض = طول) - ring size in px (width = height)
+      donutThickness: 16, // سُمك الدايرة - ring thickness
+      donutPercentFontSize: 38, // حجم النسبة في نص الدايرة - percentage in the middle of the ring
+      donutLabelFontSize: 14, // حجم كلمة "من التارجت" تحت النسبة - "من التارجت" under the percentage
       // لو الكارت أقصر من كده (شاشة لابتوب 1366×768) بتتطبق المقاسات الأصغر دي. التلفزيون مش بيتأثر
       // Cards shorter than this (a 1366x768 laptop) use the smaller sizes below. The TV is not affected
       compactBelowCardHeight: 330,
       compact: {
+        donutSize: 104,
+        donutThickness: 12,
+        donutPercentFontSize: 26,
+        donutLabelFontSize: 11,
         nameFontSize: 24,
         vanFontSize: 13,
         monthNumberFontSize: 50,
@@ -704,17 +748,21 @@ export const dashboardConfig = {
     distributorsPage: {
       summaryHeight: 64, // ارتفاع الشريط اللي فوق - top summary strip height
       summaryNumberFontSize: 32, // حجم أرقام الشريط اللي فوق - summary numbers font size
-      featuredWidth: 0.9, // عرض كارت الموزع الكبير بالنسبة لكل عمود من الـ 2×2 (1 = نفس العرض) - featured card width vs each grid column
+      featuredWidth: 1.15, // عرض عمود الموزع الكبير بالنسبة لكل عمود من التانيين (1 = نفس العرض) - featured column width vs each other column
       nameFontSize: 28, // حجم اسم الموزع - distributor name font size
       featuredNameFontSize: 40, // حجم اسم الموزع الكبير - featured name font size
+      tallNameFontSize: 34, // حجم اسم الموزع اللي في عمود لوحده (fullHeight) - name size of a fullHeight card
       packetsFontSize: 56, // حجم رقم سحب الشهر بالباكت - month packets number size (px)
       featuredPacketsFontSize: 96, // حجم رقم سحب الشهر في الكارت الكبير - featured month packets size (px)
+      tallPacketsFontSize: 80, // حجم رقم سحب الشهر في كارت fullHeight - month packets size in a fullHeight card
       amountFontSize: 22, // حجم المبلغ بالجنيه - amount size
       featuredAmountFontSize: 34, // حجم المبلغ في الكارت الكبير - featured amount size
+      tallAmountFontSize: 30, // حجم المبلغ في كارت fullHeight - amount size in a fullHeight card
       labelFontSize: 16, // حجم العناوين الصغيرة - small labels
       infoFontSize: 17, // حجم عدد الطلبيات وآخر طلبية - orders count / last order text
       chipFontSize: 16, // حجم كبسولات المنتجات - product chips font size
       featuredChipFontSize: 20, // حجم كبسولات المنتجات في الكارت الكبير - featured product chips
+      tallChipFontSize: 18, // حجم كبسولات المنتجات في كارت fullHeight - product chips in a fullHeight card
       lateDays: 10, // لو آخر طلبية من أكتر من كده يوم تظهر برتقاني كتحذير - last order older than this many days shows orange
       cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
       // لو الكروت الصغيرة أقصر من كده (شاشة لابتوب 1366×768) بتتطبق المقاسات الأصغر دي. التلفزيون مش بيتأثر
@@ -731,7 +779,45 @@ export const dashboardConfig = {
         infoFontSize: 14,
         chipFontSize: 14,
         featuredChipFontSize: 17,
+        tallNameFontSize: 28,
+        tallPacketsFontSize: 64,
+        tallAmountFontSize: 24,
+        tallChipFontSize: 15,
         cardGap: 6,
+      },
+    },
+
+    // الخزن والمحافظ (الصفحة 5) - wallets page
+    // الأرقام = min(Max px, Scale cqi) و cqi = 1% من عرض الكارت نفسه، فالرقم عمره ما بيخرج برّه الكارت
+    // Numbers = min(Max px, Scale cqi), cqi = 1% of the card's own width, so a number never overflows its card
+    wallets: {
+      summaryHeight: 76, // ارتفاع الشريط اللي فوق (إجمالي الخزن والمحافظ) - top strip height
+      summaryNumberFontSize: 44, // حجم رقم الإجمالي - total number size
+      summaryFlowFontSize: 24, // حجم وارد/منصرف اليوم في الشريط اللي فوق - today's in/out in the top strip
+      nameMaxSize: 34, // أكبر حجم لاسم المحفظة - max wallet name size (px)
+      nameScale: 6.5, // اسم المحفظة = 6.5% من عرض الكارت لو أصغر - name size as % of card width
+      iconSize: 68, // حجم رسمة المحفظة / ماكينة فوري - wallet / Fawry picture size (px)
+      balanceLabelFontSize: 18, // حجم كلمة "الرصيد" - "الرصيد" label
+      balanceMaxSize: 72, // أكبر حجم لرقم الرصيد - max balance number size (px)
+      balanceScale: 12, // رقم الرصيد = 12% من عرض الكارت لو أصغر - balance size as % of card width
+      flowMaxSize: 30, // أكبر حجم لرقم الوارد / المنصرف - max incoming / outgoing number size (px)
+      flowScale: 5.5, // رقم الوارد / المنصرف = 5.5% من عرض الكارت لو أصغر - in/out number size as % of card width
+      flowLabelFontSize: 18, // حجم كلمة "وارد اليوم" / "منصرف اليوم" - in/out label
+      lastMoveMaxSize: 17, // أكبر حجم لسطر "آخر حركة" - max "آخر حركة" line size
+      lastMoveScale: 3.1, // سطر "آخر حركة" = 3.1% من عرض الكارت لو أصغر - "آخر حركة" size as % of card width
+      cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
+      // لو الكارت أقصر من كده (شاشة لابتوب 1366×768) بتتطبق المقاسات الأصغر دي. التلفزيون مش بيتأثر
+      // Cards shorter than this (a 1366x768 laptop) use the smaller sizes below. The TV is not affected
+      compactBelowCardHeight: 400,
+      compact: {
+        nameMaxSize: 24,
+        iconSize: 40,
+        balanceLabelFontSize: 14,
+        balanceMaxSize: 48,
+        flowMaxSize: 20,
+        flowLabelFontSize: 14,
+        lastMoveMaxSize: 14,
+        cardGap: 4,
       },
     },
 

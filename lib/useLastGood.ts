@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { Batches, DashboardData, Distributors, SalesReps, SectionKey } from "./types";
+import { Batches, DashboardData, Distributors, SalesReps, SectionKey, WalletNumbers } from "./types";
 
-// آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد الـ reload كل 5 دقايق
+// آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد الـ reload التلقائي (pages.reloadMinutes)
 // وحتى لو السيرفر (Vercel serverless) اتعمله restart ونسي آخر قيمة. بتتمسح لما اليوم يتغير
 // Last good result per card in the browser (localStorage), so it survives the automatic reload and
 // serverless restarts that wipe the server's memory. Cleared when the Cairo day changes.
@@ -14,6 +14,7 @@ type Saved = Partial<Pick<DashboardData, SectionKey>> & {
   batches?: Batches;
   sales?: SalesReps;
   distributors?: Distributors;
+  wallets?: Record<string, WalletNumbers>; // باسم المحفظة - by wallet name
   day: string;
 };
 
@@ -92,6 +93,22 @@ export function useLastGood(data: DashboardData | undefined) {
       changed = true;
     } else if (!data.distributors && saved.distributors) {
       view.distributors = { ...saved.distributors, offline: true };
+    }
+
+    // الخزن والمحافظ: كل كارت لوحده - wallets: each card on its own
+    if (data.wallets) {
+      view.wallets = {
+        list: data.wallets.list.map((card) => {
+          if (!card.linked) return card;
+          if (card.numbers && !card.offline) {
+            saved.wallets = { ...saved.wallets, [card.name]: card.numbers };
+            changed = true;
+            return card;
+          }
+          const copy = saved.wallets?.[card.name];
+          return !card.numbers && copy ? { ...card, numbers: copy, offline: true } : card;
+        }),
+      };
     }
 
     if (changed) writeSaved(saved);
