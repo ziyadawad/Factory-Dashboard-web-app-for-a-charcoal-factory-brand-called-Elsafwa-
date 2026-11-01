@@ -26,6 +26,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { stockMinimums } from "@/config/stock-min";
 import { ErpError, erpCall, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
+import { distributorsSection, salesRepsSection } from "./sales";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
 // Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
@@ -648,7 +649,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
   let treasuryStatus: SectionStatus = "ok";
-  const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns, charity] = await Promise.all([
+  const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns, charity, sales, distributors] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
         ({ account }) => balanceOn(account)),
@@ -736,6 +737,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     batchesSection(results),
     erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
     charitySection(results),
+    // المبيعات: كاش 60 ثانية (sales.cacheSeconds) - sales: cached for sales.cacheSeconds
+    salesRepsSection(results),
+    distributorsSection(results),
   ]);
   const [balance, incomingToday, outgoingToday] = treasury;
 
@@ -770,6 +774,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     batches: todayBatches,
     charity,
+    sales,
+    distributors,
     updatedAt: new Date().toISOString(),
     erpOffline,
     sections: { attendance: today.status, treasury: treasuryStatus, kilns: erpKilns.status },

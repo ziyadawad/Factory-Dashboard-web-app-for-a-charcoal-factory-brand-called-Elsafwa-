@@ -199,8 +199,61 @@ export interface Charity {
   offline: boolean;
 }
 
+// باكتات منتج واحد (ربع / نص / كيلو / 2 كيلو / 3 كيلو) - packets of one product
+export interface ProductPackets {
+  label: string;
+  packets: number;
+}
+
+// مندوب: الأرقام كلها للشهر ده (صافي بعد المرتجعات) - a rep; every number is this month, net of returns
+export interface RepSales {
+  name: string;
+  van: string;
+  target: number;
+  monthPackets: number;
+  products: ProductPackets[];
+  lastDay: { date: string; packets: number } | null; // آخر يوم فيه بيع الشهر ده - latest selling day this month
+  sellingDays: number; // عدد الأيام اللي فيها بيع - days with sales
+  avgPerDay: number; // متوسط اليوم (على أيام البيع) - average per selling day
+  projected: number; // المتوقع لآخر الشهر = المتوسط × أيام الشهر - projection = average × days in month
+  lastMonthPackets: number; // الشهر اللي فات - last month
+  isTop: boolean; // الأول في المبيعات - most packets this month
+}
+
+// صفحة مبيعات المناديب - reps sales page; offline = ERPNext failed and this is the last good data
+export interface SalesReps {
+  month: string; // "2026-11"
+  reps: RepSales[];
+  totalPackets: number;
+  totalTarget: number;
+  offline: boolean;
+}
+
+// موزع: سحب الشهر ده (صافي بعد المرتجعات) - a distributor, this month net of returns
+export interface DistributorSales {
+  name: string;
+  linked: boolean; // false = مفيش Customer ID في الكونفج - no Customer ID in the config
+  featured: boolean;
+  monthPackets: number;
+  monthAmount: number; // ج.م
+  products: ProductPackets[];
+  invoiceCount: number; // عدد الطلبيات (من غير المرتجعات) - invoices this month (returns excluded)
+  // آخر طلبية (كل فواتير آخر يوم مع بعض) - the latest order day (all invoices of that day together)
+  lastOrder: { date: string; packets: number; amount: number; daysAgo: number } | null;
+  lastMonthPackets: number;
+}
+
+export interface Distributors {
+  month: string;
+  list: DistributorSales[];
+  totalPackets: number;
+  offline: boolean;
+}
+
 export interface DashboardData {
   attendance: Attendance;
+  sales: SalesReps | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
+  distributors: Distributors | null; // null = ERPNext فشل ومفيش نتيجة قديمة
   stock: Stock;
   kilns: Kilns;
   treasury: Treasury;

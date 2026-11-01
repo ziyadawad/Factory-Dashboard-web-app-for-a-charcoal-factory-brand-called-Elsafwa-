@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { Batches, DashboardData, SectionKey } from "./types";
+import { Batches, DashboardData, Distributors, SalesReps, SectionKey } from "./types";
 
 // آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد الـ reload كل 5 دقايق
 // وحتى لو السيرفر (Vercel serverless) اتعمله restart ونسي آخر قيمة. بتتمسح لما اليوم يتغير
@@ -10,7 +10,12 @@ import { Batches, DashboardData, SectionKey } from "./types";
 
 const STORAGE_KEY = "dashboard-last-good";
 
-type Saved = Partial<Pick<DashboardData, SectionKey>> & { batches?: Batches; day: string };
+type Saved = Partial<Pick<DashboardData, SectionKey>> & {
+  batches?: Batches;
+  sales?: SalesReps;
+  distributors?: Distributors;
+  day: string;
+};
 
 const cairoDay = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
 
@@ -73,6 +78,20 @@ export function useLastGood(data: DashboardData | undefined) {
       changed = true;
     } else if (!data.batches && saved.batches) {
       view.batches = { ...saved.batches, offline: true };
+    }
+
+    // المبيعات والموزعين بنفس الطريقة - sales and distributors the same way
+    if (data.sales && !data.sales.offline) {
+      saved.sales = data.sales;
+      changed = true;
+    } else if (!data.sales && saved.sales) {
+      view.sales = { ...saved.sales, offline: true };
+    }
+    if (data.distributors && !data.distributors.offline) {
+      saved.distributors = data.distributors;
+      changed = true;
+    } else if (!data.distributors && saved.distributors) {
+      view.distributors = { ...saved.distributors, offline: true };
     }
 
     if (changed) writeSaved(saved);

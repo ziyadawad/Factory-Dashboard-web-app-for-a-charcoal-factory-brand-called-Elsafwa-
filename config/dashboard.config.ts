@@ -232,8 +232,67 @@ export const dashboardConfig = {
     list: [
       { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
       { id: "stock", title: "أرصدة المخازن", durationSeconds: 120 }, // الصفحة 2: المخازن - page 2
-      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 3: صناديق الصدقات - page 3
+      { id: "sales", title: "مبيعات المناديب", durationSeconds: 30 }, // الصفحة 3: مبيعات المناديب - page 3
+      { id: "distributors", title: "الموزعين", durationSeconds: 30 }, // الصفحة 4: الموزعين - page 4
+      { id: "charity", title: "الصدقات", durationSeconds: 30 }, // الصفحة 5: صناديق الصدقات - page 5
     ] as ConfigPage[],
+  },
+
+  // ============================================================
+  // المبيعات (صفحة مبيعات المناديب وصفحة الموزعين) - من فواتير البيع (Sales Invoice) المعتمدة بس
+  // Sales (reps page and distributors page) - from submitted Sales Invoices only
+  // - الفترة = الشهر ده من يوم 1 لحد النهارده بتوقيت القاهرة، والمرتجعات (is_return) بتتطرح لوحدها
+  // - الرقم بالباكت: كل وحدة من أصناف المنتجات المعبأة = باكت (زي صفحة المخازن، الكرتونة "كامل" = باكت)
+  //   ولو صنف لازم يتحسب بأكتر من باكت اكتبه في packetsPerUnit
+  // - البيانات بتتجاب من ERPNext مرة كل cacheSeconds (البيع بيتسجل تاني يوم)، ولو ERPNext وقع بتفضل آخر
+  //   بيانات نجحت مع "غير متصل"، ولو مفيش الكارت يكتب "غير متصل" (مش أصفار)
+  // Period = this month (Cairo) to today, returns subtracted. Packets: one unit of a packaged item = one packet
+  // (like the stock page); override in packetsPerUnit. Fetched once per cacheSeconds; on failure the last good
+  // data stays with "غير متصل", else the card shows "غير متصل" (never fake zeros)
+  // ============================================================
+  sales: {
+    cacheSeconds: 60, // البيانات بتتجاب من ERPNext مرة كل 60 ثانية بالكتير - fetch from ERPNext at most once per 60s
+    monthlyTarget: 1000, // تارجت الشهر لكل مندوب بالباكت (تقدر تغيره لمندوب لوحده بـ target) - monthly target per rep (packets)
+
+    // المنتجات بالترتيب اللي بتظهر بيه: label = الاسم القصير على الشاشة، stockName = اسمه في erp.stock.packaged فوق
+    // (أكواد الأصناف بتتاخد من هناك، فلو صنف جديد اتضاف للمخازن بيتحسب هنا لوحده)
+    // Products in display order: label = short name on screen, stockName = its name in erp.stock.packaged (item codes come from there)
+    products: [
+      { label: "ربع", stockName: "ربع كيلو" },
+      { label: "نص", stockName: "نص كيلو" },
+      { label: "كيلو", stockName: "كيلو" },
+      { label: "2 كيلو", stockName: "2 كيلو" },
+      { label: "3 كيلو", stockName: "3 كيلو" },
+    ] as { label: string; stockName: string }[],
+
+    // كام باكت في الوحدة لصنف معين (لو مش مكتوب = 1). ERPNext مفيهوش تحويل من كرتونة لباكت،
+    // فـ"كرتونة 1 كيلو" و"كرتونة 2 كيلو" بيتحسبوا باكت واحد زي صفحة المخازن. مثال: "كرتونة 1 كيلو": 10
+    // Packets per stock unit for an item (missing = 1). ERPNext has no carton -> packet conversion, so cartons count as 1
+    packetsPerUnit: {} as Record<string, number>,
+
+    // المناديب: كل مندوب بالعربية بتاعته. الفاتورة بتتحسب للمندوب حسب مخزن العربية اللي اتباع منه
+    // (warehouse في سطور الفاتورة)، لأن Sales Person في الفواتير مش متسجل بانتظام
+    // name = اسمه على الشاشة، van = اسم العربية، warehouse = اسم المخزن بالظبط زي ERPNext، target = تارجت مختلف (اختياري)
+    // Reps: an invoice counts for the rep whose van warehouse it was sold from (Sales Person is not filled reliably)
+    reps: [
+      { name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC" },
+      { name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC" },
+      { name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC" },
+      { name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC" },
+    ] as { name: string; van: string; warehouse: string; target?: number }[],
+
+    // الموزعين: سحب كل موزع = فواتير البيع بتاعته (Customer). customer = الـ ID بتاع العميل في ERPNext بالظبط
+    // featured = الكارت الكبير على اليمين. لو customer فاضي الكارت بيكتب "مش مربوط"
+    // Distributors: what each one took = their Sales Invoices. customer = the exact ERPNext Customer ID; featured = big card
+    distributors: [
+      { name: "عمرو خاطر", customer: "عمرو خاطر", featured: true },
+      { name: "محمد عادل حمزه", customer: "محمد عادل حمزة" },
+      { name: "اسامه شبرا", customer: "اسامه شبرا" },
+      // فيه كمان عميل "حماده العزباوي تعبئة" - لو عايز تجمعهم قولّي - there is also a "حماده العزباوي تعبئة" customer
+      { name: "حماده العزباوى", customer: "حماده العزباوي" },
+      // مفيش عميل بالاسم ده في ERPNext - اكتب الـ ID هنا (الأقرب: "احمد حسان - 1" في المنيا) - no match yet
+      { name: "احمد المنيا", customer: "" },
+    ] as { name: string; customer: string; featured?: boolean }[],
   },
 
   // ============================================================
@@ -608,6 +667,72 @@ export const dashboardConfig = {
       monthOutFontSize: 18, // حجم "صرف الشهر" فوق على الشمال - "صرف الشهر" chip font size
       recentRowHeight: 32, // ارتفاع كل سطر في "آخر العمليات" - last operations row height (px)
       recentFontSize: 15, // حجم الكلام في "آخر العمليات" - last operations font size
+    },
+
+    // مبيعات المناديب (الصفحة 3) - reps sales page
+    salesPage: {
+      summaryHeight: 64, // ارتفاع الشريط اللي فوق (إجمالي الشهر مقابل التارجت) - top summary strip height
+      summaryNumberFontSize: 32, // حجم أرقام الشريط اللي فوق - summary numbers font size
+      nameFontSize: 30, // حجم اسم المندوب - rep name font size
+      vanFontSize: 15, // حجم اسم العربية (سوزوكي 4) - van chip font size
+      monthNumberFontSize: 64, // حجم رقم مبيعات الشهر - month packets number size (px)
+      labelFontSize: 16, // حجم العناوين الصغيرة (مبيعات الشهر، آخر يوم بيع...) - small labels
+      lastDayNumberFontSize: 30, // حجم رقم باكتات آخر يوم بيع - last selling day packets size
+      infoFontSize: 16, // حجم سطر المتوسط والمتوقع - average / projection line
+      progressHeight: 14, // سُمك شريط التارجت - target progress bar thickness
+      percentFontSize: 22, // حجم نسبة التارجت - target percentage size
+      chipFontSize: 16, // حجم كبسولات المنتجات (ربع / نص / كيلو...) - product chips font size
+      cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
+      // لو الكارت أقصر من كده (شاشة لابتوب 1366×768) بتتطبق المقاسات الأصغر دي. التلفزيون مش بيتأثر
+      // Cards shorter than this (a 1366x768 laptop) use the smaller sizes below. The TV is not affected
+      compactBelowCardHeight: 330,
+      compact: {
+        nameFontSize: 24,
+        vanFontSize: 13,
+        monthNumberFontSize: 50,
+        labelFontSize: 14,
+        lastDayNumberFontSize: 22,
+        infoFontSize: 14,
+        progressHeight: 10,
+        percentFontSize: 18,
+        chipFontSize: 14,
+        cardGap: 6,
+      },
+    },
+
+    // الموزعين (الصفحة 4) - distributors page
+    distributorsPage: {
+      summaryHeight: 64, // ارتفاع الشريط اللي فوق - top summary strip height
+      summaryNumberFontSize: 32, // حجم أرقام الشريط اللي فوق - summary numbers font size
+      featuredWidth: 0.9, // عرض كارت الموزع الكبير بالنسبة لكل عمود من الـ 2×2 (1 = نفس العرض) - featured card width vs each grid column
+      nameFontSize: 28, // حجم اسم الموزع - distributor name font size
+      featuredNameFontSize: 40, // حجم اسم الموزع الكبير - featured name font size
+      packetsFontSize: 56, // حجم رقم سحب الشهر بالباكت - month packets number size (px)
+      featuredPacketsFontSize: 96, // حجم رقم سحب الشهر في الكارت الكبير - featured month packets size (px)
+      amountFontSize: 22, // حجم المبلغ بالجنيه - amount size
+      featuredAmountFontSize: 34, // حجم المبلغ في الكارت الكبير - featured amount size
+      labelFontSize: 16, // حجم العناوين الصغيرة - small labels
+      infoFontSize: 17, // حجم عدد الطلبيات وآخر طلبية - orders count / last order text
+      chipFontSize: 16, // حجم كبسولات المنتجات - product chips font size
+      featuredChipFontSize: 20, // حجم كبسولات المنتجات في الكارت الكبير - featured product chips
+      lateDays: 10, // لو آخر طلبية من أكتر من كده يوم تظهر برتقاني كتحذير - last order older than this many days shows orange
+      cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
+      // لو الكروت الصغيرة أقصر من كده (شاشة لابتوب 1366×768) بتتطبق المقاسات الأصغر دي. التلفزيون مش بيتأثر
+      // Small cards shorter than this (a 1366x768 laptop) use the smaller sizes below. The TV is not affected
+      compactBelowCardHeight: 330,
+      compact: {
+        nameFontSize: 22,
+        featuredNameFontSize: 32,
+        packetsFontSize: 44,
+        featuredPacketsFontSize: 80,
+        amountFontSize: 18,
+        featuredAmountFontSize: 28,
+        labelFontSize: 14,
+        infoFontSize: 14,
+        chipFontSize: 14,
+        featuredChipFontSize: 17,
+        cardGap: 6,
+      },
     },
 
     // كروت الصناديق في الصفحة 3 - مربع "الرصيد" صغير في النص، وتحته "آخر العمليات" بياخد باقي الكارت

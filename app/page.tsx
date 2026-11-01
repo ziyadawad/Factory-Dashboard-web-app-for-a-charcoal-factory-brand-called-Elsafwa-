@@ -11,6 +11,9 @@ import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
+import SalesRepsSection from "@/components/SalesRepsSection";
+import DistributorsSection from "@/components/DistributorsSection";
+import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
 import { useLastGood } from "@/lib/useLastGood";
@@ -244,6 +247,10 @@ export default function Dashboard() {
         );
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" />;
+      case "sales":
+        return <SalesRepsSection data={data.sales ?? null} />;
+      case "distributors":
+        return <DistributorsSection data={data.distributors ?? null} />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>
@@ -255,8 +262,35 @@ export default function Dashboard() {
     }
   };
 
-  return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+  // شاشة صغيرة (موبايل بالعرض): الصفحة على لوحة 1920×1080 متصغرة بـ scale. الشاشات الكبيرة مفيش أي تغيير
+  // Small screens (phone landscape): the page on a 1920x1080 canvas scaled down. Large screens: unchanged
+  const fit = useViewportFit();
+
+  if (fit.portrait) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <span className="text-6xl">📱</span>
+        <p className="text-white text-2xl font-bold">لف الموبايل بالعرض</p>
+      </div>
+    );
+  }
+
+  const dashboard = (
+    <div
+      className={`${fit.scale ? "" : "h-screen "}flex flex-col overflow-hidden bg-background`}
+      style={
+        fit.scale
+          ? {
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: CANVAS_WIDTH,
+              height: CANVAS_HEIGHT,
+              transform: `translate(-50%, -50%) scale(${fit.scale})`,
+            }
+          : undefined
+      }
+    >
       <Header
         isConnected={isConnected}
         page={PAGES[pageIndex]}
@@ -293,4 +327,6 @@ export default function Dashboard() {
       </main>
     </div>
   );
+
+  return fit.scale ? <div className="fixed inset-0 overflow-hidden bg-background">{dashboard}</div> : dashboard;
 }
