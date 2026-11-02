@@ -183,9 +183,10 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
             </div>
           </div>
 
-          {/* المنتجات - per product */}
-          <div className="shrink-0">
+          {/* المنتجات: صف العادي بالباكت وتحته صف الكراتين بعددها - per product: regular row (packets), then cartons (count) */}
+          <div className="shrink-0 flex flex-col gap-1.5">
             <ProductChips products={rep.products} fontSize={sizes.chipFontSize} accent="text-brandYellow" />
+            <ProductChips products={rep.cartons ?? []} fontSize={sizes.chipFontSize} accent="text-brandYellow" />
           </div>
         </>
       )}

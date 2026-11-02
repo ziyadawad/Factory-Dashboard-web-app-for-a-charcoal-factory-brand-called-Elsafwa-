@@ -41,6 +41,16 @@ function productOfItem(): Map<string, number> {
   return map;
 }
 
+// كل صنف كرتونة ← رقمه في sales.cartons (النوع "كامل") - carton item code -> index in sales.cartons
+function cartonOfItem(): Map<string, number> {
+  const map = new Map<string, number>();
+  sales.cartons.forEach((carton, index) => {
+    const field = dashboardConfig.erp.stock.packaged[carton.stockName]?.["كامل"];
+    if (field?.source === "erp") for (const code of field.itemCodes) map.set(code, index);
+  });
+  return map;
+}
+
 const packetsOf = (itemCode: string, stockQty: number) => stockQty * (sales.packetsPerUnit[itemCode] ?? 1);
 
 const emptyProducts = (): ProductPackets[] => sales.products.map((p) => ({ label: p.label, packets: 0 }));
@@ -90,9 +100,13 @@ async function loadRepRows(today: string): Promise<RepRow[]> {
 export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offline"> {
   const { month, prevMonth } = monthBounds(today);
   const products = productOfItem();
+  const cartonIndex = cartonOfItem();
   const reps: RepSales[] = sales.reps.map((rep) => {
     const own = rows.filter((row) => row.warehouse === rep.warehouse);
     const breakdown = emptyProducts();
+    // الإجمالي بالباكت زي الأول (الكراتين جواه)، والصف الأول من غير الكراتين - packet total as before (cartons included); row 1 without cartons
+    const regular = emptyProducts();
+    const cartons: ProductPackets[] = sales.cartons.map((c) => ({ label: c.label, packets: 0 }));
     const byDay = new Map<string, number>();
     let lastMonthPackets = 0;
     for (const row of own) {
@@ -103,6 +117,9 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
       if (date.startsWith(prevMonth)) lastMonthPackets += packets;
       if (!date.startsWith(month)) continue;
       breakdown[index].packets += packets;
+      const carton = cartonIndex.get(row.item_code);
+      if (carton === undefined) regular[index].packets += packets;
+      else cartons[carton].packets += row.qty ?? 0;
       byDay.set(date, (byDay.get(date) ?? 0) + packets);
     }
     const sellingDays = Array.from(byDay.entries()).filter(([, packets]) => packets > 0);
@@ -113,7 +130,8 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
       van: rep.van,
       target: rep.target ?? sales.monthlyTarget,
       monthPackets,
-      products: breakdown.map((p) => ({ ...p, packets: round(p.packets) })),
+      products: regular.map((p) => ({ ...p, packets: round(p.packets) })),
+      cartons: cartons.map((c) => ({ ...c, packets: round(c.packets) })),
       lastDay: last ? { date: last[0], packets: round(last[1]) } : null,
       sellingDays: sellingDays.length,
       lastMonthPackets: round(lastMonthPackets),

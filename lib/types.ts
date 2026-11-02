@@ -211,7 +211,8 @@ export interface RepSales {
   van: string;
   target: number;
   monthPackets: number;
-  products: ProductPackets[];
+  products: ProductPackets[]; // الصف الأول: الأصناف العادي بالباكت - row 1: regular items in packets
+  cartons: ProductPackets[]; // الصف التاني: الكراتين بعددها (packets = عدد الكراتين) - row 2: carton count (packets = cartons)
   lastDay: { date: string; packets: number } | null; // آخر يوم فيه بيع الشهر ده - latest selling day this month
   sellingDays: number; // عدد الأيام اللي فيها بيع - days with sales
   lastMonthPackets: number; // الشهر اللي فات - last month

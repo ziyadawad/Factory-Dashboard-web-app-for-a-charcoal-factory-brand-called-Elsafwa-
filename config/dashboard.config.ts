@@ -299,6 +299,17 @@ export const dashboardConfig = {
       { label: "3 كيلو", stockName: "3 كيلو" },
     ] as { label: string; stockName: string }[],
 
+    // الكراتين (الصف التاني في كارت المندوب): عدد الكراتين بوحدة الصنف نفسه (مش متحولة لباكت)
+    // الكود بيتاخد من النوع "كامل" في erp.stock.packaged[stockName]. الكراتين دي متحسبة في إجمالي الباكت زي ما هي
+    // Cartons (second chip row on a rep card): count in the item's own unit (not converted). The item code comes from
+    // the "كامل" variant of erp.stock.packaged[stockName]; they still count in the packet total as before
+    cartons: [
+      { label: "ربع كامل", stockName: "ربع كيلو" }, // باكت ربع كامل
+      { label: "نص كامل", stockName: "نص كيلو" }, // باكت نص كامل
+      { label: "كرتونة 1 كيلو", stockName: "كيلو" }, // كرتونة 1 كيلو
+      { label: "كرتونة 2 كيلو", stockName: "2 كيلو" }, // كرتونة 2 كيلو
+    ] as { label: string; stockName: string }[],
+
     // كام باكت في الوحدة لصنف معين (لو مش مكتوب = 1). ERPNext مفيهوش تحويل من كرتونة لباكت،
     // فـ"كرتونة 1 كيلو" و"كرتونة 2 كيلو" بيتحسبوا باكت واحد زي صفحة المخازن. مثال: "كرتونة 1 كيلو": 10
     // Packets per stock unit for an item (missing = 1). ERPNext has no carton -> packet conversion, so cartons count as 1
