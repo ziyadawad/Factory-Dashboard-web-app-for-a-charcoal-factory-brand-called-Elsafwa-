@@ -214,8 +214,6 @@ export interface RepSales {
   products: ProductPackets[];
   lastDay: { date: string; packets: number } | null; // آخر يوم فيه بيع الشهر ده - latest selling day this month
   sellingDays: number; // عدد الأيام اللي فيها بيع - days with sales
-  avgPerDay: number; // متوسط اليوم (على أيام البيع) - average per selling day
-  projected: number; // المتوقع لآخر الشهر = المتوسط × أيام الشهر - projection = average × days in month
   lastMonthPackets: number; // الشهر اللي فات - last month
   isTop: boolean; // الأول في المبيعات - most packets this month
 }

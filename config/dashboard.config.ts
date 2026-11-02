@@ -712,7 +712,7 @@ export const dashboardConfig = {
       monthNumberFontSize: 64, // حجم رقم مبيعات الشهر - month packets number size (px)
       labelFontSize: 16, // حجم العناوين الصغيرة (مبيعات الشهر، آخر يوم بيع...) - small labels
       lastDayNumberFontSize: 30, // حجم رقم باكتات آخر يوم بيع - last selling day packets size
-      infoFontSize: 16, // حجم سطر المتوسط والمتوقع - average / projection line
+      infoFontSize: 16, // حجم سطر التارجت وآخر يوم بيع - target line and last selling day
       progressHeight: 14, // سُمك شريط التارجت - target progress bar thickness
       percentFontSize: 22, // حجم نسبة التارجت - target percentage size
       chipFontSize: 16, // حجم كبسولات المنتجات (ربع / نص / كيلو...) - product chips font size

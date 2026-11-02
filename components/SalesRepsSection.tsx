@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Crown, Target, TrendingUp, Truck } from "lucide-react";
+import { CalendarDays, Crown, Truck } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
 import { RepSales, SalesReps } from "@/lib/types";
 import { formatDayName, toEnglishDigits } from "@/lib/format";
@@ -148,18 +148,6 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
                 <span className="text-gray-400">باكت</span>
               </p>
             </div>
-          </div>
-
-          {/* المتوسط والمتوقع في سطر واحد - average and projection on one line */}
-          <div className="shrink-0 flex items-center gap-4 text-gray-400 whitespace-nowrap leading-[1.5]" style={{ fontSize: sizes.infoFontSize }}>
-            <span className="flex items-center gap-1.5">
-              <TrendingUp size={sizes.infoFontSize} className="text-sky-400" />
-              متوسط اليوم: <Num value={rep.avgPerDay} className="text-gray-200 font-bold" /> باكت
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Target size={sizes.infoFontSize} className="text-sky-400" />
-              المتوقع لآخر الشهر: <Num value={rep.projected} className="text-gray-200 font-bold" /> باكت
-            </span>
           </div>
 
           {/* التارجت - target progress */}

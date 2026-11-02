@@ -20,7 +20,6 @@ function monthBounds(today: string) {
     monthStart: `${today.slice(0, 7)}-01`,
     prevMonth: `${prevYear}-${pad(prevMonth)}`,
     prevMonthStart: `${prevYear}-${pad(prevMonth)}-01`,
-    daysInMonth: new Date(Date.UTC(year, month, 0)).getUTCDate(),
   };
 }
 
@@ -89,7 +88,7 @@ async function loadRepRows(today: string): Promise<RepRow[]> {
 }
 
 export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offline"> {
-  const { month, prevMonth, daysInMonth } = monthBounds(today);
+  const { month, prevMonth } = monthBounds(today);
   const products = productOfItem();
   const reps: RepSales[] = sales.reps.map((rep) => {
     const own = rows.filter((row) => row.warehouse === rep.warehouse);
@@ -109,7 +108,6 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
     const sellingDays = Array.from(byDay.entries()).filter(([, packets]) => packets > 0);
     const last = sellingDays.sort(([a], [b]) => b.localeCompare(a))[0];
     const monthPackets = round(breakdown.reduce((sum, p) => sum + p.packets, 0));
-    const avgPerDay = sellingDays.length > 0 ? monthPackets / sellingDays.length : 0;
     return {
       name: rep.name,
       van: rep.van,
@@ -118,8 +116,6 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
       products: breakdown.map((p) => ({ ...p, packets: round(p.packets) })),
       lastDay: last ? { date: last[0], packets: round(last[1]) } : null,
       sellingDays: sellingDays.length,
-      avgPerDay: round(avgPerDay),
-      projected: round(avgPerDay * daysInMonth),
       lastMonthPackets: round(lastMonthPackets),
       isTop: false,
     };
