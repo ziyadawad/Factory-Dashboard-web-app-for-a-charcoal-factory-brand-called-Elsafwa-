@@ -329,6 +329,7 @@ export interface ConfigPage {
   id: string;
   title: string;
   durationSeconds: number; // مدة الصفحة في التقليب التلقائي - seconds on screen when auto rotating
+  enabled?: boolean; // false = الصفحة متوقفة (مش في التقليب ولا الأسهم ولا العداد) - false = page hidden everywhere
 }
 
 // قسم حضور في الكونفج: أكواد البصمة (attendance_device_id) - رقم لوحده أو [من، لحد]

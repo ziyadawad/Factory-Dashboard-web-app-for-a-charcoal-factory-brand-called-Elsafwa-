@@ -235,7 +235,8 @@ export const dashboardConfig = {
       { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 3: الخزن والمحافظ - page 3
       { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 4: صناديق الصدقات - page 4
       { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 5: مبيعات المناديب - page 5
-      { id: "distributors", title: "الموزعين", durationSeconds: 60 }, // الصفحة 6: الموزعين - page 6
+      // متوقفة — غيّرها لـ true لو عايز ترجّعها
+      { id: "distributors", title: "الموزعين", durationSeconds: 60, enabled: false }, // الموزعين - distributors (disabled)
     ] as ConfigPage[],
   },
 

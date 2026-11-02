@@ -647,6 +647,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const results: ErpStatus[] = [];
   const stock = stockLoader(results);
   const firstWood = Object.values(erp.stock.wood).find((field) => field.source === "erp");
+  const distributorsPageEnabled = dashboardConfig.pages.list.some((page) => page.id === "distributors" && page.enabled !== false);
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
   let treasuryStatus: SectionStatus = "ok";
@@ -740,7 +741,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     charitySection(results),
     // المبيعات: كاش 60 ثانية (sales.cacheSeconds) - sales: cached for sales.cacheSeconds
     salesRepsSection(results),
-    distributorsSection(results),
+    // الموزعين: مفيش طلب لـ ERPNext لو الصفحة متوقفة - distributors: no ERPNext request while the page is disabled
+    distributorsPageEnabled ? distributorsSection(results) : null,
     // الخزن والمحافظ: كاش 10 ثواني (wallets.cacheSeconds) - wallets: cached for wallets.cacheSeconds
     walletsSection(results),
   ]);

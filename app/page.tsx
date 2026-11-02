@@ -29,7 +29,8 @@ const fetcher = async (url: string) => {
 
 const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
 
-const PAGES = dashboardConfig.pages.list;
+// الصفحات الشغالة بس (enabled: false = متوقفة) - enabled pages only
+const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false);
 
 // رقم الصفحة اللي كانت ظاهرة قبل الـ reload التلقائي - the page shown before the automatic reload
 const RELOAD_PAGE_KEY = "dashboard-page-index";
