@@ -4,6 +4,7 @@ import { useState, useEffect, ReactNode } from "react";
 import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import FullscreenHint from "./FullscreenHint";
 
 interface HeaderProps {
   // false بس لو جلب البيانات فشل - false only when the data fetch failed
@@ -199,6 +200,7 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
         </button>
 
         {nav}
+        <FullscreenHint />
       </div>
     </header>
   );
