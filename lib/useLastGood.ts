@@ -3,9 +3,9 @@
 import { useMemo, useRef } from "react";
 import { Batches, DashboardData, Distributors, SalesReps, SectionKey, WalletNumbers } from "./types";
 
-// آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد الـ reload التلقائي (pages.reloadMinutes)
+// آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد أي reload
 // وحتى لو السيرفر (Vercel serverless) اتعمله restart ونسي آخر قيمة. بتتمسح لما اليوم يتغير
-// Last good result per card in the browser (localStorage), so it survives the automatic reload and
+// Last good result per card in the browser (localStorage), so it survives a page reload and
 // serverless restarts that wipe the server's memory. Cleared when the Cairo day changes.
 
 const STORAGE_KEY = "dashboard-last-good";

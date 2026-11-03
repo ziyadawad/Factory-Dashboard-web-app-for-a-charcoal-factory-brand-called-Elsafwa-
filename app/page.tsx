@@ -32,28 +32,6 @@ const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
 // الصفحات الشغالة بس (enabled: false = متوقفة) - enabled pages only
 const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false);
 
-// رقم الصفحة اللي كانت ظاهرة قبل الـ reload التلقائي - the page shown before the automatic reload
-const RELOAD_PAGE_KEY = "dashboard-page-index";
-
-function readReloadPage(): number | null {
-  try {
-    const saved = sessionStorage.getItem(RELOAD_PAGE_KEY);
-    sessionStorage.removeItem(RELOAD_PAGE_KEY);
-    const index = saved === null ? NaN : parseInt(saved, 10);
-    return index >= 0 && index < PAGES.length ? index : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveReloadPage(index: number) {
-  try {
-    sessionStorage.setItem(RELOAD_PAGE_KEY, String(index));
-  } catch {
-    // مفيش sessionStorage: الصفحة هتيجي من اللينك (?page=) - no sessionStorage: the URL's ?page= is used
-  }
-}
-
 // ?page=2 (رقم الصفحة) أو ?page=stock (اسمها) - page from the URL: 1-based number or page id
 function pageFromUrl(): number {
   const param = new URLSearchParams(window.location.search).get("page");
@@ -69,9 +47,21 @@ export default function Dashboard() {
     "/api/dashboard",
     fetcher,
     {
+      // بيسأل كل refreshSeconds من غير reload للصفحة (الداتا القديمة فاضلة لحد ما الجديدة توصل، فمفيش رمشة)
+      // Polls every refreshSeconds without reloading the page (old data stays until the new data arrives: no flicker)
       refreshInterval: REFRESH_MS,
-      revalidateOnFocus: false,
-      dedupingInterval: REFRESH_MS / 2,
+      // النت رجع أو الشاشة رجعلها الفوكس = اسأل حالا - internet back or window focused = refetch right away
+      revalidateOnReconnect: true,
+      revalidateOnFocus: true,
+      // يفضل يسأل وهو أوفلاين: الطلب بيفشل فتظهر "غير متصل" والأرقام القديمة فاضلة - keep polling offline so the badge shows
+      refreshWhenOffline: true,
+      dedupingInterval: 2000,
+      // لو الطلب فشل: إعادة كل ~15 ثانية وبتطول لحد دقيقة، ومش بتقف أبدا - on failure retry from ~15 s backing off to 60 s, forever
+      errorRetryInterval: 15_000,
+      onErrorRetry: (_error, _key, _config, revalidate, { retryCount }) => {
+        const delay = Math.min(60_000, 15_000 * 2 ** Math.min(retryCount - 1, 2));
+        setTimeout(() => revalidate({ retryCount }), delay);
+      },
     }
   );
 
@@ -88,32 +78,7 @@ export default function Dashboard() {
   const [pageIndex, setPageIndex] = useState(0);
   // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
   const [switchCount, setSwitchCount] = useState(0);
-  useEffect(() => setPageIndex(readReloadPage() ?? pageFromUrl()), []);
-
-  // reload كل reloadMinutes، ولو النت مقطوع نستنى "online" عشان مانفتحش صفحة خطأ
-  // Reload every reloadMinutes; when offline wait for the "online" event so we never reload into an error page
-  const pageIndexRef = useRef(0);
-  pageIndexRef.current = pageIndex;
-  useEffect(() => {
-    const minutes = dashboardConfig.pages.reloadMinutes;
-    if (!(minutes > 0)) return;
-    const reload = () => {
-      saveReloadPage(pageIndexRef.current);
-      window.location.reload();
-    };
-    const whenOnline = () => {
-      window.removeEventListener("online", whenOnline);
-      reload();
-    };
-    const timer = setTimeout(() => {
-      if (navigator.onLine) reload();
-      else window.addEventListener("online", whenOnline);
-    }, minutes * 60 * 1000);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("online", whenOnline);
-    };
-  }, []);
+  useEffect(() => setPageIndex(pageFromUrl()), []);
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);

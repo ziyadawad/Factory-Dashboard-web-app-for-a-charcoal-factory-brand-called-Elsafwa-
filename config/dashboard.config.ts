@@ -73,7 +73,9 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    refreshSeconds: 10, // كل كام ثانية الشاشة تسأل السيرفر عن بيانات جديدة (كل الصفحات) - how often every page polls the server
+    // كل 30 ثانية الشاشة بتجيب البيانات الجديدة من غير ما الصفحة تعمل reload (الشاشة الكاملة بتفضل شغالة)
+    // Every 30 s the screen fetches fresh data without reloading the page (fullscreen stays on)
+    refreshSeconds: 30,
     // السيرفر بيكلم ERPNext مرة واحدة بالكتير كل الثواني دي، وفي النص بيرجع آخر نتيجة - the server calls ERPNext at most once per this many seconds
     cacheSeconds: 10,
 
@@ -219,11 +221,6 @@ export const dashboardConfig = {
 
   pages: {
     autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
-    // الصفحة كلها بتعمل reload كل كام دقيقة (عشان ترجع لوحدها بعد ما النت يقطع)، وبترجع لنفس الصفحة اللي كانت عليها
-    // لو النت مقطوع ساعتها بتستنى لحد ما يرجع وبعدين تعمل reload - 0 = مفيش reload
-    // Reload the whole page every N minutes (recovers from internet drops) and return to the same page;
-    // when offline at that moment it waits for the connection to come back. 0 = never
-    reloadMinutes: 15,
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
     // durationSeconds = الصفحة دي تفضل كام ثانية قبل ما تتقلب للي بعدها - seconds on screen before the next page
     // لو حد داس على الأسهم الصفحة بتتقلب والعداد بيبدأ من الأول - a manual switch restarts the timer
