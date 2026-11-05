@@ -6,6 +6,15 @@
 ## Second Page
 ![second page](second%20page.png)
 
+## Third  Page
+![Third page](Third%20page.png)
+
+## fourth Page
+![fourth](fourth%20page.png)
+
+## fifth Page
+![fifth](fifth%20page.png)
+
 ## مراجعة الإنتاج (Production Audit)
 أداة بتقرا بس من ERPNext (مش بتغير أي حاجة) وبتراجع الإنتاج يوم بيوم من حركات Stock Entry نوعها Manufacture،
 عشان تلاقي الأيام اللي متسجلش فيها إنتاج، أو صنف غلط، أو كمية غريبة، أو حركة اتسجلت متأخر.
