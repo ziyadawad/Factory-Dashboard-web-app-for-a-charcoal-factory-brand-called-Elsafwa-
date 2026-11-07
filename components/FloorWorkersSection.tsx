@@ -24,6 +24,8 @@ interface FloorWorkersSectionProps {
   // العمال + السواقين والمناديب والغفر (دول برّه إجمالي العمال) - workers + drivers, reps, guards (not in the workers total)
   data: Attendance;
   offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
+  // الضغط على قسم يفتح تفاصيله (المفتاح من attendance.sections) - clicking a section opens its details
+  onOpenSection?: (section: string) => void;
 }
 
 type FactoryGroupKey = keyof Attendance["workers"]["productionFactory"]["groups"];
@@ -62,7 +64,7 @@ const CONTENT_ROWS_2 = "minmax(0,auto) minmax(0,auto)";
 const shownPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status !== "absent");
 const absentPeople = (group: AttendanceGroup) => group.people.filter((p) => p.status === "absent");
 
-export default function FloorWorkersSection({ data, offline = false }: FloorWorkersSectionProps) {
+export default function FloorWorkersSection({ data, offline = false, onOpenSection }: FloorWorkersSectionProps) {
   // مقاسات الكلام من sizes.page1 في الكونفج - text sizes from sizes.page1 in the config
   const text = useWorkerSizes();
 
@@ -80,6 +82,7 @@ export default function FloorWorkersSection({ data, offline = false }: FloorWork
     };
   }, []);
   const boxProps = { text, round };
+  const open = (section: string) => (onOpenSection ? () => onOpenSection(section) : undefined);
 
   const workers = data.workers;
   const factory = workers.productionFactory;
@@ -105,7 +108,7 @@ export default function FloorWorkersSection({ data, offline = false }: FloorWork
           <GroupHeader label={factory.label} icon={Factory} group={factory} titleFontSize={text.workerTitleFontSize} text={text} />
           <div className="flex-1 min-h-0 grid grid-cols-3 gap-2">
             {FACTORY_GROUPS.map(({ key, icon }) => (
-              <GroupBox key={key} group={factory.groups[key]} icon={icon} {...boxProps} nested />
+              <GroupBox key={key} group={factory.groups[key]} icon={icon} {...boxProps} nested onOpen={open(key)} />
             ))}
           </div>
         </div>
@@ -113,14 +116,14 @@ export default function FloorWorkersSection({ data, offline = false }: FloorWork
         {/* تحت (من اليمين): تعبئة | يومية فوق وغفر تحت | سواقين فوق ومناديب تحت
             Bottom area (right to left): packing | daily above guards | drivers above reps */}
         <div className="min-h-0 grid grid-cols-3 gap-2">
-          <GroupBox group={workers.packing} icon={Package} {...boxProps} />
+          <GroupBox group={workers.packing} icon={Package} {...boxProps} onOpen={open("packing")} />
           <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
-            <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} />
-            <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} />
+            <GroupBox group={workers.daily} icon={CalendarDays} {...boxProps} onOpen={open("daily")} />
+            <GroupBox group={data.guards} icon={ShieldCheck} {...boxProps} onOpen={open("guards")} />
           </div>
           <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
-            <GroupBox group={data.drivers} icon={Truck} {...boxProps} />
-            <GroupBox group={data.reps} icon={Briefcase} {...boxProps} />
+            <GroupBox group={data.drivers} icon={Truck} {...boxProps} onOpen={open("drivers")} />
+            <GroupBox group={data.reps} icon={Briefcase} {...boxProps} onOpen={open("reps")} />
           </div>
         </div>
       </div>
@@ -222,12 +225,14 @@ function GroupBox({
   text,
   round,
   nested,
+  onOpen,
 }: {
   group: AttendanceGroup;
   icon: LucideIcon;
   text: WorkerSizes;
   round: number;
   nested?: boolean;
+  onOpen?: () => void;
 }) {
   const minFontSize = dashboardConfig.sizes.page1.minWorkerChipFontSize;
   const shown = shownPeople(group);
@@ -250,7 +255,8 @@ function GroupBox({
 
   return (
     <div
-      className={`rounded-xl min-w-0 min-h-0 flex flex-col overflow-hidden ${
+      onClick={onOpen}
+      className={`rounded-xl min-w-0 min-h-0 flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""} ${
         nested ? "bg-card border border-cardBorder" : "bg-background"
       }`}
       style={{ padding: `${nested ? text.workerNestedBoxPadding : text.workerBoxPadding}px` }}

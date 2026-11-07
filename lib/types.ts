@@ -228,6 +228,41 @@ export interface SalesReps {
   offline: boolean;
 }
 
+// تفاصيل الحضور (لوحة الضغط على كارت حضور) - attendance details (the panel opened from an attendance card)
+// present / absent / leave = يوم شغل، off = الإجازة الأسبوعية، holiday = من Holiday List،
+// none = قبل التعيين أو قبل البصمة، future = لسه - none = before joining / before the biometric
+export type DayStatus = "present" | "absent" | "leave" | "off" | "holiday" | "none" | "future";
+
+export interface EmployeeDay {
+  date: string; // YYYY-MM-DD
+  status: DayStatus;
+  firstPunch: string | null; // "08:12" أول بصمة في اليوم (حتى لو يوم إجازة) - first punch that day
+}
+
+export interface EmployeeAttendance {
+  id: string; // Employee ID
+  code: string | null; // كود البصمة - attendance_device_id
+  name: string; // الاسم الكامل - full name
+  section: string; // اسم القسم - section label
+  today: PersonStatus; // نفس حالة الكارت - same status as the card
+  todayFirstPunch: string | null;
+  presentDays: number;
+  absentDays: number;
+  leaveDays: number;
+  absentDates: string[];
+  days: EmployeeDay[]; // كل أيام الشهر - every day of the month
+}
+
+export interface AttendanceDetails {
+  month: string; // "2026-11"
+  today: string;
+  section: { key: string; label: string; present: number; absent: number; leave: number };
+  trackingStartDate: string;
+  weeklyOff: string[];
+  holidayListsRead: boolean; // false = مفيش صلاحية على Holiday List (الإجازة الأسبوعية من الكونفج بس)
+  people: EmployeeAttendance[]; // الغايب النهارده الأول وبعدين بالاسم - absent today first, then by name
+}
+
 // تفاصيل المندوب يوم بيوم (لوحة التفاصيل) - a rep's daily details (the details panel)
 // columns = القيم بنفس ترتيب RepDetails.columns (الأصناف بالباكت ثم الكراتين بعددها) - values in RepDetails.columns order
 export interface RepInvoice {

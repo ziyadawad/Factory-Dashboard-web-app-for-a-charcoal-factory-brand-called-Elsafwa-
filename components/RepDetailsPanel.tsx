@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
+import { useIdleClose } from "@/lib/useIdleClose";
 import useSWR from "swr";
 import { ChevronDown, ChevronLeft, Truck, X } from "lucide-react";
 import { RepDetails, RepSales } from "@/lib/types";
@@ -39,27 +40,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
   const [openDay, setOpenDay] = useState<string | null>(null);
 
   // Esc يقفل، وأي لمسة تعيد عداد الدقيقة - Esc closes; any touch restarts the 60 s idle timer
-  useEffect(() => {
-    let timer = setTimeout(onClose, IDLE_CLOSE_MS);
-    const touch = () => {
-      clearTimeout(timer);
-      timer = setTimeout(onClose, IDLE_CLOSE_MS);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else touch();
-    };
-    const events = ["pointerdown", "pointermove", "wheel", "touchstart"] as const;
-    events.forEach((name) => window.addEventListener(name, touch, { passive: true }));
-    window.addEventListener("scroll", touch, { passive: true, capture: true });
-    window.addEventListener("keydown", onKey);
-    return () => {
-      clearTimeout(timer);
-      events.forEach((name) => window.removeEventListener(name, touch));
-      window.removeEventListener("scroll", touch, { capture: true });
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useIdleClose(onClose, IDLE_CLOSE_MS);
 
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
   const reached = rep.target > 0 && rep.monthPackets >= rep.target;

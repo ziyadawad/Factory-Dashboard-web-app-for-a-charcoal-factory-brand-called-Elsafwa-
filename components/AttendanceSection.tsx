@@ -16,6 +16,7 @@ interface AttendanceSectionProps {
   data: AttendanceGroup;
   updatedAt: string;
   offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
+  onOpen?: () => void; // الضغط على الكارت يفتح التفاصيل - clicking the card opens the details
 }
 
 // ألوان كل قايمة أسامي - colors of each name list
@@ -84,7 +85,7 @@ function NameList({
   );
 }
 
-export default function AttendanceSection({ data, updatedAt, offline = false }: AttendanceSectionProps) {
+export default function AttendanceSection({ data, updatedAt, offline = false, onOpen }: AttendanceSectionProps) {
   const absent = data.total - data.present - data.leave;
   const { count: presentCount } = useCountUp(data.present, 600);
   const { count: absentCount } = useCountUp(absent, 600);
@@ -143,7 +144,10 @@ export default function AttendanceSection({ data, updatedAt, offline = false }: 
   const innerRadius = outerRadius - sizes.donutThickness;
 
   return (
-    <div className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden">
+    <div
+      onClick={onOpen}
+      className={`bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""}`}
+    >
       {/* العنوان وتحته "آخر تحديث" - title, with the last update time on its own line */}
       <div className="mb-2 shrink-0">
         <div className="flex items-center justify-between gap-2">

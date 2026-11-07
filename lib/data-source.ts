@@ -43,7 +43,7 @@ function minimumOf(tree: MinimumTree, name: string, part?: { variant?: string; s
 
 // ===== الحضور - attendance (ERPNext only, sections by device code) =====
 
-type AttendanceSectionKey = keyof typeof dashboardConfig.attendance.sections;
+export type AttendanceSectionKey = keyof typeof dashboardConfig.attendance.sections;
 
 // بيانات النهارده الخام من ERPNext - today's raw ERPNext rows
 export type TodayAttendanceRows = {

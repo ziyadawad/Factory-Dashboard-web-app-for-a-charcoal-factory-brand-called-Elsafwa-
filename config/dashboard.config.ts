@@ -62,6 +62,14 @@ export const dashboardConfig = {
       "مصنع التعبئة": "packing", // مصنع التعبئة ← عمال تعبئة
       "مصنع الإنتاج": "production", // مصنع الإنتاج ← مصنع إنتاج / عمال إنتاج
     } as Record<string, string>,
+
+    // ===== تفاصيل الحضور (الضغط على كارت حضور) - attendance details (click an attendance card) =====
+    // أول يوم البصمة اشتغلت فيه (أول Employee Checkin في ERPNext). الأيام اللي قبله مش بتتحسب حضور ولا غياب
+    // First day of the biometric (the first Employee Checkin in ERPNext); earlier days count as neither present nor absent
+    trackingStartDate: "2026-10-28",
+    // أيام الإجازة الأسبوعية (بالإنجليزي): مش بتتحسب غياب ولا حضور. مثال يومين: ["Friday", "Saturday"]
+    // Weekly day(s) off (English day names): never counted as absent or present
+    weeklyOff: ["Friday"] as string[],
   },
 
   // ============================================================

@@ -12,6 +12,7 @@ import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
+import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
@@ -80,7 +81,11 @@ export default function Dashboard() {
   const [switchCount, setSwitchCount] = useState(0);
   useEffect(() => setPageIndex(pageFromUrl()), []);
   // لوحة تفاصيل مفتوحة = التقليب واقف (والأسهم كمان) - a details panel is open: rotation (and arrow keys) paused
-  const [paused, setPaused] = useState(false);
+  const [salesDetailsOpen, setSalesDetailsOpen] = useState(false);
+  // قسم الحضور المفتوح (من كروت الحضور في الرئيسية) - the open attendance section (from the main page cards)
+  const [attendanceSection, setAttendanceSection] = useState<string | null>(null);
+  const closeAttendance = useCallback(() => setAttendanceSection(null), []);
+  const paused = salesDetailsOpen || attendanceSection !== null;
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);
@@ -189,6 +194,7 @@ export default function Dashboard() {
                   data={data.attendance.management}
                   updatedAt={data.updatedAt}
                   offline={cards.attendance.offline}
+                  onOpen={() => setAttendanceSection("management")}
                 />
               )}
             </div>
@@ -196,7 +202,11 @@ export default function Dashboard() {
               {cards.attendance.missing ? (
                 <OfflineCard title="حضور عمال" />
               ) : (
-                <FloorWorkersSection data={data.attendance} offline={cards.attendance.offline} />
+                <FloorWorkersSection
+                  data={data.attendance}
+                  offline={cards.attendance.offline}
+                  onOpenSection={setAttendanceSection}
+                />
               )}
             </div>
             {/* الأفران وتحتها الطرحات اليوم - kilns with today's batches below */}
@@ -217,7 +227,7 @@ export default function Dashboard() {
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" />;
       case "sales":
-        return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setPaused} />;
+        return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setSalesDetailsOpen} />;
       case "distributors":
         return <DistributorsSection data={data.distributors ?? null} />;
       case "wallets":
@@ -296,6 +306,8 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
     </div>
   );
 

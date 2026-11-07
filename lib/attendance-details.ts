@@ -1,0 +1,201 @@
+// تفاصيل الحضور: كل موظفين القسم وحضورهم الشهر ده (بتتجاب بس لما لوحة تتفتح، وكاش 60 ثانية)
+// Attendance details: every employee of a section and their month (fetched only when a panel opens, 60 s cache)
+// قراية بس من ERPNext - read-only from ERPNext
+import { dashboardConfig } from "@/config/dashboard.config";
+import { erpGet, erpToday } from "./erp";
+import { AttendanceSectionKey, TodayAttendanceRows, employeeStatuses, splitBySection } from "./data-source";
+import { toEnglishDigits } from "./format";
+import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeDay } from "./types";
+
+const CACHE_MS = 60_000;
+const PRESENT_STATUSES = ["Present", "Half Day", "Work From Home"];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+type EmployeeRow = TodayAttendanceRows["employees"][number] & { date_of_joining: string | null; holiday_list: string | null };
+type AttendanceRow = { employee: string; employee_name: string | null; status: string; attendance_date: string };
+type CheckinRow = { employee: string; time: string; log_type: string | null };
+
+type MonthRows = {
+  today: string;
+  employees: EmployeeRow[];
+  attendance: AttendanceRow[];
+  checkins: CheckinRow[];
+  holidays: Map<string, Set<string>> | null; // اسم القايمة ← التواريخ (null = مفيش صلاحية) - list name -> dates
+  defaultHolidayList: string | null;
+};
+
+async function list<T>(doctype: string, params: Record<string, unknown>): Promise<T[]> {
+  const query: Record<string, string | number> = { limit_page_length: 0 };
+  for (const [name, value] of Object.entries(params)) query[name] = typeof value === "string" ? value : JSON.stringify(value);
+  return (await erpGet<{ data: T[] }>(`/api/resource/${encodeURIComponent(doctype)}`, query)).data;
+}
+
+// Holiday List لو الـ API user يقدر يقراها (لو 403 بنكمل بالإجازة الأسبوعية من الكونفج بس)
+// Holiday Lists when the API user may read them (on 403 we go on with the config weekly off only)
+async function loadHolidays(names: string[]): Promise<Map<string, Set<string>> | null> {
+  const result = new Map<string, Set<string>>();
+  try {
+    for (const name of names) {
+      const { data } = await erpGet<{ data: { holidays?: { holiday_date: string }[] } }>(
+        `/api/resource/Holiday%20List/${encodeURIComponent(name)}`
+      );
+      result.set(name, new Set((data.holidays ?? []).map((h) => String(h.holiday_date).slice(0, 10))));
+    }
+    return result;
+  } catch (error) {
+    console.warn("[erp] Holiday List not readable, using attendance.weeklyOff only:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+async function loadMonth(today: string): Promise<MonthRows> {
+  const { trackingStartDate } = dashboardConfig.attendance;
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const from = trackingStartDate > monthStart ? trackingStartDate : monthStart;
+  const [employees, attendance, checkins, companies] = await Promise.all([
+    list<EmployeeRow>("Employee", {
+      filters: [["status", "=", "Active"]],
+      fields: ["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "date_of_joining", "holiday_list"],
+    }),
+    list<AttendanceRow>("Attendance", {
+      filters: [["attendance_date", ">=", monthStart], ["attendance_date", "<=", today], ["docstatus", "=", 1]],
+      fields: ["employee", "employee_name", "status", "attendance_date"],
+    }),
+    list<CheckinRow>("Employee Checkin", {
+      filters: [["time", ">=", `${from} 00:00:00`], ["time", "<=", `${today} 23:59:59`]],
+      fields: ["employee", "time", "log_type"],
+      order_by: "time asc",
+    }),
+    list<{ default_holiday_list: string | null }>("Company", { fields: ["default_holiday_list"] }).catch(() => []),
+  ]);
+  const defaultHolidayList = companies.find((c) => c.default_holiday_list)?.default_holiday_list ?? null;
+  const names = Array.from(
+    new Set([defaultHolidayList, ...employees.map((e) => e.holiday_list)].filter((n): n is string => !!n))
+  );
+  const holidays = await loadHolidays(names);
+  return { today, employees, attendance, checkins, holidays, defaultHolidayList };
+}
+
+// الوقت في ERPNext بتوقيت مصر - ERPNext times are Africa/Cairo
+const dayOf = (time: string) => String(time).slice(0, 10);
+const punchOf = (time: string) => String(time).slice(11, 16);
+
+// أيام الشهر من 1 لآخره - every date of the month
+function monthDates(today: string): string[] {
+  const [year, month] = today.split("-").map(Number);
+  const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Array.from({ length: count }, (_, i) => `${today.slice(0, 7)}-${String(i + 1).padStart(2, "0")}`);
+}
+
+const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
+
+function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
+  const { today } = rows;
+  const config = dashboardConfig.attendance;
+  const weeklyOff = new Set(config.weeklyOff);
+
+  // 1) نفس قسمة الكروت بالظبط على بيانات النهارده - the cards' exact split on today's rows
+  const todayRows: TodayAttendanceRows = {
+    employees: rows.employees,
+    attendance: rows.attendance.filter((a) => dayOf(a.attendance_date) === today),
+    checkins: rows.checkins.filter((c) => dayOf(c.time) === today),
+  };
+  const people = splitBySection(todayRows)[key];
+  const todayStatuses = employeeStatuses(todayRows);
+
+  // 2) أول بصمة لكل موظف كل يوم، وسجل Attendance لكل يوم - first punch per employee per day, Attendance per day
+  const firstPunch = new Map<string, string>();
+  for (const c of rows.checkins) {
+    const k = `${c.employee}|${dayOf(c.time)}`;
+    const t = punchOf(c.time);
+    const previous = firstPunch.get(k);
+    if (!previous || t < previous) firstPunch.set(k, t);
+  }
+  const marked = new Map<string, "present" | "leave" | "absent">();
+  for (const a of rows.attendance) {
+    const k = `${a.employee}|${dayOf(a.attendance_date)}`;
+    const status = PRESENT_STATUSES.includes(a.status) ? "present" : a.status === "On Leave" ? "leave" : "absent";
+    const previous = marked.get(k);
+    if (previous === "present" || (previous === "leave" && status === "absent")) continue;
+    marked.set(k, status);
+  }
+
+  const byId = new Map(rows.employees.map((e) => [e.name, e]));
+  const attendanceNames = new Map(rows.attendance.map((a) => [a.employee, a.employee_name]));
+  const dates = monthDates(today);
+
+  const result: EmployeeAttendance[] = people.map((person) => {
+    const employee = byId.get(person.id);
+    const joined = employee?.date_of_joining ? String(employee.date_of_joining).slice(0, 10) : "";
+    // مبيتحسبش قبل التعيين ولا قبل البصمة - nothing counts before joining or before the biometric started
+    const startsAt = joined > config.trackingStartDate ? joined : config.trackingStartDate;
+    const holidayList = employee?.holiday_list || rows.defaultHolidayList;
+    const holidays = holidayList ? rows.holidays?.get(holidayList) : undefined;
+
+    const days: EmployeeDay[] = dates.map((date) => {
+      const punch = firstPunch.get(`${person.id}|${date}`) ?? null;
+      const mark = marked.get(`${person.id}|${date}`);
+      let status: DayStatus;
+      if (date > today) status = "future";
+      else if (date < startsAt) status = "none";
+      else if (weeklyOff.has(weekdayOf(date))) status = "off";
+      else if (holidays?.has(date)) status = "holiday";
+      else if (punch || mark === "present") status = "present";
+      else if (mark === "leave") status = "leave";
+      else status = "absent";
+      return { date, status, firstPunch: punch };
+    });
+    const count = (status: DayStatus) => days.filter((d) => d.status === status).length;
+    return {
+      id: person.id,
+      code: employee?.attendance_device_id ? toEnglishDigits(String(employee.attendance_device_id)).trim() : null,
+      name: toEnglishDigits(employee?.employee_name || attendanceNames.get(person.id) || person.id)
+        .replace(/\s+/g, " ")
+        .trim(),
+      section: config.sections[key].label,
+      today: todayStatuses.get(person.id) ?? person.status,
+      todayFirstPunch: firstPunch.get(`${person.id}|${today}`) ?? null,
+      presentDays: count("present"),
+      absentDays: count("absent"),
+      leaveDays: count("leave"),
+      absentDates: days.filter((d) => d.status === "absent").map((d) => d.date),
+      days,
+    };
+  });
+
+  // الغايب النهارده الأول وبعدين بالاسم - absent today first, then by name
+  result.sort((a, b) => Number(b.today === "absent") - Number(a.today === "absent") || a.name.localeCompare(b.name, "ar"));
+  const present = people.filter((p) => p.status === "present").length;
+  const leave = people.filter((p) => p.status === "leave").length;
+  return {
+    month: today.slice(0, 7),
+    today,
+    section: { key, label: config.sections[key].label, present, leave, absent: people.length - present - leave },
+    trackingStartDate: config.trackingStartDate,
+    weeklyOff: config.weeklyOff,
+    holidayListsRead: rows.holidays !== null,
+    people: result,
+  };
+}
+
+export const isAttendanceSection = (key: string): key is AttendanceSectionKey =>
+  Object.prototype.hasOwnProperty.call(dashboardConfig.attendance.sections, key);
+
+// طلب واحد لكل الأقسام، كاش 60 ثانية - one ERPNext round for every section, cached 60 s
+let cached: { at: number; rows: MonthRows } | null = null;
+let inFlight: Promise<MonthRows> | null = null;
+
+export async function attendanceDetails(key: AttendanceSectionKey): Promise<AttendanceDetails> {
+  const today = erpToday();
+  let rows = cached && cached.rows.today === today && Date.now() - cached.at < CACHE_MS ? cached.rows : null;
+  if (!rows) {
+    inFlight ??= loadMonth(today)
+      .then((loaded) => {
+        cached = { at: Date.now(), rows: loaded };
+        return loaded;
+      })
+      .finally(() => (inFlight = null));
+    rows = await inFlight;
+  }
+  return build(rows, key);
+}
