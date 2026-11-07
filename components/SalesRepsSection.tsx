@@ -6,6 +6,8 @@ import { RepSales, SalesReps } from "@/lib/types";
 import { formatDayName, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
+import RepDetailsPanel from "./RepDetailsPanel";
+import { useCallback, useEffect, useState } from "react";
 import { monthName, Num, Percent, ProductChips, SummaryStrip, useCompactRows } from "./SalesCommon";
 
 type Sizes = Omit<typeof dashboardConfig.sizes.salesPage, "compact">;
@@ -65,7 +67,7 @@ function TargetRing({ percent, reached, sizes }: { percent: number; reached: boo
 }
 
 // كارت مندوب - one rep's card
-function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; sizes: Sizes }) {
+function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: boolean; sizes: Sizes; onOpen: () => void }) {
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
   const reached = rep.target > 0 && rep.monthPackets >= rep.target;
   const remaining = Math.max(0, rep.target - rep.monthPackets);
@@ -73,8 +75,10 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
   const pill = "shrink-0 flex items-center gap-1.5 rounded-full border px-3 font-semibold leading-[1.75]";
 
   return (
+    // الضغط على الكارت (أو الاسم أو العربية) يفتح التفاصيل - clicking the card (name / van included) opens the details
     <div
-      className={`bg-card border rounded-2xl p-4 h-full min-h-0 flex flex-col overflow-hidden ${
+      onClick={onOpen}
+      className={`cursor-pointer bg-card border rounded-2xl p-4 h-full min-h-0 flex flex-col overflow-hidden ${
         reached ? "border-statusGreen/60 shadow-[0_0_22px_rgba(34,197,94,0.25)]" : "border-cardBorder"
       }`}
       style={{ gap: sizes.cardGap }}
@@ -194,9 +198,17 @@ function RepCard({ rep, offline, sizes }: { rep: RepSales; offline: boolean; siz
   );
 }
 
-export default function SalesRepsSection({ data }: { data: SalesReps | null }) {
+export default function SalesRepsSection({ data, onDetailsChange }: {
+  data: SalesReps | null;
+  onDetailsChange?: (open: boolean) => void; // عشان التقليب يقف واللوحة مفتوحة - pauses the rotation while open
+}) {
   const { compact, ...normal } = dashboardConfig.sizes.salesPage;
   const { ref, sizes } = useCompactRows<Sizes>(normal, compact, normal.compactBelowCardHeight);
+  // اللوحة بتتفتح بالضغط بس - the panel opens only on click
+  const [openRep, setOpenRep] = useState<string | null>(null);
+  useEffect(() => onDetailsChange?.(openRep !== null), [openRep, onDetailsChange]);
+  const closeDetails = useCallback(() => setOpenRep(null), []);
+  const detailsRep = openRep ? data?.reps.find((r) => r.name === openRep) : undefined;
 
   if (!data) {
     return (
@@ -239,9 +251,11 @@ export default function SalesRepsSection({ data }: { data: SalesReps | null }) {
       {/* 4 كروت 2×2 - 4 equal cards */}
       <div ref={ref} className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-4">
         {data.reps.map((rep) => (
-          <RepCard key={rep.name} rep={rep} offline={data.offline} sizes={sizes} />
+          <RepCard key={rep.name} rep={rep} offline={data.offline} sizes={sizes} onOpen={() => setOpenRep(rep.name)} />
         ))}
       </div>
+
+      {detailsRep && <RepDetailsPanel rep={detailsRep} onClose={closeDetails} />}
     </div>
   );
 }

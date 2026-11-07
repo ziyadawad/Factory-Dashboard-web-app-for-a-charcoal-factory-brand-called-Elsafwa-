@@ -79,6 +79,8 @@ export default function Dashboard() {
   // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
   const [switchCount, setSwitchCount] = useState(0);
   useEffect(() => setPageIndex(pageFromUrl()), []);
+  // لوحة تفاصيل مفتوحة = التقليب واقف (والأسهم كمان) - a details panel is open: rotation (and arrow keys) paused
+  const [paused, setPaused] = useState(false);
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);
@@ -92,22 +94,22 @@ export default function Dashboard() {
   // Keyboard arrows: left = next, right = previous (RTL)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (paused || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
       const step = e.key === "ArrowLeft" ? 1 : -1;
       changePage((pageIndex + step + PAGES.length) % PAGES.length);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pageIndex, changePage]);
+  }, [pageIndex, paused, changePage]);
 
   // التقليب التلقائي: كل صفحة بمدتها - auto rotate, each page for its own duration
   // (the timer restarts after every switch, manual or automatic)
   useEffect(() => {
     const seconds = PAGES[pageIndex]?.durationSeconds;
-    if (!autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
+    if (paused || !autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
     const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [pageIndex, switchCount, autoRotate, changePage]);
+  }, [pageIndex, switchCount, paused, autoRotate, changePage]);
 
   useEffect(() => {
     if (data && prevDataRef.current) {
@@ -215,7 +217,7 @@ export default function Dashboard() {
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" />;
       case "sales":
-        return <SalesRepsSection data={data.sales ?? null} />;
+        return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setPaused} />;
       case "distributors":
         return <DistributorsSection data={data.distributors ?? null} />;
       case "wallets":

@@ -2,7 +2,7 @@
 // قراية بس من ERPNext (Sales Invoice المعتمدة) - read-only from ERPNext (submitted Sales Invoices)
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpPost, erpToday } from "./erp";
-import { DistributorSales, Distributors, ProductPackets, RepSales, SalesReps } from "./types";
+import { DistributorSales, Distributors, ProductPackets, RepDay, RepDetails, RepInvoice, RepSales, SalesReps } from "./types";
 
 const sales = dashboardConfig.sales;
 
@@ -274,3 +274,157 @@ export const salesRepsSection = cachedSection("sales reps", async (today) => rep
 export const distributorsSection = cachedSection("distributors", async (today) =>
   distributorsFrom(await loadDistributorRows(today), today)
 );
+
+// ===== تفاصيل المندوب يوم بيوم (بتتجاب بس لما اللوحة تتفتح) - a rep's daily details (only when the panel opens) =====
+
+type DetailRow = {
+  name: string;
+  customer: string;
+  customer_name: string | null;
+  posting_date: string;
+  is_return: number;
+  grand_total: number;
+  item_code: string | null;
+  stock_qty: number | null;
+};
+
+// سطور فواتير عربية المندوب من أول الشهر لحد النهارده (طلب واحد) - the van's invoice lines this month, one request
+async function loadDetailRows(warehouse: string, today: string): Promise<DetailRow[]> {
+  const { monthStart } = monthBounds(today);
+  const child = "`tabSales Invoice Item`";
+  return getList<DetailRow>({
+    filters: [
+      ["docstatus", "=", 1],
+      ["posting_date", ">=", monthStart],
+      ["posting_date", "<=", today],
+      ["Sales Invoice Item", "warehouse", "=", warehouse],
+    ],
+    fields: [
+      "name",
+      "customer",
+      "customer_name",
+      "posting_date",
+      "is_return",
+      "grand_total",
+      `${child}.item_code as item_code`,
+      `${child}.stock_qty as stock_qty`,
+    ],
+    order_by: "posting_date desc, name asc",
+  });
+}
+
+// الأعمدة: الأصناف العادي (بالباكت) وبعدها الكراتين (بعددها) زي صفين الكارت - columns: regular products, then cartons, like the card's two chip rows
+export const detailColumns = (): string[] => [...sales.products.map((p) => p.label), ...sales.cartons.map((c) => c.label)];
+
+function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today: string): RepDetails {
+  const { month } = monthBounds(today);
+  const products = productOfItem();
+  const cartonIndex = cartonOfItem();
+  const width = sales.products.length + sales.cartons.length;
+  const blank = () => new Array<number>(width).fill(0);
+
+  // الفاتورة بتيجي سطر لكل صنف: المبلغ مرة واحدة لكل فاتورة - one row per line: each invoice's total counted once
+  const invoices = new Map<string, RepInvoice & { date: string; touches: boolean }>();
+  for (const row of rows) {
+    const date = String(row.posting_date).slice(0, 10);
+    let invoice = invoices.get(row.name);
+    if (!invoice) {
+      invoice = {
+        id: row.name,
+        customer: row.customer_name || row.customer,
+        isReturn: !!row.is_return,
+        columns: blank(),
+        packets: 0,
+        amount: money(row.grand_total ?? 0),
+        date,
+        touches: false,
+      };
+      invoices.set(row.name, invoice);
+    }
+    const index = row.item_code ? products.get(row.item_code) : undefined;
+    if (index === undefined || !row.item_code) continue;
+    const qty = row.stock_qty ?? 0;
+    const carton = cartonIndex.get(row.item_code);
+    // نفس حساب الكارت: العادي بالباكت، الكرتونة بعددها، والإجمالي بالباكت - same math as the card
+    if (carton === undefined) invoice.columns[index] += packetsOf(row.item_code, qty);
+    else invoice.columns[sales.products.length + carton] += qty;
+    invoice.packets += packetsOf(row.item_code, qty);
+    invoice.touches = true;
+  }
+
+  const days = new Map<string, RepDay>();
+  for (const invoice of Array.from(invoices.values())) {
+    if (!invoice.touches || !invoice.date.startsWith(month)) continue;
+    let day = days.get(invoice.date);
+    if (!day) {
+      day = { date: invoice.date, columns: blank(), packets: 0, amount: 0, customers: 0, invoices: [] };
+      days.set(invoice.date, day);
+    }
+    day.invoices.push({
+      id: invoice.id,
+      customer: invoice.customer,
+      isReturn: invoice.isReturn,
+      columns: invoice.columns,
+      packets: invoice.packets,
+      amount: invoice.amount,
+    });
+    invoice.columns.forEach((value, i) => (day!.columns[i] += value));
+    day.packets += invoice.packets;
+    day.amount += invoice.amount;
+  }
+
+  const list = Array.from(days.values())
+    .map((day) => ({
+      ...day,
+      columns: day.columns.map(round),
+      packets: round(day.packets),
+      amount: money(day.amount),
+      // العملاء = عدد العملاء المختلفين في فواتير البيع (من غير المرتجعات) - distinct customers on sale invoices
+      customers: new Set(day.invoices.filter((inv) => !inv.isReturn).map((inv) => inv.customer)).size,
+      invoices: day.invoices.map((inv) => ({ ...inv, columns: inv.columns.map(round), packets: round(inv.packets) })),
+    }))
+    .filter((day) => day.packets !== 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const totals = blank();
+  for (const day of list) day.columns.forEach((value, i) => (totals[i] += value));
+  return {
+    month,
+    name: rep.name,
+    van: rep.van,
+    target: rep.target ?? sales.monthlyTarget,
+    columns: detailColumns(),
+    days: list,
+    total: {
+      columns: totals,
+      packets: list.reduce((sum, d) => sum + d.packets, 0),
+      amount: money(list.reduce((sum, d) => sum + d.amount, 0)),
+      customers: list.reduce((sum, d) => sum + d.customers, 0),
+    },
+  };
+}
+
+// كاش 60 ثانية لكل مندوب (بيتسأل بس لما حد يفتح اللوحة) - 60 s cache per rep (asked only when someone opens the panel)
+const detailCache = new Map<string, { at: number; value: RepDetails }>();
+const detailInFlight = new Map<string, Promise<RepDetails>>();
+
+export async function repDetails(warehouseOrName: string): Promise<RepDetails | null> {
+  const rep = sales.reps.find((r) => r.warehouse === warehouseOrName || r.name === warehouseOrName || r.van === warehouseOrName);
+  if (!rep) return null;
+  const today = erpToday();
+  const key = `${rep.warehouse}|${today}`;
+  const hit = detailCache.get(key);
+  if (hit && Date.now() - hit.at < sales.cacheSeconds * 1000) return hit.value;
+  let pending = detailInFlight.get(key);
+  if (!pending) {
+    pending = loadDetailRows(rep.warehouse, today)
+      .then((rows) => {
+        const value = detailsFrom(rep, rows, today);
+        detailCache.set(key, { at: Date.now(), value });
+        return value;
+      })
+      .finally(() => detailInFlight.delete(key));
+    detailInFlight.set(key, pending);
+  }
+  return pending;
+}

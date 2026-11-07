@@ -228,6 +228,36 @@ export interface SalesReps {
   offline: boolean;
 }
 
+// تفاصيل المندوب يوم بيوم (لوحة التفاصيل) - a rep's daily details (the details panel)
+// columns = القيم بنفس ترتيب RepDetails.columns (الأصناف بالباكت ثم الكراتين بعددها) - values in RepDetails.columns order
+export interface RepInvoice {
+  id: string;
+  customer: string;
+  isReturn: boolean;
+  columns: number[];
+  packets: number;
+  amount: number;
+}
+
+export interface RepDay {
+  date: string; // YYYY-MM-DD
+  columns: number[];
+  packets: number;
+  amount: number;
+  customers: number;
+  invoices: RepInvoice[];
+}
+
+export interface RepDetails {
+  month: string;
+  name: string;
+  van: string;
+  target: number;
+  columns: string[];
+  days: RepDay[]; // الأحدث فوق - newest first
+  total: { columns: number[]; packets: number; amount: number; customers: number };
+}
+
 // موزع: سحب الشهر ده (صافي بعد المرتجعات) - a distributor, this month net of returns
 export interface DistributorSales {
   name: string;
