@@ -356,7 +356,8 @@ export interface DebtInvoice {
   daysAgo: number;
   isReturn: boolean;
   total: number;
-  paid: number;
+  paid: number; // المدفوع كله (متربط + دفعات مش متربطة اتخصمت منها) - all paid, linked + unlinked applied
+  unlinked: number; // من دفعات أو مرتجعات مش متربطة بالفاتورة في ERPNext - from payments or credit notes not linked to the invoice in ERPNext
   outstanding: number;
   url: string; // الفاتورة في ERPNext - the invoice in ERPNext
 }
@@ -366,6 +367,7 @@ export interface DebtCustomer {
   amount: number; // صافي مديونية العميل - net outstanding
   openInvoices: number; // الفواتير اللي عليها فلوس - invoices with money still due
   oldest: { date: string; daysAgo: number } | null; // أقدم فاتورة مفتوحة - oldest unpaid invoice
+  unlinkedApplied: number; // دفعات مش متربطة اتخصمت من فواتير العربية دي - unlinked payments deducted from this van's invoices
   invoices: DebtInvoice[]; // الأقدم الأول - oldest first
 }
 
@@ -373,6 +375,7 @@ export interface DebtCustomer {
 export interface RepDebt {
   amount: number;
   customers: number;
+  unlinkedApplied: number; // دفعات العملاء اللي مش متربطة بفواتير واتخصمت - unlinked customer payments deducted
   warningDays: number;
   aging: { label: string; amount: number; invoices: number }[]; // 0–7 / 8–30 / أكتر من 30
   list: DebtCustomer[]; // الأكبر الأول - biggest first

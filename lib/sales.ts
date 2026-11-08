@@ -166,8 +166,12 @@ export function repsFrom(rows: RepRow[], today: string, debts: Map<string, RepDe
 // ===== المديونية برّه - outstanding debt =====
 // كل الفواتير المعتمدة اللي لسه عليها فلوس (أي تاريخ)، متقسمة على المناديب بمخزن العربية زي الكروت.
 // المرتجعات (Credit Note) اللي لسه مخصومتش outstanding بتاعها بالسالب فبتطرح لوحدها.
+// الدفعات اللي مش متربطة بفواتير (Payment Entry فيها unallocated_amount) بتتخصم من مديونية العميل:
+// بتتوزع على أقدم فواتيره المفتوحة الأول (من أي مخزن) زي ما Payment Reconciliation في ERPNext بيعمل.
 // Every submitted invoice with money still due (any date), split by van warehouse like the cards.
 // Unallocated credit notes have a negative outstanding, so they subtract by themselves.
+// Payments not linked to invoices (Payment Entry unallocated_amount) are deducted per customer, applied to
+// the customer's oldest open invoices first (any warehouse), the way ERPNext Payment Reconciliation would.
 
 type DebtRow = {
   name: string;
@@ -178,17 +182,19 @@ type DebtRow = {
   grand_total: number;
   rounded_total: number | null;
   outstanding_amount: number;
-  warehouse: string;
+  warehouse: string | null;
 };
 
-// طلب واحد: صف لكل (فاتورة × مخزن عربية) - one request: a row per (invoice × van warehouse)
+type UnlinkedRow = { party: string; payment_type: string; amount: number };
+
+// كل الفواتير المفتوحة (أي مخزن، عشان الدفعات تتوزع على أقدم فواتير العميل كلها): صف لكل (فاتورة × مخزن)
+// Every open invoice (any warehouse, so payments go to the customer's oldest invoices overall): a row per (invoice × warehouse)
 async function loadDebtRows(): Promise<DebtRow[]> {
   const child = "`tabSales Invoice Item`";
   return getList<DebtRow>({
     filters: [
       ["docstatus", "=", 1],
       ["outstanding_amount", "!=", 0],
-      ["Sales Invoice Item", "warehouse", "in", sales.reps.map((r) => r.warehouse)],
     ],
     fields: [
       "name",
@@ -206,27 +212,97 @@ async function loadDebtRows(): Promise<DebtRow[]> {
   });
 }
 
+// الدفعات اللي مش متربطة لكل عميل (Receive بيقلل المديونية، Pay = رد فلوس للعميل بيزودها)
+// Unlinked payments per customer (Receive lowers the debt, Pay = a refund to the customer raises it)
+async function loadUnlinkedPayments(): Promise<Map<string, number>> {
+  const rows = await getList<UnlinkedRow>({
+    doctype: "Payment Entry",
+    filters: [
+      ["docstatus", "=", 1],
+      ["party_type", "=", "Customer"],
+      ["unallocated_amount", "!=", 0],
+    ],
+    fields: ["party", "payment_type", "sum(unallocated_amount) as amount"],
+    group_by: "party, payment_type",
+  });
+  const credit = new Map<string, number>();
+  for (const row of rows) {
+    const sign = row.payment_type === "Receive" ? 1 : row.payment_type === "Pay" ? -1 : 0;
+    credit.set(row.party, (credit.get(row.party) ?? 0) + sign * (row.amount ?? 0));
+  }
+  return credit;
+}
+
 const AGING = [
   { label: "0–7 أيام", max: 7 },
   { label: "8–30 يوم", max: 30 },
   { label: "أكتر من 30 يوم", max: Infinity },
 ];
 
+type OpenInvoice = { row: DebtRow; van: string | null; date: string; outstanding: number; unlinked: number };
+
 // مديونية كل مخزن عربية - each van warehouse's debt
-function debtsFrom(rows: DebtRow[], today: string): Map<string, RepDebt> {
+function debtsFrom(rows: DebtRow[], unlinked: Map<string, number>, today: string): Map<string, RepDebt> {
   const warningDays = sales.debtWarningDays;
-  const seen = new Set<string>(); // الفاتورة لمندوب واحد بس - an invoice counts for one rep only
+  const vans = new Set(sales.reps.map((r) => r.warehouse));
+
+  // فاتورة واحدة لكل اسم، ومخزن العربية لو أي سطر منها من عربية - one entry per invoice, with its van if any line is from one
+  const invoices = new Map<string, OpenInvoice>();
+  for (const row of rows) {
+    const van = row.warehouse && vans.has(row.warehouse) ? row.warehouse : null;
+    const existing = invoices.get(row.name);
+    if (existing) {
+      existing.van ??= van;
+      continue;
+    }
+    const outstanding = money(row.outstanding_amount ?? 0);
+    invoices.set(row.name, { row, van, date: String(row.posting_date).slice(0, 10), outstanding, unlinked: 0 });
+  }
+
+  // الدفعات والمرتجعات اللي مش متربطة: على أقدم فواتير العميل المفتوحة الأول (فالمديونية عمرها ما تبقى بالسالب)
+  // Unlinked payments and credit notes: oldest open invoices first (so a debt never goes negative)
+  const byCustomer = new Map<string, OpenInvoice[]>();
+  const credits = new Map(unlinked);
+  for (const invoice of Array.from(invoices.values())) {
+    const customer = invoice.row.customer;
+    if (invoice.outstanding < 0) {
+      credits.set(customer, (credits.get(customer) ?? 0) - invoice.outstanding);
+      invoice.outstanding = 0;
+      continue;
+    }
+    const list = byCustomer.get(customer) ?? [];
+    list.push(invoice);
+    byCustomer.set(customer, list);
+  }
+  for (const [customer, list] of Array.from(byCustomer.entries())) {
+    let credit = credits.get(customer) ?? 0;
+    if (credit <= 0) continue;
+    list.sort((a, b) => a.date.localeCompare(b.date) || a.row.name.localeCompare(b.row.name));
+    for (const invoice of list) {
+      if (credit <= 0) break;
+      const applied = Math.min(credit, invoice.outstanding);
+      invoice.unlinked = money(applied);
+      invoice.outstanding = money(invoice.outstanding - applied);
+      credit -= applied;
+    }
+  }
+
   const result = new Map<string, RepDebt>();
   for (const rep of sales.reps) {
     const customers = new Map<string, DebtCustomer>();
     const aging = AGING.map((b) => ({ ...b, amount: 0, invoices: 0 }));
-    for (const row of rows) {
-      if (row.warehouse !== rep.warehouse || seen.has(row.name)) continue;
-      seen.add(row.name);
-      const date = String(row.posting_date).slice(0, 10);
+    for (const open of Array.from(invoices.values())) {
+      if (open.van !== rep.warehouse) continue;
+      const { row, date, outstanding } = open;
+      let customer = customers.get(row.customer);
+      if (!customer) {
+        customer = { customer: row.customer_name || row.customer, amount: 0, openInvoices: 0, oldest: null, unlinkedApplied: 0, invoices: [] };
+        customers.set(row.customer, customer);
+      }
+      customer.unlinkedApplied += open.unlinked;
+      if (outstanding === 0) continue; // اتغطت بدفعة أو مرتجع مش متربط - covered by an unlinked payment or credit note
       const daysAgo = Math.max(0, daysBetween(date, today));
       const total = money(row.rounded_total || row.grand_total || 0);
-      const outstanding = money(row.outstanding_amount ?? 0);
       const invoice: DebtInvoice = {
         id: row.name,
         date,
@@ -234,14 +310,10 @@ function debtsFrom(rows: DebtRow[], today: string): Map<string, RepDebt> {
         isReturn: !!row.is_return,
         total,
         paid: money(total - outstanding),
+        unlinked: open.unlinked,
         outstanding,
         url: erpDocUrl("Sales Invoice", row.name),
       };
-      let customer = customers.get(row.customer);
-      if (!customer) {
-        customer = { customer: row.customer_name || row.customer, amount: 0, openInvoices: 0, oldest: null, invoices: [] };
-        customers.set(row.customer, customer);
-      }
       customer.invoices.push(invoice);
       customer.amount += outstanding;
       if (outstanding > 0) {
@@ -253,12 +325,18 @@ function debtsFrom(rows: DebtRow[], today: string): Map<string, RepDebt> {
       if (outstanding > 0) bucket.invoices += 1;
     }
     const list = Array.from(customers.values())
-      .map((c) => ({ ...c, amount: money(c.amount), invoices: c.invoices.sort((a, b) => a.date.localeCompare(b.date)) }))
+      .map((c) => ({
+        ...c,
+        amount: money(c.amount),
+        unlinkedApplied: money(c.unlinkedApplied),
+        invoices: c.invoices.sort((a, b) => a.date.localeCompare(b.date)),
+      }))
       .filter((c) => c.amount !== 0 || c.openInvoices > 0)
       .sort((a, b) => b.amount - a.amount);
     result.set(rep.warehouse, {
       amount: money(list.reduce((sum, c) => sum + c.amount, 0)),
       customers: list.filter((c) => c.amount > 0).length,
+      unlinkedApplied: money(Array.from(customers.values()).reduce((sum, c) => sum + c.unlinkedApplied, 0)),
       warningDays,
       aging: aging.map(({ label, amount, invoices }) => ({ label, amount: money(amount), invoices })),
       list,
@@ -283,9 +361,9 @@ let debtInFlight: Promise<Map<string, RepDebt>> | null = null;
 
 export async function repDebts(today: string): Promise<Map<string, RepDebt>> {
   if (debtCache && debtCache.today === today && Date.now() - debtCache.at < sales.cacheSeconds * 1000) return debtCache.value;
-  debtInFlight ??= loadDebtRows()
-    .then((rows) => {
-      const value = debtsFrom(rows, today);
+  debtInFlight ??= Promise.all([loadDebtRows(), loadUnlinkedPayments()])
+    .then(([rows, unlinked]) => {
+      const value = debtsFrom(rows, unlinked, today);
       debtCache = { at: Date.now(), today, value };
       return value;
     })
