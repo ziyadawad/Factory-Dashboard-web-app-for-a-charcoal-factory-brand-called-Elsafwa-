@@ -1,8 +1,21 @@
 // المبيعات: صفحة مبيعات المناديب وصفحة الموزعين - sales: the reps page and the distributors page
 // قراية بس من ERPNext (Sales Invoice المعتمدة) - read-only from ERPNext (submitted Sales Invoices)
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpPost, erpToday } from "./erp";
-import { DistributorSales, Distributors, ProductPackets, RepDay, RepDetails, RepInvoice, RepSales, SalesReps } from "./types";
+import { erpDocUrl, erpPost, erpToday } from "./erp";
+import {
+  DebtCustomer,
+  DebtInvoice,
+  DistributorSales,
+  Distributors,
+  ProductPackets,
+  RepDay,
+  RepDebt,
+  RepDebtSummary,
+  RepDetails,
+  RepInvoice,
+  RepSales,
+  SalesReps,
+} from "./types";
 
 const sales = dashboardConfig.sales;
 
@@ -97,7 +110,7 @@ async function loadRepRows(today: string): Promise<RepRow[]> {
   });
 }
 
-export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offline"> {
+export function repsFrom(rows: RepRow[], today: string, debts: Map<string, RepDebt> | null = null): Omit<SalesReps, "offline"> {
   const { month, prevMonth } = monthBounds(today);
   const products = productOfItem();
   const cartonIndex = cartonOfItem();
@@ -136,6 +149,7 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
       sellingDays: sellingDays.length,
       lastMonthPackets: round(lastMonthPackets),
       isTop: false,
+      debt: debts ? debtSummary(debts.get(rep.warehouse)) : null,
     };
   });
   const best = Math.max(0, ...reps.map((r) => r.monthPackets));
@@ -145,7 +159,148 @@ export function repsFrom(rows: RepRow[], today: string): Omit<SalesReps, "offlin
     reps,
     totalPackets: reps.reduce((sum, r) => sum + r.monthPackets, 0),
     totalTarget: reps.reduce((sum, r) => sum + r.target, 0),
+    totalDebt: debts ? money(reps.reduce((sum, r) => sum + (r.debt?.amount ?? 0), 0)) : null,
   };
+}
+
+// ===== المديونية برّه - outstanding debt =====
+// كل الفواتير المعتمدة اللي لسه عليها فلوس (أي تاريخ)، متقسمة على المناديب بمخزن العربية زي الكروت.
+// المرتجعات (Credit Note) اللي لسه مخصومتش outstanding بتاعها بالسالب فبتطرح لوحدها.
+// Every submitted invoice with money still due (any date), split by van warehouse like the cards.
+// Unallocated credit notes have a negative outstanding, so they subtract by themselves.
+
+type DebtRow = {
+  name: string;
+  customer: string;
+  customer_name: string | null;
+  posting_date: string;
+  is_return: number;
+  grand_total: number;
+  rounded_total: number | null;
+  outstanding_amount: number;
+  warehouse: string;
+};
+
+// طلب واحد: صف لكل (فاتورة × مخزن عربية) - one request: a row per (invoice × van warehouse)
+async function loadDebtRows(): Promise<DebtRow[]> {
+  const child = "`tabSales Invoice Item`";
+  return getList<DebtRow>({
+    filters: [
+      ["docstatus", "=", 1],
+      ["outstanding_amount", "!=", 0],
+      ["Sales Invoice Item", "warehouse", "in", sales.reps.map((r) => r.warehouse)],
+    ],
+    fields: [
+      "name",
+      "customer",
+      "customer_name",
+      "posting_date",
+      "is_return",
+      "grand_total",
+      "rounded_total",
+      "outstanding_amount",
+      `${child}.warehouse as warehouse`,
+    ],
+    group_by: `name, ${child}.warehouse`,
+    order_by: "posting_date asc, name asc",
+  });
+}
+
+const AGING = [
+  { label: "0–7 أيام", max: 7 },
+  { label: "8–30 يوم", max: 30 },
+  { label: "أكتر من 30 يوم", max: Infinity },
+];
+
+// مديونية كل مخزن عربية - each van warehouse's debt
+function debtsFrom(rows: DebtRow[], today: string): Map<string, RepDebt> {
+  const warningDays = sales.debtWarningDays;
+  const seen = new Set<string>(); // الفاتورة لمندوب واحد بس - an invoice counts for one rep only
+  const result = new Map<string, RepDebt>();
+  for (const rep of sales.reps) {
+    const customers = new Map<string, DebtCustomer>();
+    const aging = AGING.map((b) => ({ ...b, amount: 0, invoices: 0 }));
+    for (const row of rows) {
+      if (row.warehouse !== rep.warehouse || seen.has(row.name)) continue;
+      seen.add(row.name);
+      const date = String(row.posting_date).slice(0, 10);
+      const daysAgo = Math.max(0, daysBetween(date, today));
+      const total = money(row.rounded_total || row.grand_total || 0);
+      const outstanding = money(row.outstanding_amount ?? 0);
+      const invoice: DebtInvoice = {
+        id: row.name,
+        date,
+        daysAgo,
+        isReturn: !!row.is_return,
+        total,
+        paid: money(total - outstanding),
+        outstanding,
+        url: erpDocUrl("Sales Invoice", row.name),
+      };
+      let customer = customers.get(row.customer);
+      if (!customer) {
+        customer = { customer: row.customer_name || row.customer, amount: 0, openInvoices: 0, oldest: null, invoices: [] };
+        customers.set(row.customer, customer);
+      }
+      customer.invoices.push(invoice);
+      customer.amount += outstanding;
+      if (outstanding > 0) {
+        customer.openInvoices += 1;
+        if (!customer.oldest || date < customer.oldest.date) customer.oldest = { date, daysAgo };
+      }
+      const bucket = aging.find((b) => daysAgo <= b.max)!;
+      bucket.amount += outstanding;
+      if (outstanding > 0) bucket.invoices += 1;
+    }
+    const list = Array.from(customers.values())
+      .map((c) => ({ ...c, amount: money(c.amount), invoices: c.invoices.sort((a, b) => a.date.localeCompare(b.date)) }))
+      .filter((c) => c.amount !== 0 || c.openInvoices > 0)
+      .sort((a, b) => b.amount - a.amount);
+    result.set(rep.warehouse, {
+      amount: money(list.reduce((sum, c) => sum + c.amount, 0)),
+      customers: list.filter((c) => c.amount > 0).length,
+      warningDays,
+      aging: aging.map(({ label, amount, invoices }) => ({ label, amount: money(amount), invoices })),
+      list,
+    });
+  }
+  return result;
+}
+
+// اللي بيظهر على الكارت - what the card shows
+function debtSummary(debt: RepDebt | undefined): RepDebtSummary | null {
+  if (!debt) return null;
+  return {
+    amount: debt.amount,
+    customers: debt.customers,
+    overdue: debt.list.some((c) => c.oldest !== null && c.oldest.daysAgo > debt.warningDays),
+  };
+}
+
+// كاش 60 ثانية للمديونية (الكروت واللوحة بيستخدموا نفس النتيجة) - 60 s cache shared by the cards and the panel
+let debtCache: { at: number; today: string; value: Map<string, RepDebt> } | null = null;
+let debtInFlight: Promise<Map<string, RepDebt>> | null = null;
+
+export async function repDebts(today: string): Promise<Map<string, RepDebt>> {
+  if (debtCache && debtCache.today === today && Date.now() - debtCache.at < sales.cacheSeconds * 1000) return debtCache.value;
+  debtInFlight ??= loadDebtRows()
+    .then((rows) => {
+      const value = debtsFrom(rows, today);
+      debtCache = { at: Date.now(), today, value };
+      return value;
+    })
+    .finally(() => (debtInFlight = null));
+  return debtInFlight;
+}
+
+// المديونية لو فشلت متوقعش الصفحة: الكارت بيكتب "—" - a failed debt request never breaks the page: the card shows "—"
+async function repDebtsOrNull(today: string): Promise<Map<string, RepDebt> | null> {
+  try {
+    return await repDebts(today);
+  } catch (error) {
+    console.error("[erp] sales debt failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 // ===== الموزعين - distributors =====
@@ -270,7 +425,10 @@ function cachedSection<T extends { month: string }>(key: string, load: (today: s
   };
 }
 
-export const salesRepsSection = cachedSection("sales reps", async (today) => repsFrom(await loadRepRows(today), today));
+export const salesRepsSection = cachedSection("sales reps", async (today) => {
+  const [rows, debts] = await Promise.all([loadRepRows(today), repDebtsOrNull(today)]);
+  return repsFrom(rows, today, debts);
+});
 export const distributorsSection = cachedSection("distributors", async (today) =>
   distributorsFrom(await loadDistributorRows(today), today)
 );
@@ -316,7 +474,7 @@ async function loadDetailRows(warehouse: string, today: string): Promise<DetailR
 // الأعمدة: الأصناف العادي (بالباكت) وبعدها الكراتين (بعددها) زي صفين الكارت - columns: regular products, then cartons, like the card's two chip rows
 export const detailColumns = (): string[] => [...sales.products.map((p) => p.label), ...sales.cartons.map((c) => c.label)];
 
-function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today: string): RepDetails {
+function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today: string, debt: RepDebt | null): RepDetails {
   const { month } = monthBounds(today);
   const products = productOfItem();
   const cartonIndex = cartonOfItem();
@@ -401,6 +559,7 @@ function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today:
       amount: money(list.reduce((sum, d) => sum + d.amount, 0)),
       customers: list.reduce((sum, d) => sum + d.customers, 0),
     },
+    debt,
   };
 }
 
@@ -417,9 +576,9 @@ export async function repDetails(warehouseOrName: string): Promise<RepDetails | 
   if (hit && Date.now() - hit.at < sales.cacheSeconds * 1000) return hit.value;
   let pending = detailInFlight.get(key);
   if (!pending) {
-    pending = loadDetailRows(rep.warehouse, today)
-      .then((rows) => {
-        const value = detailsFrom(rep, rows, today);
+    pending = Promise.all([loadDetailRows(rep.warehouse, today), repDebtsOrNull(today)])
+      .then(([rows, debts]) => {
+        const value = detailsFrom(rep, rows, today, debts?.get(rep.warehouse) ?? null);
         detailCache.set(key, { at: Date.now(), value });
         return value;
       })

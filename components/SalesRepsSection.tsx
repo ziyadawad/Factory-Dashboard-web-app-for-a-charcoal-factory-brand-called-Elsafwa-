@@ -2,7 +2,7 @@
 
 import { CalendarDays, Crown, Truck } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
-import { RepSales, SalesReps } from "@/lib/types";
+import { RepDebtSummary, RepSales, SalesReps } from "@/lib/types";
 import { formatDayName, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
@@ -66,6 +66,34 @@ function TargetRing({ percent, reached, sizes }: { percent: number; reached: boo
   );
 }
 
+// المديونية برّه (نفس شكل خانة آخر يوم بيع): أخضر لو صفر، برتقاني لو فيه، أحمر لو فيه فاتورة أقدم من debtWarningDays
+// Outstanding debt (same style as the last selling day box): green at 0, orange above, red past debtWarningDays
+function DebtBox({ debt, sizes }: { debt: RepDebtSummary | null; sizes: Sizes }) {
+  const color = !debt ? "text-gray-500" : debt.amount <= 0 ? "text-statusGreen" : debt.overdue ? "text-statusRed" : "text-brandOrange";
+  return (
+    // سطر واحد عشان الكارت ميطولش ويخبط في سطر التارجت - one line so the card row never grows into the target line
+    <div
+      className="shrink-0 flex items-center gap-1.5 rounded-xl border border-cardBorder bg-background/70 px-3 whitespace-nowrap leading-[1.6]"
+      style={{ fontSize: sizes.infoFontSize }}
+    >
+      <span className="text-gray-400 font-semibold">💰 مديونية برّه:</span>
+      {debt ? (
+        <>
+          <span style={{ lineHeight: 1.3 }}>
+            <Num value={Math.round(debt.amount)} className={`font-bold ${color}`} style={{ fontSize: sizes.debtNumberFontSize }} />{" "}
+            <span className="text-gray-400">ج.م</span>
+          </span>
+          <span className="ms-auto ps-1 text-gray-400">
+            عند <Num value={debt.customers} className="text-gray-200 font-bold" /> عميل
+          </span>
+        </>
+      ) : (
+        <span className="font-bold text-gray-500">—</span>
+      )}
+    </div>
+  );
+}
+
 // كارت مندوب - one rep's card
 function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: boolean; sizes: Sizes; onOpen: () => void }) {
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
@@ -120,6 +148,7 @@ function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: bool
           <p className="text-gray-500" style={{ fontSize: sizes.infoFontSize }}>
             الشهر اللي فات: <Num value={rep.lastMonthPackets} className="text-gray-300 font-bold" /> باكت
           </p>
+          <DebtBox debt={rep.debt} sizes={sizes} />
         </div>
       ) : (
         <>
@@ -141,16 +170,20 @@ function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: bool
               </p>
             </div>
             <TargetRing percent={percent} reached={reached} sizes={sizes} />
-            <div className="shrink-0 rounded-xl border border-cardBorder bg-background/70 px-3 py-1" style={{ fontSize: sizes.infoFontSize }}>
-              <p className="flex items-center gap-1.5 text-gray-400 font-semibold whitespace-nowrap leading-[1.6]">
-                <CalendarDays size={sizes.infoFontSize} />
-                آخر يوم بيع
-                <span className="text-gray-200">{rep.lastDay ? formatDayName(rep.lastDay.date) : "—"}</span>
-              </p>
-              <p className="whitespace-nowrap" style={{ lineHeight: 1.2 }}>
-                <Num value={rep.lastDay?.packets ?? 0} className="font-bold text-brandYellow" style={{ fontSize: sizes.lastDayNumberFontSize }} />{" "}
-                <span className="text-gray-400">باكت</span>
-              </p>
+            {/* آخر يوم بيع وتحته المديونية برّه - the last selling day, with the outstanding debt under it */}
+            <div className="shrink-0 flex flex-col" style={{ gap: sizes.debtBoxGap }}>
+              <div className="shrink-0 rounded-xl border border-cardBorder bg-background/70 px-3 py-1" style={{ fontSize: sizes.infoFontSize }}>
+                <p className="flex items-center gap-1.5 text-gray-400 font-semibold whitespace-nowrap leading-[1.6]">
+                  <CalendarDays size={sizes.infoFontSize} />
+                  آخر يوم بيع
+                  <span className="text-gray-200">{rep.lastDay ? formatDayName(rep.lastDay.date) : "—"}</span>
+                </p>
+                <p className="whitespace-nowrap" style={{ lineHeight: 1.2 }}>
+                  <Num value={rep.lastDay?.packets ?? 0} className="font-bold text-brandYellow" style={{ fontSize: sizes.lastDayNumberFontSize }} />{" "}
+                  <span className="text-gray-400">باكت</span>
+                </p>
+              </div>
+              <DebtBox debt={rep.debt} sizes={sizes} />
             </div>
           </div>
 
@@ -234,6 +267,13 @@ export default function SalesRepsSection({ data, onDetailsChange }: {
           <Num value={data.totalTarget} className="font-bold text-gray-300" style={{ fontSize: sizes.summaryNumberFontSize * 0.75 }} />
           <span className="text-gray-400 text-lg font-semibold"> باكت</span>
         </p>
+        {data.totalDebt !== null && (
+          <p className="whitespace-nowrap text-gray-300 font-semibold text-lg" style={{ lineHeight: 1.1 }}>
+            إجمالي المديونية:{" "}
+            <Num value={Math.round(data.totalDebt)} className="font-extrabold text-brandOrange" style={{ fontSize: sizes.summaryNumberFontSize * 0.75 }} />
+            <span className="text-gray-400"> ج.م</span>
+          </p>
+        )}
         <div className="flex-1 min-w-[120px] h-3 rounded-full bg-background border border-cardBorder overflow-hidden">
           <div
             className={`h-full rounded-full ${percent >= 100 ? "bg-statusGreen" : "bg-gradient-to-l from-brandYellow to-brandOrange"}`}

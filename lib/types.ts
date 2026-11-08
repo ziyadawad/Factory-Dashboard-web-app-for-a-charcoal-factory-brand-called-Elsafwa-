@@ -263,6 +263,14 @@ export interface RepSales {
   sellingDays: number; // عدد الأيام اللي فيها بيع - days with sales
   lastMonthPackets: number; // الشهر اللي فات - last month
   isTop: boolean; // الأول في المبيعات - most packets this month
+  debt: RepDebtSummary | null; // المديونية برّه (كل الفواتير المفتوحة، أي تاريخ) - outstanding debt (all open invoices, any date)
+}
+
+// مديونية المندوب على الكارت - a rep's outstanding debt on the card
+export interface RepDebtSummary {
+  amount: number; // صافي المديونية (الفواتير المفتوحة ناقص المرتجعات) ج.م - net outstanding, EGP
+  customers: number; // عدد العملاء اللي عليهم فلوس - customers who owe money
+  overdue: boolean; // فيه فاتورة مفتوحة أقدم من sales.debtWarningDays - an unpaid invoice older than debtWarningDays
 }
 
 // صفحة مبيعات المناديب - reps sales page; offline = ERPNext failed and this is the last good data
@@ -271,6 +279,7 @@ export interface SalesReps {
   reps: RepSales[];
   totalPackets: number;
   totalTarget: number;
+  totalDebt: number | null; // إجمالي مديونية المناديب - all reps' outstanding debt
   offline: boolean;
 }
 
@@ -337,6 +346,36 @@ export interface RepDetails {
   columns: string[];
   days: RepDay[]; // الأحدث فوق - newest first
   total: { columns: number[]; packets: number; amount: number; customers: number };
+  debt: RepDebt | null; // null = طلب المديونية فشل - the debt request failed
+}
+
+// فاتورة مفتوحة (أو مرتجع لسه مخصومش) - an unpaid invoice (or an unallocated credit note)
+export interface DebtInvoice {
+  id: string;
+  date: string; // YYYY-MM-DD
+  daysAgo: number;
+  isReturn: boolean;
+  total: number;
+  paid: number;
+  outstanding: number;
+  url: string; // الفاتورة في ERPNext - the invoice in ERPNext
+}
+
+export interface DebtCustomer {
+  customer: string;
+  amount: number; // صافي مديونية العميل - net outstanding
+  openInvoices: number; // الفواتير اللي عليها فلوس - invoices with money still due
+  oldest: { date: string; daysAgo: number } | null; // أقدم فاتورة مفتوحة - oldest unpaid invoice
+  invoices: DebtInvoice[]; // الأقدم الأول - oldest first
+}
+
+// مديونية المندوب في لوحة التفاصيل - a rep's debt in the details panel
+export interface RepDebt {
+  amount: number;
+  customers: number;
+  warningDays: number;
+  aging: { label: string; amount: number; invoices: number }[]; // 0–7 / 8–30 / أكتر من 30
+  list: DebtCustomer[]; // الأكبر الأول - biggest first
 }
 
 // موزع: سحب الشهر ده (صافي بعد المرتجعات) - a distributor, this month net of returns

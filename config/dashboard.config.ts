@@ -293,6 +293,8 @@ export const dashboardConfig = {
   sales: {
     cacheSeconds: 60, // البيانات بتتجاب من ERPNext مرة كل 60 ثانية بالكتير - fetch from ERPNext at most once per 60s
     monthlyTarget: 1000, // تارجت الشهر لكل مندوب بالباكت (تقدر تغيره لمندوب لوحده بـ target) - monthly target per rep (packets)
+    // المديونية برّه: الرقم بيبقى أحمر لو فيه فاتورة مفتوحة أقدم من كده (بالأيام) - debt turns red past this many days
+    debtWarningDays: 30,
 
     // المنتجات بالترتيب اللي بتظهر بيه: label = الاسم القصير على الشاشة، stockName = اسمه في erp.stock.packaged فوق
     // (أكواد الأصناف بتتاخد من هناك، فلو صنف جديد اتضاف للمخازن بيتحسب هنا لوحده)
@@ -734,6 +736,8 @@ export const dashboardConfig = {
       percentFontSize: 22, // حجم نسبة التارجت - target percentage size
       chipFontSize: 16, // حجم كبسولات المنتجات (ربع / نص / كيلو...) - product chips font size
       cardGap: 12, // المسافة بين أجزاء الكارت - space between the parts of a card
+      debtNumberFontSize: 22, // حجم رقم المديونية برّه (تحت آخر يوم بيع) - outstanding debt number (under the last selling day)
+      debtBoxGap: 6, // المسافة بين خانة آخر يوم بيع وخانة المديونية - gap between the last-day box and the debt box
       // دايرة نسبة التارجت (زي دونت الحضور): برتقاني تحت التارجت، أخضر ولامع لو وصل - target ring (like the attendance donut)
       donutSize: 150, // حجم الدايرة بالبكسل (عرض = طول) - ring size in px (width = height)
       donutThickness: 16, // سُمك الدايرة - ring thickness
@@ -757,6 +761,8 @@ export const dashboardConfig = {
         percentFontSize: 18,
         chipFontSize: 14,
         cardGap: 6,
+        debtNumberFontSize: 17,
+        debtBoxGap: 4,
       },
     },
 

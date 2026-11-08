@@ -22,6 +22,12 @@ function erpSettings() {
   return { baseUrl: url.replace(/\/+$/, ""), auth: `token ${key}:${secret}` };
 }
 
+// رابط مستند في ERPNext (للزرار "افتح في ERPNext") - a document's ERPNext desk link
+export function erpDocUrl(doctype: string, name: string): string {
+  const slug = doctype.toLowerCase().replace(/ /g, "-");
+  return `${erpSettings().baseUrl}/app/${slug}/${encodeURIComponent(name)}`;
+}
+
 // GET على ERPNext ويرجع الـ JSON - GET from ERPNext and return the parsed JSON
 // path مثلا "/api/method/frappe.auth.get_logged_user" - params بتتحط في الـ query string
 export async function erpGet<T = unknown>(

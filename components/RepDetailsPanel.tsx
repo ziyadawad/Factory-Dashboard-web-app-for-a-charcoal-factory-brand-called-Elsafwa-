@@ -3,10 +3,10 @@
 import { Fragment, useState } from "react";
 import { useIdleClose } from "@/lib/useIdleClose";
 import useSWR from "swr";
-import { ChevronDown, ChevronLeft, Truck, X } from "lucide-react";
-import { RepDetails, RepSales } from "@/lib/types";
+import { ChevronDown, ChevronLeft, ExternalLink, Truck, X } from "lucide-react";
+import { RepDebt, RepDetails, RepSales } from "@/lib/types";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
-import { monthName, Num, Percent } from "./SalesCommon";
+import { daysAgoText, monthName, Num, Percent } from "./SalesCommon";
 
 // لو محدش لمس اللوحة دقيقة تقفل لوحدها - closes by itself after 60 s without any touch
 const IDLE_CLOSE_MS = 60_000;
@@ -29,6 +29,175 @@ function Cell({ value, strong = false, money = false }: { value: number; strong?
   );
 }
 
+// "1,234 ج.م" - an amount in EGP
+function Money({ value, className = "" }: { value: number; className?: string }) {
+  return (
+    <span className="whitespace-nowrap">
+      <Num value={Math.round(value)} className={className} /> <span className="text-gray-500 text-[0.85em]">ج.م</span>
+    </span>
+  );
+}
+
+const formatDate = (date: string) => {
+  const [year, month, day] = date.split("-");
+  return `${day}/${month}/${year}`;
+};
+
+// تاب المديونية: الإجمالي والأعمار فوق، وجدول العملاء (الأكبر الأول)، والضغط على العميل يفتح فواتيره المفتوحة
+// The debt tab: total and aging on top, then customers (biggest first); clicking a customer shows their unpaid invoices
+function DebtTab({ debt }: { debt: RepDebt }) {
+  const [openCustomer, setOpenCustomer] = useState<string | null>(null);
+  const th = "px-3 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+  const agingColors = ["text-statusGreen", "text-brandOrange", "text-statusRed"];
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      {/* الإجمالي والأعمار - total and aging */}
+      <div className="shrink-0 flex flex-wrap items-stretch gap-3 px-5 py-3 border-b border-cardBorder">
+        <div className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
+          <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">إجمالي المديونية</p>
+          <p className="leading-[1.3]">
+            <Num value={Math.round(debt.amount)} className={`text-[30px] font-extrabold ${debt.amount > 0 ? "text-brandOrange" : "text-statusGreen"}`} />{" "}
+            <span className="text-gray-400 text-lg">ج.م</span>
+          </p>
+        </div>
+        <div className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
+          <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">عدد العملاء</p>
+          <p className="leading-[1.3]">
+            <Num value={debt.customers} className="text-[30px] font-extrabold text-white" /> <span className="text-gray-400 text-lg">عميل</span>
+          </p>
+        </div>
+        {debt.aging.map((bucket, i) => (
+          <div key={bucket.label} className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
+            <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">
+              {bucket.label} <span className="text-gray-500">· {bucket.invoices} فاتورة</span>
+            </p>
+            <p className="leading-[1.3]">
+              <Num value={Math.round(bucket.amount)} className={`text-[26px] font-extrabold ${bucket.amount > 0 ? agingColors[i] : "text-gray-500"}`} />{" "}
+              <span className="text-gray-400 text-lg">ج.م</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-auto">
+        {debt.list.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xl text-statusGreen">مفيش مديونية برّه ✅</div>
+        ) : (
+          <table className="w-full border-separate border-spacing-0 text-[16px] leading-[2.1]">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr>
+                <th className={`${th} text-start ps-5`}>اسم العميل</th>
+                <th className={th}>المديونية</th>
+                <th className={th}>عدد الفواتير المفتوحة</th>
+                <th className={th}>أقدم فاتورة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {debt.list.map((customer) => {
+                const open = openCustomer === customer.customer;
+                const late = customer.oldest !== null && customer.oldest.daysAgo > debt.warningDays;
+                return (
+                  <Fragment key={customer.customer}>
+                    <tr
+                      onClick={() => setOpenCustomer(open ? null : customer.customer)}
+                      className={`cursor-pointer ${open ? "bg-brandOrange/10" : "hover:bg-white/5"}`}
+                    >
+                      <td className="ps-3 pe-2 border-b border-cardBorder/60 text-gray-200 font-semibold">
+                        <span className="inline-flex items-center gap-1.5">
+                          {open ? <ChevronDown size={18} className="text-brandOrange" /> : <ChevronLeft size={18} className="text-gray-500" />}
+                          {toEnglishDigits(customer.customer)}
+                        </span>
+                      </td>
+                      <td className="px-3 text-center border-b border-cardBorder/60">
+                        <Money
+                          value={customer.amount}
+                          className={`font-bold ${customer.amount <= 0 ? "text-statusGreen" : late ? "text-statusRed" : "text-brandOrange"}`}
+                        />
+                      </td>
+                      <td className="px-3 text-center border-b border-cardBorder/60">
+                        <Num value={customer.openInvoices} className="text-gray-100" />
+                      </td>
+                      <td className={`px-3 text-center border-b border-cardBorder/60 whitespace-nowrap ${late ? "text-statusRed font-semibold" : "text-gray-300"}`}>
+                        {customer.oldest ? (
+                          <>
+                            <span dir="ltr" className="font-numbers">{formatDate(customer.oldest.date)}</span>
+                            <span className={late ? "" : "text-gray-500"}> · {daysAgoText(customer.oldest.daysAgo)}</span>
+                          </>
+                        ) : (
+                          <span className="text-gray-600">—</span>
+                        )}
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr>
+                        <td colSpan={4} className="bg-background/60 border-b border-cardBorder/60 px-5 py-2">
+                          <table className="w-full border-separate border-spacing-0 text-[15px] leading-[1.9]">
+                            <thead>
+                              <tr className="text-gray-500">
+                                <th className="px-3 text-start font-semibold">رقم الفاتورة</th>
+                                <th className="px-3 font-semibold">التاريخ</th>
+                                <th className="px-3 font-semibold">الإجمالي</th>
+                                <th className="px-3 font-semibold">المدفوع</th>
+                                <th className="px-3 font-semibold">الباقي</th>
+                                <th className="px-3" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {customer.invoices.map((invoice) => {
+                                const old = invoice.outstanding > 0 && invoice.daysAgo > debt.warningDays;
+                                return (
+                                  <tr key={invoice.id} className="border-t border-cardBorder/40">
+                                    <td className="px-3 text-gray-300 whitespace-nowrap">
+                                      <span dir="ltr" className="font-numbers">{invoice.id}</span>
+                                      {invoice.isReturn && <span className="ms-2 text-statusRed text-sm">مرتجع</span>}
+                                    </td>
+                                    <td className={`px-3 text-center whitespace-nowrap ${old ? "text-statusRed" : "text-gray-300"}`}>
+                                      <span dir="ltr" className="font-numbers">{formatDate(invoice.date)}</span>
+                                      <span className="text-gray-500"> · {daysAgoText(invoice.daysAgo)}</span>
+                                    </td>
+                                    <td className="px-3 text-center">
+                                      <Money value={invoice.total} className="text-gray-100" />
+                                    </td>
+                                    <td className="px-3 text-center">
+                                      <Money value={invoice.paid} className="text-gray-300" />
+                                    </td>
+                                    <td className="px-3 text-center">
+                                      <Money
+                                        value={invoice.outstanding}
+                                        className={`font-bold ${invoice.outstanding < 0 ? "text-statusGreen" : old ? "text-statusRed" : "text-brandOrange"}`}
+                                      />
+                                    </td>
+                                    <td className="px-3 text-center">
+                                      <a
+                                        href={invoice.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 whitespace-nowrap text-sm"
+                                      >
+                                        افتح في ERPNext
+                                        <ExternalLink size={14} />
+                                      </a>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // لوحة تفاصيل المندوب: جدول يوم بيوم، والضغط على اليوم يفتح فواتيره
 // The rep details panel: a day-by-day table; clicking a day shows its invoices
 export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClose: () => void }) {
@@ -38,6 +207,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
     shouldRetryOnError: false,
   });
   const [openDay, setOpenDay] = useState<string | null>(null);
+  const [tab, setTab] = useState<"days" | "debt">("days");
 
   // Esc يقفل، وأي لمسة تعيد عداد الدقيقة - Esc closes; any touch restarts the 60 s idle timer
   useIdleClose(onClose, IDLE_CLOSE_MS);
@@ -86,12 +256,44 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
           </div>
         </div>
 
+        {/* التابات: المبيعات اليومية / المديونية - tabs: daily sales / debt */}
+        <div className="shrink-0 flex items-center gap-2 px-5 pt-2 border-b border-cardBorder">
+          {(
+            [
+              ["days", "المبيعات اليومية"],
+              ["debt", "المديونية"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`px-4 text-lg font-bold leading-[2.1] rounded-t-xl border-b-2 -mb-px ${
+                tab === key ? "border-brandOrange text-brandOrange bg-brandOrange/10" : "border-transparent text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {label}
+              {key === "debt" && rep.debt && rep.debt.amount > 0 && (
+                <span className={`ms-2 text-base ${rep.debt.overdue ? "text-statusRed" : "text-gray-300"}`}>
+                  <Num value={Math.round(rep.debt.amount)} />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* الجدول (بيعمل scroll جوه اللوحة) - the table (scrolls inside the panel) */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className={`flex-1 min-h-0 ${tab === "debt" ? "overflow-hidden" : "overflow-auto"}`}>
           {!data ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">
               {error ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
             </div>
+          ) : tab === "debt" ? (
+            data.debt ? (
+              <DebtTab debt={data.debt} />
+            ) : (
+              <div className="h-full flex items-center justify-center text-xl text-gray-400">المديونية مش متاحة دلوقتي — جرب تاني بعد شوية</div>
+            )
           ) : data.days.length === 0 ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">لسه مفيش بيع الشهر ده</div>
           ) : (
