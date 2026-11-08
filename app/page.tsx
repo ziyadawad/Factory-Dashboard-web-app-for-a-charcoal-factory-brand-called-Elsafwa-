@@ -13,7 +13,7 @@ import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
 import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
-import TreasuryDetailsPanel from "@/components/TreasuryDetailsPanel";
+import AccountDetailsPanel from "@/components/AccountDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
@@ -33,6 +33,9 @@ const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
 
 // الصفحات الشغالة بس (enabled: false = متوقفة) - enabled pages only
 const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false);
+// رقم حساب الخزنة (نفس حساب الكارت: "1110 - الخزينة - AC" -> "1110") - the treasury card's account number
+const treasuryField = dashboardConfig.erp.treasury.balance;
+const TREASURY_ACCOUNT_NUMBER = treasuryField.source === "erp" ? treasuryField.account.split(" - ")[0].trim() : "1110";
 
 // ?page=2 (رقم الصفحة) أو ?page=stock (اسمها) - page from the URL: 1-based number or page id
 function pageFromUrl(): number {
@@ -89,7 +92,10 @@ export default function Dashboard() {
   // لوحة تفاصيل الخزنة (من كارت رصيد الخزنة) - the treasury details panel (from the treasury card)
   const [treasuryOpen, setTreasuryOpen] = useState(false);
   const closeTreasury = useCallback(() => setTreasuryOpen(false), []);
-  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen;
+  // المحفظة المفتوحة (من كروت صفحة الخزن والمحافظ) - the open wallet (from the wallets page cards)
+  const [wallet, setWallet] = useState<{ accountNumber: string; title: string } | null>(null);
+  const closeWallet = useCallback(() => setWallet(null), []);
+  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null;
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);
@@ -239,7 +245,10 @@ export default function Dashboard() {
       case "distributors":
         return <DistributorsSection data={data.distributors ?? null} />;
       case "wallets":
-        return <WalletsSection data={data.wallets ?? null} />;
+        return <WalletsSection
+            data={data.wallets ?? null}
+            onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
+          />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>
@@ -316,7 +325,10 @@ export default function Dashboard() {
       </main>
 
       {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
-      {treasuryOpen && <TreasuryDetailsPanel onClose={closeTreasury} />}
+      {treasuryOpen && (
+        <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
+      )}
+      {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
     </div>
   );
 

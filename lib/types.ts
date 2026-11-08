@@ -138,8 +138,8 @@ export interface Treasury {
   outgoingToday: number; // منصرف اليوم
 }
 
-// حركة واحدة على الخزنة (GL Entry) - one treasury movement (a GL Entry)
-export interface TreasuryMove {
+// حركة واحدة على حساب (الخزنة أو محفظة) - one movement on an account (treasury or a wallet), a GL Entry
+export interface AccountMove {
   id: string; // GL Entry name
   postingDate: string; // YYYY-MM-DD
   creation: string; // "YYYY-MM-DD HH:MM" بتوقيت ERPNext (مصر) - ERPNext time (Cairo)
@@ -155,20 +155,33 @@ export interface TreasuryMove {
   owner: string; // اسم اللي سجّلها - full name of who entered it
 }
 
-// تفاصيل الخزنة (لوحة الضغط على الكارت) - treasury details (the card click panel)
-export interface TreasuryDetails {
-  account: string;
+// شهر فيه حركات - a month that has movements
+export interface AccountMonth {
+  month: string; // YYYY-MM
+  count: number;
+}
+
+// تفاصيل حساب (لوحة الضغط على كارت الخزنة أو محفظة) - account details (treasury / wallet card click panel)
+export interface AccountDetails {
+  accountNumber: string;
+  account: string; // الاسم الكامل في ERPNext - full ERPNext account name
   today: string;
   from: string; // أول يوم في الحركات اللي اتجابت - first fetched day
+  to: string; // آخر يوم (آخر الشهر أو النهارده) - last fetched day (month end or today)
+  month: string | null; // YYYY-MM في وضع الشهور - in month mode
   monthStart: string;
+  months: AccountMonth[]; // وضع الشهور بس، الأحدث الأول - month mode only, newest first
   balance: number; // الرصيد الحالي (زي الكارت) - current balance (same as the card)
   openingBalance: number; // الرصيد قبل from - balance before from
+  closingBalance: number; // الرصيد آخر يوم to - balance at the end of to
+  totalIn: number; // وارد from..to
+  totalOut: number; // منصرف from..to
   incomingToday: number;
   outgoingToday: number;
   movesToday: number;
   lastEntry: { creation: string; createdAt: number; owner: string } | null; // آخر تسجيل (بالـ creation)
   erpUrl: string; // عشان لينك "افتح في ERPNext" - for the "open in ERPNext" link
-  moves: TreasuryMove[]; // الأحدث الأول - newest first
+  moves: AccountMove[]; // الأحدث الأول - newest first
 }
 
 // عدد الطرحات لكل نوع خشب - batch count per wood type; totals are calculated in the UI
@@ -359,6 +372,7 @@ export interface WalletNumbers {
 
 export interface WalletCard {
   name: string;
+  accountNumber: string; // رقم الحساب (للوحة التفاصيل) - account number (for the details panel)
   kind: "cash" | "fawry";
   linked: boolean; // false = مفيش حساب في الكونفج - no account in the config
   offline: boolean; // true = ERPNext فشل ودي آخر أرقام نجحت (أو مفيش أرقام) - failed: last good numbers (or none)

@@ -79,7 +79,7 @@ function FlowRow({ label, value, kind, sizes }: { label: string; value: number; 
 }
 
 // كارت محفظة - one wallet card (container-type على الكارت نفسه عشان cqi = عرضه) - cqi = this card's width
-function WalletCardView({ card, sizes }: { card: WalletCard; sizes: Sizes }) {
+function WalletCardView({ card, sizes, onOpen }: { card: WalletCard; sizes: Sizes; onOpen?: () => void }) {
   const fawry = card.kind === "fawry";
   const n = card.numbers;
   const balanceText = n ? formatNumber(n.balance) : "";
@@ -87,9 +87,10 @@ function WalletCardView({ card, sizes }: { card: WalletCard; sizes: Sizes }) {
 
   return (
     <div
+      onClick={onOpen}
       className={`bg-card border rounded-2xl p-4 h-full min-h-0 min-w-0 flex flex-col overflow-hidden ${
         fawry ? "border-amber-400/30" : "border-statusGreen/25"
-      }`}
+      } ${onOpen ? "cursor-pointer" : ""}`}
       style={{ containerType: "inline-size", gap: sizes.cardGap }}
     >
       {/* الاسم والرسمة - name and picture */}
@@ -176,7 +177,8 @@ function WalletCardView({ card, sizes }: { card: WalletCard; sizes: Sizes }) {
   );
 }
 
-export default function WalletsSection({ data }: { data: Wallets | null }) {
+// onOpenWallet: الضغط على كارت مربوط يفتح تفاصيله - clicking a linked card opens its details
+export default function WalletsSection({ data, onOpenWallet }: { data: Wallets | null; onOpenWallet?: (card: WalletCard) => void }) {
   const { compact, ...normal } = dashboardConfig.sizes.wallets;
   const { ref, sizes } = useCompactRows<Sizes>(normal, compact, normal.compactBelowCardHeight);
 
@@ -234,7 +236,12 @@ export default function WalletsSection({ data }: { data: Wallets | null }) {
       {/* 6 كروت 3×2 - six equal cards */}
       <div ref={ref} className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-4">
         {data.list.map((card) => (
-          <WalletCardView key={card.name} card={card} sizes={sizes} />
+          <WalletCardView
+            key={card.name}
+            card={card}
+            sizes={sizes}
+            onOpen={card.linked && onOpenWallet ? () => onOpenWallet(card) : undefined}
+          />
         ))}
       </div>
     </div>
