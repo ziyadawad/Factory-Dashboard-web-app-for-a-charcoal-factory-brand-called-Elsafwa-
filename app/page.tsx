@@ -13,6 +13,7 @@ import BatchesSection from "@/components/BatchesSection";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
 import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
+import TreasuryDetailsPanel from "@/components/TreasuryDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
@@ -85,7 +86,10 @@ export default function Dashboard() {
   // قسم الحضور المفتوح (من كروت الحضور في الرئيسية) - the open attendance section (from the main page cards)
   const [attendanceSection, setAttendanceSection] = useState<string | null>(null);
   const closeAttendance = useCallback(() => setAttendanceSection(null), []);
-  const paused = salesDetailsOpen || attendanceSection !== null;
+  // لوحة تفاصيل الخزنة (من كارت رصيد الخزنة) - the treasury details panel (from the treasury card)
+  const [treasuryOpen, setTreasuryOpen] = useState(false);
+  const closeTreasury = useCallback(() => setTreasuryOpen(false), []);
+  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen;
 
   const changePage = useCallback((index: number) => {
     setPageIndex(index);
@@ -183,7 +187,11 @@ export default function Dashboard() {
               {cards.treasury.missing ? (
                 <OfflineCard title="رصيد الخزنة" />
               ) : (
-                <TreasurySection data={data.treasury} offline={cards.treasury.offline} />
+                <TreasurySection
+                  data={data.treasury}
+                  offline={cards.treasury.offline}
+                  onOpen={() => setTreasuryOpen(true)}
+                />
               )}
             </div>
             <div className={flashClass("attendance")}>
@@ -308,6 +316,7 @@ export default function Dashboard() {
       </main>
 
       {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
+      {treasuryOpen && <TreasuryDetailsPanel onClose={closeTreasury} />}
     </div>
   );
 

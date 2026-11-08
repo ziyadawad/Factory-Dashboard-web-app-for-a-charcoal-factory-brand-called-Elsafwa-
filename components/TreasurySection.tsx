@@ -16,9 +16,10 @@ function fitCqi(scale: number, baseLength: number, text: string) {
 interface TreasurySectionProps {
   data: Treasury;
   offline?: boolean; // ERPNext فشل ودي آخر قيمة نجحت - ERPNext failed, these are the last good values
+  onOpen?: () => void; // الضغط على الكارت يفتح التفاصيل - clicking the card opens the details
 }
 
-export default function TreasurySection({ data, offline = false }: TreasurySectionProps) {
+export default function TreasurySection({ data, offline = false, onOpen }: TreasurySectionProps) {
   const { count } = useCountUp(data.balance, 800);
   const formattedBalance = formatNumber(count);
   const sizes = dashboardConfig.sizes.treasury;
@@ -28,7 +29,8 @@ export default function TreasurySection({ data, offline = false }: TreasurySecti
   return (
     // container على الكارت نفسه (بعرضه كله) عشان cqi = عرض الكارت - the card itself is the container, so cqi = card width
     <div
-      className="bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden"
+      onClick={onOpen}
+      className={`bg-card border border-cardBorder rounded-2xl p-4 h-full flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""}`}
       style={{ containerType: "inline-size" }}
     >
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">

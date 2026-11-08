@@ -138,6 +138,39 @@ export interface Treasury {
   outgoingToday: number; // منصرف اليوم
 }
 
+// حركة واحدة على الخزنة (GL Entry) - one treasury movement (a GL Entry)
+export interface TreasuryMove {
+  id: string; // GL Entry name
+  postingDate: string; // YYYY-MM-DD
+  creation: string; // "YYYY-MM-DD HH:MM" بتوقيت ERPNext (مصر) - ERPNext time (Cairo)
+  createdAt: number; // epoch ms
+  lateDays: number; // أيام بين التاريخ والتسجيل الفعلي - days between posting date and the real entry
+  debit: number; // وارد
+  credit: number; // منصرف
+  balanceAfter: number; // الرصيد بعد الحركة
+  party: string; // الطرف (party أو against)
+  remarks: string;
+  voucherType: string;
+  voucherNo: string;
+  owner: string; // اسم اللي سجّلها - full name of who entered it
+}
+
+// تفاصيل الخزنة (لوحة الضغط على الكارت) - treasury details (the card click panel)
+export interface TreasuryDetails {
+  account: string;
+  today: string;
+  from: string; // أول يوم في الحركات اللي اتجابت - first fetched day
+  monthStart: string;
+  balance: number; // الرصيد الحالي (زي الكارت) - current balance (same as the card)
+  openingBalance: number; // الرصيد قبل from - balance before from
+  incomingToday: number;
+  outgoingToday: number;
+  movesToday: number;
+  lastEntry: { creation: string; createdAt: number; owner: string } | null; // آخر تسجيل (بالـ creation)
+  erpUrl: string; // عشان لينك "افتح في ERPNext" - for the "open in ERPNext" link
+  moves: TreasuryMove[]; // الأحدث الأول - newest first
+}
+
 // عدد الطرحات لكل نوع خشب - batch count per wood type; totals are calculated in the UI
 export interface BatchCounts {
   orange: number; // برتقال
