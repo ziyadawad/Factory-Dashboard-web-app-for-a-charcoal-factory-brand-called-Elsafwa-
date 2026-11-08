@@ -68,7 +68,7 @@ function DebtTab({ debt }: { debt: RepDebt }) {
         </div>
         {debt.unlinkedApplied > 0 && (
           <div className="rounded-xl border border-dashed border-cardBorder px-4 py-1.5">
-            <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">اتخصم دفعات ومرتجعات مش متربطة بفواتير</p>
+            <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">اتخصم دفعات ومرتجعات وقيود مش متربطة بفواتير</p>
             <p className="leading-[1.3]">
               <Num value={Math.round(debt.unlinkedApplied)} className="text-[26px] font-extrabold text-sky-400" />{" "}
               <span className="text-gray-400 text-lg">ج.م</span>
@@ -142,7 +142,7 @@ function DebtTab({ debt }: { debt: RepDebt }) {
                         <td colSpan={4} className="bg-background/60 border-b border-cardBorder/60 px-5 py-2">
                           {customer.unlinkedApplied > 0 && (
                             <p className="text-sky-400 text-[15px] leading-[1.9]">
-                              اتخصم <Money value={customer.unlinkedApplied} className="font-bold" /> دفعات ومرتجعات مش متربطة بفواتير في ERPNext (من أقدم فاتورة للأحدث)
+                              اتخصم <Money value={customer.unlinkedApplied} className="font-bold" /> دفعات ومرتجعات وقيود مش متربطة بفواتير في ERPNext (من أقدم فاتورة للأحدث)
                             </p>
                           )}
                           <table className="w-full border-separate border-spacing-0 text-[15px] leading-[1.9]">

@@ -213,23 +213,40 @@ async function loadDebtRows(): Promise<DebtRow[]> {
 }
 
 // الدفعات اللي مش متربطة لكل عميل (Receive بيقلل المديونية، Pay = رد فلوس للعميل بيزودها)
+// + قيود اليومية على العميل اللي مش متربطة بفاتورة (الدائن بيقلل المديونية، المدين بيزودها)
 // Unlinked payments per customer (Receive lowers the debt, Pay = a refund to the customer raises it)
+// + Journal Entry lines on the customer not linked to an invoice (credit lowers the debt, debit raises it)
 async function loadUnlinkedPayments(): Promise<Map<string, number>> {
-  const rows = await getList<UnlinkedRow>({
-    doctype: "Payment Entry",
-    filters: [
-      ["docstatus", "=", 1],
-      ["party_type", "=", "Customer"],
-      ["unallocated_amount", "!=", 0],
-    ],
-    fields: ["party", "payment_type", "sum(unallocated_amount) as amount"],
-    group_by: "party, payment_type",
-  });
+  const child = "`tabJournal Entry Account`";
+  const [payments, journals] = await Promise.all([
+    getList<UnlinkedRow>({
+      doctype: "Payment Entry",
+      filters: [
+        ["docstatus", "=", 1],
+        ["party_type", "=", "Customer"],
+        ["unallocated_amount", "!=", 0],
+      ],
+      fields: ["party", "payment_type", "sum(unallocated_amount) as amount"],
+      group_by: "party, payment_type",
+    }),
+    getList<{ party: string; amount: number }>({
+      doctype: "Journal Entry",
+      filters: [
+        ["docstatus", "=", 1],
+        ["Journal Entry Account", "party_type", "=", "Customer"],
+        ["Journal Entry Account", "reference_name", "is", "not set"],
+      ],
+      fields: [`${child}.party as party`, `sum(${child}.credit_in_account_currency - ${child}.debit_in_account_currency) as amount`],
+      group_by: `${child}.party`,
+    }),
+  ]);
   const credit = new Map<string, number>();
-  for (const row of rows) {
+  const add = (party: string, amount: number) => credit.set(party, (credit.get(party) ?? 0) + amount);
+  for (const row of payments) {
     const sign = row.payment_type === "Receive" ? 1 : row.payment_type === "Pay" ? -1 : 0;
-    credit.set(row.party, (credit.get(row.party) ?? 0) + sign * (row.amount ?? 0));
+    add(row.party, sign * (row.amount ?? 0));
   }
+  for (const row of journals) if (row.party) add(row.party, row.amount ?? 0);
   return credit;
 }
 
