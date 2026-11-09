@@ -292,6 +292,7 @@ export interface EmployeeDay {
   date: string; // YYYY-MM-DD
   status: DayStatus;
   firstPunch: string | null; // "08:12" أول بصمة في اليوم (حتى لو يوم إجازة) - first punch that day
+  half?: true; // نص يوم (حاضر بس بيتخصم نص يوم في المرتب) - half day (present, half a day off the salary)
 }
 
 export interface EmployeeAttendance {
@@ -533,4 +534,33 @@ export interface ConfigPackagingItem {
   quantity: number;
   unit: string;
   icon?: string; // "plastic" | "roll" | "bag" | "tape"
+}
+
+// المرتبات (لوحة الحضور بس، بعد زرار "💰 المرتب") - salaries (attendance panel only, behind the button)
+// قيمة ممكن تكون مش متسجلة في ERPNext (manual = true يعني 0 ولازم تتراجع يدوي) - manual = not in ERPNext, shown as 0
+export interface SalaryValue {
+  value: number;
+  manual: boolean;
+}
+
+export interface EmployeeSalary {
+  id: string; // Employee ID
+  kind: "monthly" | "daily" | "none"; // daily = اليومية حسابها خارجي، none = مش متسجل في السيستم
+  total: number; // الأجر الشامل - salary (base + allowance)
+  absentDays: number; // أيام الغياب حتى النهارده (نص اليوم = 0.5) - absent days so far (half day = 0.5)
+  absence: number; // خصم الغياب حتى النهارده - absence deduction so far
+  advances: SalaryValue; // سلف الشهر
+  loan: SalaryValue; // قسط القرض
+  insurance: SalaryValue; // التأمينات
+  penalty: SalaryValue; // جزاءات
+  late: SalaryValue; // تأخير
+  expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
+}
+
+export interface SectionSalaries {
+  month: string; // "2026-11"
+  today: string;
+  daysPerMonth: number;
+  people: EmployeeSalary[];
+  totals: { total: number; absence: number; expectedNet: number; monthly: number }; // الشهريين بس - monthly staff only
 }

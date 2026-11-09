@@ -70,6 +70,42 @@ export const dashboardConfig = {
     // أيام الإجازة الأسبوعية (بالإنجليزي): مش بتتحسب غياب ولا حضور. مثال يومين: ["Friday", "Saturday"]
     // Weekly day(s) off (English day names): never counted as absent or present
     weeklyOff: ["Friday"] as string[],
+    // نص يوم: لو الموظف بصم بصمة واحدة بس في اليوم وكانت قبل الساعة دي = نص يوم غياب (في المرتب، والتقويم بيعلّم عليه)
+    // النهارده مش بيتحسب نص يوم لأن اليوم لسه مخلصش. Attendance بحالة "Half Day" = نص يوم برضه
+    // Half day: a single punch that day before this time = half a day absent (salary; marked on the calendar).
+    // Today never counts (the day isn't over). An Attendance marked "Half Day" also counts as half
+    // ⚠️ مقفول دلوقتي: من 28/10 لـ 8/11 ‏82% من أيام الموظفين فيها بصمة واحدة بس (معظمهم مش بيبصموا انصراف)،
+    // فلو اشتغل هيخصم نص يوم من أغلب الناس كل يوم. خليه true لما البصمة تبقى حضور + انصراف
+    // OFF for now: 82% of employee-days (Oct 28 - Nov 8) have a single punch (most never punch out), so it would
+    // dock half a day from almost everyone. Set true once people punch in and out
+    halfDay: { enabled: false, singlePunchBefore: "12:00" },
+  },
+
+  // ============================================================
+  // المرتبات (جوه لوحة تفاصيل الحضور بس، بزرار "💰 المرتب") - للإدارة، قراية بس من ERPNext
+  // Salaries (only inside the attendance details panel, behind the "💰 المرتب" button) - read-only
+  // - عمرها ما بتظهر على الشاشة الرئيسية ولا في اللف، وبتتجاب من /api/salaries بس لما الزرار يتداس
+  // - الأجر الشامل = base + custom_allowance من آخر Salary Structure Assignment (نفس معادلة Ts في ERPNext)
+  //   (أيام الجمعة اللي في الكشف الورق مش متسجلة في ERPNext)
+  // - خصم الغياب = الشامل ÷ daysPerMonth × أيام الغياب (من البصمة، بنفس قواعد لوحة الحضور + نص اليوم فوق)
+  // - السلف = Loan Disbursement على advancesAccount للموظف الشهر ده (من GL Entry)
+  // - الجزاء والتأخير من Additional Salary الشهر ده (لو مفيش = 0 ومكتوب "يدوي")
+  // - قسط القرض والتأمينات: مش متسجلين في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
+  // Salary = base + custom_allowance of the latest assignment; absence = salary / daysPerMonth × absent days
+  // (biometric, same rules as the attendance panel); advances = Loan Disbursements on advancesAccount this month;
+  // penalty / late from Additional Salary this month (else 0 marked "manual"); loan installment / insurance = manual
+  // ============================================================
+  salaries: {
+    daysPerMonth: 30,
+    // هياكل المرتبات اللي معناها عامل يومية (اليومية حسابها خارجي) - structures that mean a daily worker
+    dailyStructures: ["عمال يومية"] as string[],
+    advancesAccount: "1620 - سلف الموظفيين - AC", // حساب سلف الموظفين - employee advances account
+    // مكونات Additional Salary - Additional Salary components (days / hours / direct amounts)
+    penaltyDaysComponent: "عدد ايام الجزاء", // × الشامل ÷ 30
+    penaltyAmountComponent: "قيمة الجزاء",
+    lateHoursComponent: "عدد ساعات التأخير", // × (الأساسي ÷ 30 ÷ 8) زي ERPNext
+    lateAmountComponent: "قيمة ساعات التأخير",
+    cacheSeconds: 60, // كاش في ذاكرة السيرفر بس (مش CDN) - server memory only, never the CDN
   },
 
   // ============================================================

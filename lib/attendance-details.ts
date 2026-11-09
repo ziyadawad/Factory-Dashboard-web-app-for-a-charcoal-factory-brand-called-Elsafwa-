@@ -105,12 +105,16 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
 
   // 2) أول بصمة لكل موظف كل يوم، وسجل Attendance لكل يوم - first punch per employee per day, Attendance per day
   const firstPunch = new Map<string, string>();
+  const punchCount = new Map<string, number>(); // عدد البصمات في اليوم (لنص اليوم) - punches per day (half-day rule)
   for (const c of rows.checkins) {
     const k = `${c.employee}|${dayOf(c.time)}`;
     const t = punchOf(c.time);
     const previous = firstPunch.get(k);
     if (!previous || t < previous) firstPunch.set(k, t);
+    punchCount.set(k, (punchCount.get(k) ?? 0) + 1);
   }
+  const halfMarked = new Set(rows.attendance.filter((a) => a.status === "Half Day").map((a) => `${a.employee}|${dayOf(a.attendance_date)}`));
+  const { halfDay } = config;
   const marked = new Map<string, "present" | "leave" | "absent">();
   for (const a of rows.attendance) {
     const k = `${a.employee}|${dayOf(a.attendance_date)}`;
@@ -143,7 +147,14 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
       else if (punch || mark === "present") status = "present";
       else if (mark === "leave") status = "leave";
       else status = "absent";
-      return { date, status, firstPunch: punch };
+      // نص يوم: Attendance "Half Day" أو بصمة واحدة بس قبل halfDay.singlePunchBefore (مش النهارده) - half day
+      const k = `${person.id}|${date}`;
+      const half =
+        status === "present" &&
+        halfDay.enabled &&
+        date < today &&
+        (halfMarked.has(k) || (punchCount.get(k) === 1 && !!punch && punch < halfDay.singlePunchBefore));
+      return { date, status, firstPunch: punch, ...(half ? { half: true } : {}) };
     });
     const count = (status: DayStatus) => days.filter((d) => d.status === status).length;
     return {

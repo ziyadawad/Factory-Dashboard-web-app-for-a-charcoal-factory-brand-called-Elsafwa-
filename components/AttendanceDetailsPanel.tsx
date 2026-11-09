@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, ChevronLeft, Users, X } from "lucide-react";
-import { AttendanceDetails, DayStatus, EmployeeAttendance, PersonStatus } from "@/lib/types";
+import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeSalary, PersonStatus, SalaryValue, SectionSalaries } from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -120,10 +120,13 @@ function MonthCalendar({ person }: { person: EmployeeAttendance }) {
         {person.days.map((day) => (
           <div
             key={day.date}
-            className={`h-[62px] rounded-lg border flex flex-col items-center justify-center leading-tight ${CELL_STYLE[day.status]}`}
+            className={`h-[62px] rounded-lg border flex flex-col items-center justify-center leading-tight ${
+              day.half ? "bg-amber-400/15 border-amber-400/70 text-white" : CELL_STYLE[day.status]
+            }`}
           >
             <span dir="ltr" className="font-numbers tabular-nums font-bold text-[18px]">
               {Number(day.date.slice(8))}
+              {day.half && <span className="text-amber-300 text-[14px]"> ½</span>}
             </span>
             {day.firstPunch && day.status !== "future" ? (
               <span dir="ltr" className="font-numbers tabular-nums text-[13px] text-gray-300">
@@ -138,6 +141,7 @@ function MonthCalendar({ person }: { person: EmployeeAttendance }) {
       <div className="flex flex-wrap items-center gap-4 text-[14px] text-gray-400">
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-statusGreen/60" /> حاضر (وقت أول بصمة)</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-statusRed/60" /> غائب</span>
+        <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-amber-400/60" /> نص يوم (بصمة واحدة الصبح)</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-gray-500/60" /> إجازة / جمعة / إجازة رسمية</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded border border-cardBorder" /> لسه / قبل البصمة أو التعيين</span>
       </div>
@@ -145,8 +149,160 @@ function MonthCalendar({ person }: { person: EmployeeAttendance }) {
   );
 }
 
+// ===== المرتبات (بتظهر بس بعد زرار "💰 المرتب") - salaries (only after the button) =====
+const money = (value: number) => (
+  <span dir="ltr" className="font-numbers tabular-nums">
+    {formatNumber(Math.round(value * 100) / 100)}
+  </span>
+);
+
+// "يدوي" = مش متسجل في ERPNext (0 ولازم يتراجع) - "manual" = not in ERPNext (shown as 0)
+const ManualTag = () => <span className="ms-2 rounded-full bg-amber-400/15 text-amber-300 px-2 text-[13px] font-bold">يدوي</span>;
+
+type SalaryState = { data: SectionSalaries | null; error: boolean };
+
+function SalaryMessage({ text }: { text: string }) {
+  return <div className="rounded-xl bg-background border border-cardBorder p-4 text-center text-[18px] text-gray-300">{text}</div>;
+}
+
+// كارت مرتب موظف - one employee's salary card
+function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; state: SalaryState }) {
+  if (state.error) return <SalaryMessage text="المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية" />;
+  if (!state.data) return <SalaryMessage text="جاري تحميل المرتب..." />;
+  if (!salary || salary.kind === "none") return <SalaryMessage text="المرتب مش متسجل في السيستم" />;
+  if (salary.kind === "daily") return <SalaryMessage text="اليومية حسابها خارجي" />;
+
+  const perDay = state.data.daysPerMonth;
+  const row = (label: string, value: React.ReactNode, tone = "text-white") => (
+    <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
+      <span className="text-gray-400">{label}</span>
+      <span className={`font-semibold ${tone}`}>{value}</span>
+    </p>
+  );
+  const deduction = (label: string, v: SalaryValue) =>
+    row(
+      label,
+      <>
+        {v.value ? <span className="text-statusRed">− {money(v.value)}</span> : money(0)}
+        {v.manual && <ManualTag />}
+      </>
+    );
+  return (
+    <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col text-[17px]">
+      <p className="text-amber-300 font-extrabold text-[19px] mb-1">💰 المرتب — الشهر ده لحد النهارده</p>
+      {row("الأجر الشامل", money(salary.total))}
+      {row("أيام الغياب حتى النهارده", money(salary.absentDays), salary.absentDays ? "text-statusRed" : "text-gray-400")}
+      {row(
+        `خصم الغياب حتى النهارده (الشامل ÷ ${perDay} × الأيام)`,
+        salary.absence ? <span className="text-statusRed">− {money(salary.absence)}</span> : money(0)
+      )}
+      {deduction("سلف الشهر", salary.advances)}
+      {deduction("قسط القرض", salary.loan)}
+      {deduction("التأمينات", salary.insurance)}
+      {deduction("جزاءات", salary.penalty)}
+      {deduction("تأخير", salary.late)}
+      <p className="flex items-center justify-between gap-4 pt-2">
+        <span className="text-white font-bold">الصافي المتوقع آخر الشهر</span>
+        <span className="text-[30px] font-extrabold text-statusGreen leading-tight">{money(salary.expectedNet)}</span>
+      </p>
+      <p className="text-gray-300 mt-1">
+        لو مغابش تاني، صافي آخر الشهر = <b className="text-white">{money(salary.expectedNet)}</b> ج.م
+      </p>
+    </div>
+  );
+}
+
+// جدول مرتبات القسم - the section salaries table
+function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; state: SalaryState; onPick: (id: string) => void }) {
+  if (state.error) {
+    return <div className="h-full flex items-center justify-center text-xl text-gray-400">المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية</div>;
+  }
+  if (!state.data) return <div className="h-full flex items-center justify-center text-xl text-gray-400">جاري تحميل المرتبات...</div>;
+  const byId = new Map(state.data.people.map((p) => [p.id, p]));
+  const th = "px-3 py-2 font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+  const td = "px-3 text-center border-b border-cardBorder/60";
+  const foot = "px-3 text-center border-t border-cardBorder font-extrabold";
+  const { totals } = state.data;
+  return (
+    <table className="w-full border-separate border-spacing-0 text-[17px] leading-[2.2]">
+      <thead className="sticky top-0 z-10 bg-card">
+        <tr>
+          <th className={`${th} text-center w-[140px]`}>كود البصمة</th>
+          <th className={`${th} text-start`}>الاسم الكامل</th>
+          <th className={`${th} text-center`}>الأجر الشامل</th>
+          <th className={`${th} text-center`}>أيام الغياب</th>
+          <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
+          <th className={`${th} text-center`}>الصافي المتوقع</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.people.map((person) => {
+          const s = byId.get(person.id);
+          return (
+            <tr key={person.id} onClick={() => onPick(person.id)} className="cursor-pointer hover:bg-white/5">
+              <td className={`${td} text-gray-300`}>
+                {person.code ? (
+                  <span dir="ltr" className="font-numbers tabular-nums">
+                    {person.code}
+                  </span>
+                ) : (
+                  <span className="text-gray-600">—</span>
+                )}
+              </td>
+              <td className="px-3 border-b border-cardBorder/60 text-white font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  {person.name}
+                  <ChevronLeft size={16} className="text-gray-600" />
+                </span>
+              </td>
+              {!s || s.kind !== "monthly" ? (
+                <td colSpan={4} className={`${td} text-gray-500`}>
+                  {s?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"}
+                </td>
+              ) : (
+                <>
+                  <td className={`${td} text-white font-bold`}>{money(s.total)}</td>
+                  <td className={`${td} font-bold ${s.absentDays ? "text-statusRed" : "text-gray-600"}`}>{s.absentDays ? money(s.absentDays) : "—"}</td>
+                  <td className={`${td} font-bold ${s.absence ? "text-statusRed" : "text-gray-600"}`}>{s.absence ? money(s.absence) : "—"}</td>
+                  <td className={`${td} text-statusGreen font-bold`}>{money(s.expectedNet)}</td>
+                </>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot className="sticky bottom-0 bg-card">
+        <tr className="text-[18px]">
+          <td className="border-t border-cardBorder" />
+          <td className="px-3 border-t border-cardBorder text-white font-extrabold">
+            إجمالي القسم <span className="text-gray-400 font-semibold text-[15px]">({money(totals.monthly)} شهري)</span>
+          </td>
+          <td className={`${foot} text-white`}>{money(totals.total)}</td>
+          <td className="border-t border-cardBorder" />
+          <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
+          <td className={`${foot} text-statusGreen`}>{money(totals.expectedNet)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
 // تفاصيل موظف - one employee
-function EmployeeView({ person, onBack }: { person: EmployeeAttendance; onBack: () => void }) {
+function EmployeeView({
+  person,
+  onBack,
+  showSalary,
+  onToggleSalary,
+  salary,
+  salaryState,
+}: {
+  person: EmployeeAttendance;
+  onBack: () => void;
+  showSalary: boolean;
+  onToggleSalary: () => void;
+  salary: EmployeeSalary | undefined;
+  salaryState: SalaryState;
+}) {
   const info = (label: string, value: string | null, ltr = false) => (
     <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
       <span className="text-gray-400">{label}</span>
@@ -197,7 +353,19 @@ function EmployeeView({ person, onBack }: { person: EmployeeAttendance; onBack: 
             {person.leaveDays > 0 && <p className="text-gray-400 mt-1">إجازة: {n(person.leaveDays)} يوم</p>}
           </div>
         </div>
-        <MonthCalendar person={person} />
+        <div className="flex flex-col gap-4">
+          <MonthCalendar person={person} />
+          <button
+            type="button"
+            onClick={onToggleSalary}
+            className={`self-start rounded-xl border px-4 py-1.5 font-bold text-[17px] ${
+              showSalary ? "border-amber-400/60 bg-amber-400/15 text-amber-300" : "border-cardBorder bg-background/70 text-gray-200 hover:border-gray-500"
+            }`}
+          >
+            💰 المرتب
+          </button>
+          {showSalary && <SalaryCard salary={salary} state={salaryState} />}
+        </div>
       </div>
     </div>
   );
@@ -213,6 +381,28 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
   });
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   useIdleClose(onClose);
+
+  // المرتبات: بتتجاب بس بعد الزرار، ومن غير SWR عشان تتمسح من الذاكرة لما اللوحة تتقفل
+  // Salaries: fetched only after the button, without SWR so they are gone from memory when the panel closes
+  const [showSalary, setShowSalary] = useState(false);
+  const [salaryState, setSalaryState] = useState<SalaryState>({ data: null, error: false });
+  const salaryLoaded = salaryState.data !== null;
+  useEffect(() => {
+    if (!showSalary || salaryLoaded) return;
+    let cancelled = false;
+    setSalaryState({ data: null, error: false });
+    fetch(`/api/salaries?section=${encodeURIComponent(section)}`, { cache: "no-store", credentials: "same-origin" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<SectionSalaries>;
+      })
+      .then((data) => !cancelled && setSalaryState({ data, error: false }))
+      .catch(() => !cancelled && setSalaryState({ data: null, error: true }));
+    return () => {
+      cancelled = true;
+    };
+  }, [showSalary, salaryLoaded, section]);
+  const toggleSalary = () => setShowSalary((v) => !v);
 
   const person = employeeId ? data?.people.find((p) => p.id === employeeId) : undefined;
   const pill = "flex items-center gap-2 rounded-full px-4 font-bold text-[18px] leading-[1.9]";
@@ -236,6 +426,17 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
                 <span className={`${pill} bg-statusGreen/15 text-statusGreen`}>حاضر {n(data.section.present)}</span>
                 <span className={`${pill} bg-statusRed/15 text-statusRed`}>غائب {n(data.section.absent)}</span>
                 <span className={`${pill} bg-gray-500/20 text-gray-300`}>إجازة {n(data.section.leave)}</span>
+                {!person && (
+                  <button
+                    type="button"
+                    onClick={toggleSalary}
+                    className={`${pill} border ${
+                      showSalary ? "border-amber-400/60 bg-amber-400/15 text-amber-300" : "border-cardBorder bg-background/70 text-gray-200 hover:border-gray-500"
+                    }`}
+                  >
+                    💰 المرتبات
+                  </button>
+                )}
               </>
             )}
             <button
@@ -256,7 +457,16 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
               {error ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
             </div>
           ) : person ? (
-            <EmployeeView person={person} onBack={() => setEmployeeId(null)} />
+            <EmployeeView
+              person={person}
+              onBack={() => setEmployeeId(null)}
+              showSalary={showSalary}
+              onToggleSalary={toggleSalary}
+              salary={salaryState.data?.people.find((p) => p.id === person.id)}
+              salaryState={salaryState}
+            />
+          ) : showSalary ? (
+            <SectionSalaryList data={data} state={salaryState} onPick={setEmployeeId} />
           ) : (
             <SectionList data={data} onPick={setEmployeeId} />
           )}
