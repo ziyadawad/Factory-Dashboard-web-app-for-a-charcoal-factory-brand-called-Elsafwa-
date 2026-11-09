@@ -24,7 +24,7 @@ import {
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { stockMinimums } from "@/config/stock-min";
-import { ErpError, erpCall, erpGet, erpPost, erpToday } from "./erp";
+import { ErpError, erpBalanceOn, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
 import { distributorsSection, salesRepsSection } from "./sales";
 import { walletsSection } from "./wallets";
@@ -495,7 +495,7 @@ async function erpNumber<F extends { source: "erp" }>(
 
 // رصيد الحساب النهارده - account balance as of today
 const balanceOn = (account: string) =>
-  erpCall("erpnext.accounts.utils.get_balance_on", { account, date: erpToday() });
+  erpBalanceOn(account, erpToday());
 
 type GlTotals = { data: { debit: number | null; credit: number | null }[] };
 

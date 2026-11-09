@@ -134,3 +134,27 @@ export function erpToday(): string {
   if (override && /^\d{4}-\d{2}-\d{2}$/.test(override)) return override;
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
 }
+
+// رصيد حساب لحد تاريخ = مجموع المدين - مجموع الدائن من GL Entry (غير الملغي)
+// ERPNext بقى يرفض erpnext.accounts.utils.get_balance_on (403 "is not whitelisted") فبنحسبه بنفس الطريقة بنفسنا
+// Account balance up to a date = sum(debit) - sum(credit) of non-cancelled GL Entries. ERPNext now rejects
+// get_balance_on (403 "not whitelisted"), so we compute it the same way (same result for balance-sheet accounts)
+export async function erpBalanceOn(account: string, date: string): Promise<number> {
+  const { message } = await erpPost<{ message: { debit: number | null; credit: number | null }[] }>(
+    "/api/method/frappe.client.get_list",
+    {
+      doctype: "GL Entry",
+      filters: [
+        ["account", "=", account],
+        ["posting_date", "<=", date],
+        ["is_cancelled", "=", 0],
+      ],
+      fields: ["sum(debit) as debit", "sum(credit) as credit"],
+      limit_page_length: 0,
+    }
+  );
+  const row = message?.[0];
+  const balance = (row?.debit ?? 0) - (row?.credit ?? 0);
+  if (!Number.isFinite(balance)) throw new ErpError(`${account}: balance is not a number`);
+  return Math.round(balance * 100) / 100;
+}

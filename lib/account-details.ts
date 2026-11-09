@@ -3,7 +3,7 @@
 // بتتجاب بس لما اللوحة تتفتح، كاش 30 ثانية، قراية بس من ERPNext
 // Fetched only when a panel opens, 30 s cache, read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpCall, erpPost, erpToday } from "./erp";
+import { erpBalanceOn, erpPost, erpToday } from "./erp";
 import { AccountDetails, AccountMonth, AccountMove } from "./types";
 
 const CACHE_MS = 30_000;
@@ -155,9 +155,9 @@ async function load(accountNumber: string, month: string | null, today: string):
       order_by: "creation desc",
       limit_page_length: 1,
     }),
-    erpCall<number>("erpnext.accounts.utils.get_balance_on", { account, date: today }),
+    erpBalanceOn(account, today),
     // الرصيد قبل أول يوم - the balance before the first day
-    erpCall<number>("erpnext.accounts.utils.get_balance_on", { account, date: addDays(from, -1) }),
+    erpBalanceOn(account, addDays(from, -1)),
     month ? monthsOf(account, today) : Promise.resolve([] as AccountMonth[]),
   ]);
   if (typeof balance !== "number" || typeof opening !== "number") throw new Error(`${account}: balance is not a number`);
@@ -190,7 +190,7 @@ async function load(accountNumber: string, month: string | null, today: string):
     };
   });
   if (to === today && Math.abs(running - money(balance)) > 0.01) {
-    console.warn(`[erp] account details ${accountNumber}: running balance ${running} != get_balance_on ${balance}`);
+    console.warn(`[erp] account details ${accountNumber}: running balance ${running} != GL balance ${balance}`);
   }
 
   const todays = moves.filter((m) => m.postingDate === today);

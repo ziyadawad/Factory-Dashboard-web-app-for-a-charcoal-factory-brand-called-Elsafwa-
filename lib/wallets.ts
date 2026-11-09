@@ -1,7 +1,7 @@
 // الخزن والمحافظ (الصفحة 5) - cash wallets / Fawry (page 5)
-// قراية بس من ERPNext: رصيد الحساب (get_balance_on) وقيود GL Entry - read-only: account balance and GL entries
+// قراية بس من ERPNext: رصيد الحساب (مجموع GL Entry) وقيود GL Entry - read-only: account balance (GL Entry sum) and GL entries
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpCall, erpPost, erpToday } from "./erp";
+import { erpBalanceOn, erpPost, erpToday } from "./erp";
 import { WalletCard, WalletNumbers, Wallets } from "./types";
 
 const config = dashboardConfig.wallets;
@@ -52,7 +52,7 @@ async function lastMove(account: string, today: string): Promise<WalletNumbers["
 
 async function loadWallet(account: string, today: string, totals: Promise<Map<string, { debit: number; credit: number }>>) {
   const [balance, todayMap, last] = await Promise.all([
-    erpCall<number>("erpnext.accounts.utils.get_balance_on", { account, date: today }),
+    erpBalanceOn(account, today),
     totals,
     lastMove(account, today),
   ]);
