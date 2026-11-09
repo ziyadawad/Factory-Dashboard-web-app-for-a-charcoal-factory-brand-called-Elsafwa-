@@ -43,49 +43,66 @@ const formatDate = (date: string) => {
   return `${day}/${month}/${year}`;
 };
 
-// تاب المديونية: الإجمالي والأعمار فوق، وجدول العملاء (الأكبر الأول)، والضغط على العميل يفتح فواتيره المفتوحة
-// The debt tab: total and aging on top, then customers (biggest first); clicking a customer shows their unpaid invoices
-function DebtTab({ debt }: { debt: RepDebt }) {
+// خانة فلوس في جدول المديونية: الصفر "—" باهت - a money cell in the debt table: zero is a dimmed "—"
+function DebtCell({ value, className }: { value: number; className: string }) {
+  if (Math.round(value) === 0) return <span className="text-gray-600">—</span>;
+  return <Money value={value} className={className} />;
+}
+
+// تاب المديونية: الشهر ده / قبل الشهر ده / الإجمالي فوق، وجدول العملاء (الأكبر الأول)، والضغط على العميل يفتح فواتيره المفتوحة
+// التقسيمة بتاريخ الفاتورة من نفس الفواتير المفتوحة (الحساب نفسه زي ما هو): قبل الشهر = إجمالي العميل - الشهر ده، فالمجموع = رقم الكارت
+// The debt tab: this month / before this month / total on top, then customers (biggest first); clicking a customer
+// shows their unpaid invoices. Split by invoice date over the same open invoices (calculation unchanged):
+// before = customer total - this month, so the sum always equals the card number
+function DebtTab({ debt, month }: { debt: RepDebt; month: string }) {
   const [openCustomer, setOpenCustomer] = useState<string | null>(null);
   const th = "px-3 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
-  const agingColors = ["text-statusGreen", "text-brandOrange", "text-statusRed"];
+  const monthStart = `${month}-01`;
+  const rows = debt.list
+    .map((customer) => {
+      const thisMonth = Math.round(customer.invoices.filter((i) => i.date >= monthStart).reduce((sum, i) => sum + i.outstanding, 0) * 100) / 100;
+      return { customer, thisMonth, before: Math.round((customer.amount - thisMonth) * 100) / 100 };
+    })
+    .sort((a, b) => b.customer.amount - a.customer.amount);
+  const totalThisMonth = rows.reduce((sum, r) => sum + r.thisMonth, 0);
+  const totalBefore = debt.amount - totalThisMonth;
+  const sinceText = `من 1/${Number(month.slice(5))} لحد النهارده`;
+  const box = "rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5";
+  const boxLabel = "text-gray-400 font-semibold text-[15px] leading-[1.7]";
+  const foot = "px-3 text-center border-t-2 border-cardBorder font-extrabold";
   return (
     <div className="h-full min-h-0 flex flex-col">
-      {/* الإجمالي والأعمار - total and aging */}
+      {/* الشهر ده / قبل الشهر ده / الإجمالي / عدد العملاء - this month / before / total / customers */}
       <div className="shrink-0 flex flex-wrap items-stretch gap-3 px-5 py-3 border-b border-cardBorder">
-        <div className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
-          <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">إجمالي المديونية</p>
+        <div className={box}>
+          <p className={boxLabel}>
+            مديونية الشهر ده <span className="text-gray-500">· {sinceText}</span>
+          </p>
+          <p className="leading-[1.3]">
+            <Num value={Math.round(totalThisMonth)} className={`text-[30px] font-extrabold ${totalThisMonth > 0 ? "text-brandOrange" : "text-gray-500"}`} />{" "}
+            <span className="text-gray-400 text-lg">ج.م</span>
+          </p>
+        </div>
+        <div className={box}>
+          <p className={boxLabel}>مديونية قبل الشهر ده</p>
+          <p className="leading-[1.3]">
+            <Num value={Math.round(totalBefore)} className={`text-[30px] font-extrabold ${Math.round(totalBefore) > 0 ? "text-statusRed" : "text-gray-500"}`} />{" "}
+            <span className="text-gray-400 text-lg">ج.م</span>
+          </p>
+        </div>
+        <div className={box}>
+          <p className={boxLabel}>إجمالي المديونية</p>
           <p className="leading-[1.3]">
             <Num value={Math.round(debt.amount)} className={`text-[30px] font-extrabold ${debt.amount > 0 ? "text-brandOrange" : "text-statusGreen"}`} />{" "}
             <span className="text-gray-400 text-lg">ج.م</span>
           </p>
         </div>
-        <div className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
-          <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">عدد العملاء</p>
+        <div className={box}>
+          <p className={boxLabel}>عدد العملاء</p>
           <p className="leading-[1.3]">
             <Num value={debt.customers} className="text-[30px] font-extrabold text-white" /> <span className="text-gray-400 text-lg">عميل</span>
           </p>
         </div>
-        {debt.unlinkedApplied > 0 && (
-          <div className="rounded-xl border border-dashed border-cardBorder px-4 py-1.5">
-            <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">اتخصم دفعات ومرتجعات وقيود مش متربطة بفواتير</p>
-            <p className="leading-[1.3]">
-              <Num value={Math.round(debt.unlinkedApplied)} className="text-[26px] font-extrabold text-sky-400" />{" "}
-              <span className="text-gray-400 text-lg">ج.م</span>
-            </p>
-          </div>
-        )}
-        {debt.aging.map((bucket, i) => (
-          <div key={bucket.label} className="rounded-xl border border-cardBorder bg-background/70 px-4 py-1.5">
-            <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">
-              {bucket.label} <span className="text-gray-500">· {bucket.invoices} فاتورة</span>
-            </p>
-            <p className="leading-[1.3]">
-              <Num value={Math.round(bucket.amount)} className={`text-[26px] font-extrabold ${bucket.amount > 0 ? agingColors[i] : "text-gray-500"}`} />{" "}
-              <span className="text-gray-400 text-lg">ج.م</span>
-            </p>
-          </div>
-        ))}
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto">
@@ -96,13 +113,15 @@ function DebtTab({ debt }: { debt: RepDebt }) {
             <thead className="sticky top-0 z-10 bg-card">
               <tr>
                 <th className={`${th} text-start ps-5`}>اسم العميل</th>
-                <th className={th}>المديونية</th>
+                <th className={th}>مديونية الشهر ده</th>
+                <th className={th}>مديونية قبل الشهر</th>
+                <th className={th}>الإجمالي</th>
                 <th className={th}>عدد الفواتير المفتوحة</th>
                 <th className={th}>أقدم فاتورة</th>
               </tr>
             </thead>
             <tbody>
-              {debt.list.map((customer) => {
+              {rows.map(({ customer, thisMonth, before }) => {
                 const open = openCustomer === customer.customer;
                 const late = customer.oldest !== null && customer.oldest.daysAgo > debt.warningDays;
                 return (
@@ -118,13 +137,19 @@ function DebtTab({ debt }: { debt: RepDebt }) {
                         </span>
                       </td>
                       <td className="px-3 text-center border-b border-cardBorder/60">
-                        <Money
+                        <DebtCell value={thisMonth} className={`font-bold ${thisMonth < 0 ? "text-statusGreen" : "text-brandOrange"}`} />
+                      </td>
+                      <td className="px-3 text-center border-b border-cardBorder/60">
+                        <DebtCell value={before} className={`font-bold ${before > 0 ? "text-statusRed" : "text-statusGreen"}`} />
+                      </td>
+                      <td className="px-3 text-center border-b border-cardBorder/60">
+                        <DebtCell
                           value={customer.amount}
-                          className={`font-bold ${customer.amount <= 0 ? "text-statusGreen" : late ? "text-statusRed" : "text-brandOrange"}`}
+                          className={`font-extrabold ${customer.amount <= 0 ? "text-statusGreen" : "text-white"}`}
                         />
                       </td>
                       <td className="px-3 text-center border-b border-cardBorder/60">
-                        <Num value={customer.openInvoices} className="text-gray-100" />
+                        {customer.openInvoices ? <Num value={customer.openInvoices} className="text-gray-100" /> : <span className="text-gray-600">—</span>}
                       </td>
                       <td className={`px-3 text-center border-b border-cardBorder/60 whitespace-nowrap ${late ? "text-statusRed font-semibold" : "text-gray-300"}`}>
                         {customer.oldest ? (
@@ -139,7 +164,7 @@ function DebtTab({ debt }: { debt: RepDebt }) {
                     </tr>
                     {open && (
                       <tr>
-                        <td colSpan={4} className="bg-background/60 border-b border-cardBorder/60 px-5 py-2">
+                        <td colSpan={6} className="bg-background/60 border-b border-cardBorder/60 px-5 py-2">
                           {customer.unlinkedApplied > 0 && (
                             <p className="text-sky-400 text-[15px] leading-[1.9]">
                               اتخصم <Money value={customer.unlinkedApplied} className="font-bold" /> دفعات ومرتجعات وقيود مش متربطة بفواتير في ERPNext (من أقدم فاتورة للأحدث)
@@ -211,6 +236,24 @@ function DebtTab({ debt }: { debt: RepDebt }) {
                 );
               })}
             </tbody>
+            <tfoot className="sticky bottom-0 z-10 bg-card">
+              <tr className="text-[17px]">
+                <td className="ps-5 pe-2 border-t-2 border-cardBorder text-white font-extrabold">الإجمالي</td>
+                <td className={foot}>
+                  <DebtCell value={totalThisMonth} className="text-brandOrange" />
+                </td>
+                <td className={foot}>
+                  <DebtCell value={totalBefore} className={Math.round(totalBefore) > 0 ? "text-statusRed" : "text-statusGreen"} />
+                </td>
+                <td className={foot}>
+                  <DebtCell value={debt.amount} className="text-white" />
+                </td>
+                <td className={foot}>
+                  <Num value={rows.reduce((sum, r) => sum + r.customer.openInvoices, 0)} className="text-gray-100" />
+                </td>
+                <td className="border-t-2 border-cardBorder" />
+              </tr>
+            </tfoot>
           </table>
         )}
       </div>
@@ -310,7 +353,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
             </div>
           ) : tab === "debt" ? (
             data.debt ? (
-              <DebtTab debt={data.debt} />
+              <DebtTab debt={data.debt} month={data.month} />
             ) : (
               <div className="h-full flex items-center justify-center text-xl text-gray-400">المديونية مش متاحة دلوقتي — جرب تاني بعد شوية</div>
             )
