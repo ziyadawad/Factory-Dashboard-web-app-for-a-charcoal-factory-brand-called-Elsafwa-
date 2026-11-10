@@ -196,6 +196,11 @@ const money = (value: number) => (
   </span>
 );
 
+// مصدر الأجر الشامل - where the salary came from
+const SOURCE_LABEL = { structure: "من هيكل المرتب", employee: "من ملف الموظف" } as const;
+const SourceTag = ({ salary }: { salary: EmployeeSalary }) =>
+  salary.source ? <span className="ms-2 text-gray-500 text-[13px] font-normal">{SOURCE_LABEL[salary.source]}</span> : null;
+
 // "يدوي" = مش متسجل في ERPNext (0 ولازم يتراجع) - "manual" = not in ERPNext (shown as 0)
 const ManualTag = () => <span className="ms-2 rounded-full bg-amber-400/15 text-amber-300 px-2 text-[13px] font-bold">يدوي</span>;
 
@@ -230,7 +235,18 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
   return (
     <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col text-[17px]">
       <p className="text-amber-300 font-extrabold text-[19px] mb-1">💰 المرتب — الشهر ده لحد النهارده</p>
-      {row("الأجر الشامل", money(salary.total))}
+      {salary.mismatch && (
+        <p className="mb-1 rounded-lg bg-amber-500/10 border border-amber-500/40 px-3 py-1 text-[14px] text-amber-400 font-semibold">
+          ⚠ المرتب في ملف الموظف ({money(salary.mismatch.ctc)}) مختلف عن هيكل المرتب ({money(salary.mismatch.structure)})
+        </p>
+      )}
+      {row(
+        "الأجر الشامل",
+        <>
+          {money(salary.total)}
+          <SourceTag salary={salary} />
+        </>
+      )}
       {row("أيام الغياب حتى النهارده", money(salary.absentDays), salary.absentDays ? "text-statusRed" : "text-gray-400")}
       {row(
         `خصم الغياب حتى النهارده (الشامل ÷ ${perDay} × الأيام)`,
@@ -241,6 +257,17 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
       {deduction("التأمينات", salary.insurance)}
       {deduction("جزاءات", salary.penalty)}
       {deduction("تأخير", salary.late)}
+      <div className="flex items-center justify-between gap-4 pt-2 border-b border-cardBorder/60 pb-2">
+        <span className="text-white font-bold">المرتب لحد النهارده</span>
+        <span className="text-end leading-tight">
+          <span className="block text-[30px] font-extrabold text-white">
+            {money(salary.earned)} <span className="text-[18px] text-gray-300">ج.م</span>
+          </span>
+          <span className="block text-[13px] text-gray-400">
+            ({money(salary.daysPassed)} يوم × {money(salary.perDay)} ج.م − خصم غياب {money(salary.absence)} ج.م)
+          </span>
+        </span>
+      </div>
       <p className="flex items-center justify-between gap-4 pt-2">
         <span className="text-white font-bold">الصافي المتوقع آخر الشهر</span>
         <span className="text-[30px] font-extrabold text-statusGreen leading-tight">{money(salary.expectedNet)}</span>
@@ -272,6 +299,7 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <th className={`${th} text-center`}>الأجر الشامل</th>
           <th className={`${th} text-center`}>أيام الغياب</th>
           <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
+          <th className={`${th} text-center`}>لحد النهارده</th>
           <th className={`${th} text-center`}>الصافي المتوقع</th>
         </tr>
       </thead>
@@ -296,14 +324,19 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                 </span>
               </td>
               {!s || s.kind !== "monthly" ? (
-                <td colSpan={4} className={`${td} text-gray-500`}>
+                <td colSpan={5} className={`${td} text-gray-500`}>
                   {s?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"}
                 </td>
               ) : (
                 <>
-                  <td className={`${td} text-white font-bold`}>{money(s.total)}</td>
+                  <td className={`${td} text-white font-bold`}>
+                    {money(s.total)}
+                    {s.mismatch && <span className="ms-1 text-amber-400" title="المرتب في ملف الموظف مختلف عن هيكل المرتب">⚠</span>}
+                    <span className="block text-gray-500 text-[12px] font-normal leading-tight">{s.source ? SOURCE_LABEL[s.source] : ""}</span>
+                  </td>
                   <td className={`${td} font-bold ${s.absentDays ? "text-statusRed" : "text-gray-600"}`}>{s.absentDays ? money(s.absentDays) : "—"}</td>
                   <td className={`${td} font-bold ${s.absence ? "text-statusRed" : "text-gray-600"}`}>{s.absence ? money(s.absence) : "—"}</td>
+                  <td className={`${td} text-white font-bold`}>{money(s.earned)}</td>
                   <td className={`${td} text-statusGreen font-bold`}>{money(s.expectedNet)}</td>
                 </>
               )}
@@ -320,6 +353,7 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <td className={`${foot} text-white`}>{money(totals.total)}</td>
           <td className="border-t border-cardBorder" />
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
+          <td className={`${foot} text-white`}>{money(totals.earned)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.expectedNet)}</td>
         </tr>
       </tfoot>

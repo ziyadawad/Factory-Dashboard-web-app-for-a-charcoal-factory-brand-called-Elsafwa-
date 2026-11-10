@@ -85,9 +85,12 @@ export const dashboardConfig = {
   // المرتبات (جوه لوحة تفاصيل الحضور بس، بزرار "💰 المرتب") - للإدارة، قراية بس من ERPNext
   // Salaries (only inside the attendance details panel, behind the "💰 المرتب" button) - read-only
   // - عمرها ما بتظهر على الشاشة الرئيسية ولا في اللف، وبتتجاب من /api/salaries بس لما الزرار يتداس
-  // - الأجر الشامل = base + custom_allowance من آخر Salary Structure Assignment (نفس معادلة Ts في ERPNext)
+  // - الأجر الشامل = base + custom_allowance من آخر Salary Structure Assignment (نفس معادلة Ts في ERPNext)،
+  //   ولو مفيش هيكل: Cost to Company (ctc) من ملف الموظف. ولو الاتنين موجودين ومختلفين بيظهر تحذير
+  // - المرتب لحد النهارده = (الشامل ÷ daysPerMonth) × الأيام اللي عدّت (بالجمعة، من التعيين لو بعد أول الشهر) − خصم الغياب
   //   (أيام الجمعة اللي في الكشف الورق مش متسجلة في ERPNext)
-  // - خصم الغياب = الشامل ÷ daysPerMonth × أيام الغياب (من البصمة، بنفس قواعد لوحة الحضور + نص اليوم فوق)
+  // - خصم الغياب = الشامل ÷ daysPerMonth × أيام الغياب (من البصمة، بنفس قواعد لوحة الحضور + نص اليوم فوق؛
+  //   الإجازة في غير يوم الجمعة بتتخصم زي الغياب، والجمعة عمرها ما بتتحسب غياب)
   // - السلف = Loan Disbursement على advancesAccount للموظف الشهر ده (من GL Entry)
   // - الجزاء والتأخير من Additional Salary الشهر ده (لو مفيش = 0 ومكتوب "يدوي")
   // - قسط القرض والتأمينات: مش متسجلين في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
@@ -105,7 +108,7 @@ export const dashboardConfig = {
     penaltyAmountComponent: "قيمة الجزاء",
     lateHoursComponent: "عدد ساعات التأخير", // × (الأساسي ÷ 30 ÷ 8) زي ERPNext
     lateAmountComponent: "قيمة ساعات التأخير",
-    cacheSeconds: 60, // كاش في ذاكرة السيرفر بس (مش CDN) - server memory only, never the CDN
+    cacheSeconds: 0, // 0 = من غير كاش: أي تعديل في ERPNext يظهر على طول - 0 = no cache: ERPNext edits show at once
   },
 
   // ============================================================

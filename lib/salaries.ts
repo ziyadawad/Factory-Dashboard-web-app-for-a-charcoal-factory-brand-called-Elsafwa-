@@ -23,6 +23,7 @@ async function list<T>(doctype: string, body: Record<string, unknown>): Promise<
 type Assignment = { employee: string; salary_structure: string; from_date: string; base: number | null; custom_allowance: number | null };
 type Additional = { employee: string; salary_component: string; amount: number | null };
 type Advance = { party: string; debit: number | null };
+type EmployeePay = { name: string; ctc: number | null; date_of_joining: string | null };
 
 function lastDayOf(month: string): string {
   const [year, m] = month.split("-").map(Number);
@@ -35,11 +36,11 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const monthStart = `${month}-01`;
   const ids = attendance.people.map((p) => p.id);
   if (ids.length === 0) {
-    return { month, today, daysPerMonth: config.daysPerMonth, people: [], totals: { total: 0, absence: 0, expectedNet: 0, monthly: 0 } };
+    return { month, today, daysPerMonth: config.daysPerMonth, people: [], totals: { total: 0, absence: 0, earned: 0, expectedNet: 0, monthly: 0 } };
   }
 
   const components = [config.penaltyDaysComponent, config.penaltyAmountComponent, config.lateHoursComponent, config.lateAmountComponent];
-  const [assignments, additional, advances] = await Promise.all([
+  const [assignments, additional, advances, employees] = await Promise.all([
     // الأحدث الأول، فأول واحد لكل موظف هو الساري النهارده - newest first: the first per employee is in force today
     list<Assignment>("Salary Structure Assignment", {
       filters: [["employee", "in", ids], ["docstatus", "=", 1], ["from_date", "<=", today]],
@@ -68,8 +69,11 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       ],
       fields: ["party", "debit"],
     }),
+    // Cost to Company من ملف الموظف (البديل لو مفيش هيكل مرتب) - Employee ctc (fallback when there is no assignment)
+    list<EmployeePay>("Employee", { filters: [["name", "in", ids]], fields: ["name", "ctc", "date_of_joining"] }),
   ]);
 
+  const employeeOf = new Map(employees.map((e) => [e.name, e]));
   const assignmentOf = new Map<string, Assignment>();
   for (const a of assignments) if (!assignmentOf.has(a.employee)) assignmentOf.set(a.employee, a);
   const advancesOf = new Map<string, number>();
@@ -83,16 +87,36 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
 
   const people: EmployeeSalary[] = attendance.people.map((person) => {
     const assignment = assignmentOf.get(person.id);
-    const kind = !assignment ? "none" : daily.has(assignment.salary_structure) ? "daily" : "monthly";
-    // نفس عدّ لوحة الحضور، ونص اليوم = 0.5 - same counting as the attendance panel, half day = 0.5
-    const absentDays = person.days.filter((d) => d.status === "absent").length + person.days.filter((d) => d.half).length * 0.5;
+    const employee = employeeOf.get(person.id);
+    const ctc = money(employee?.ctc ?? 0);
+    const structureTotal = assignment ? money((assignment.base ?? 0) + (assignment.custom_allowance ?? 0)) : 0;
+    // الأولوية: هيكل المرتب، وبعدين ctc من ملف الموظف - priority: the assignment, then Employee.ctc
+    const isDaily = !!assignment && daily.has(assignment.salary_structure);
+    const source: EmployeeSalary["source"] = isDaily || structureTotal > 0 ? "structure" : ctc > 0 ? "employee" : null;
+    const kind: EmployeeSalary["kind"] = isDaily ? "daily" : source ? "monthly" : "none";
+    const total = source === "structure" ? structureTotal : source === "employee" ? ctc : 0;
+    const mismatch = !isDaily && structureTotal > 0 && ctc > 0 && ctc !== structureTotal ? { ctc, structure: structureTotal } : null;
+
+    // نفس عدّ لوحة الحضور، نص اليوم = 0.5، والإجازة (مش جمعة) = غياب - same counting, half day = 0.5, leave = absent
+    const absentDays =
+      person.days.filter((d) => d.status === "absent" || d.status === "leave").length + person.days.filter((d) => d.half).length * 0.5;
+    // الأيام اللي عدّت: من أول الشهر (أو التعيين لو بعده) لحد النهارده، بالجمعة - days so far incl. Fridays
+    const joined = employee?.date_of_joining ? String(employee.date_of_joining).slice(0, 10) : "";
+    const from = joined > monthStart ? joined : monthStart;
+    const daysPassed = from > today ? 0 : Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+
     const zero = { value: 0, manual: true };
-    if (kind !== "monthly" || !assignment) {
-      return { id: person.id, kind, total: 0, absentDays, absence: 0, advances: zero, loan: zero, insurance: zero, penalty: zero, late: zero, expectedNet: 0 };
+    if (kind !== "monthly") {
+      return {
+        id: person.id, kind, total: 0, source, mismatch: null, perDay: 0, daysPassed, earned: 0, absentDays, absence: 0,
+        advances: zero, loan: zero, insurance: zero, penalty: zero, late: zero, expectedNet: 0,
+      };
     }
-    const base = assignment.base ?? 0;
-    const total = base + (assignment.custom_allowance ?? 0);
-    const absence = money((total / perDay) * absentDays);
+    // التأخير على الأساسي (ولو المصدر ctc يبقى الأساسي = ctc) - late uses base (ctc when that is the source)
+    const base = source === "structure" ? assignment?.base ?? 0 : total;
+    const dayRate = total / perDay;
+    const absence = money(dayRate * absentDays);
+    const earned = money(dayRate * daysPassed - dayRate * absentDays); // من غير تقريب في النص - no mid-way rounding
 
     // نفس معادلات ERPNext: الجزاء = الشامل ÷ 30 × الأيام، التأخير = (الأساسي ÷ 30) ÷ 8 × الساعات
     // Same formulas as the ERPNext structure: penalty = Ts / 30 × days, late = (base / 30) / 8 × hours
@@ -100,14 +124,17 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const penaltyAmount = extraOf(person.id, config.penaltyAmountComponent);
     const lateHours = extraOf(person.id, config.lateHoursComponent);
     const lateAmount = extraOf(person.id, config.lateAmountComponent);
-    const penalty = manual((total / perDay) * penaltyDays + penaltyAmount, penaltyDays !== 0 || penaltyAmount !== 0);
+    const penalty = manual(dayRate * penaltyDays + penaltyAmount, penaltyDays !== 0 || penaltyAmount !== 0);
     const late = manual((base / perDay / 8) * lateHours + lateAmount, lateHours !== 0 || lateAmount !== 0);
     const advance = advancesOf.get(person.id) ?? 0;
     const advancesValue = { value: money(advance), manual: false };
     const loan = { value: 0, manual: true };
     const insurance = { value: 0, manual: true };
     const expectedNet = money(total - absence - advancesValue.value - loan.value - insurance.value - penalty.value - late.value);
-    return { id: person.id, kind, total: money(total), absentDays, absence, advances: advancesValue, loan, insurance, penalty, late, expectedNet };
+    return {
+      id: person.id, kind, total: money(total), source, mismatch, perDay: money(dayRate), daysPassed, earned, absentDays, absence,
+      advances: advancesValue, loan, insurance, penalty, late, expectedNet,
+    };
   });
 
   const monthly = people.filter((p) => p.kind === "monthly");
@@ -117,7 +144,13 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     today,
     daysPerMonth: perDay,
     people,
-    totals: { total: sum((p) => p.total), absence: sum((p) => p.absence), expectedNet: sum((p) => p.expectedNet), monthly: monthly.length },
+    totals: {
+      total: sum((p) => p.total),
+      absence: sum((p) => p.absence),
+      earned: sum((p) => p.earned),
+      expectedNet: sum((p) => p.expectedNet),
+      monthly: monthly.length,
+    },
   };
 }
 
@@ -126,7 +159,7 @@ const cache = new Map<string, { at: number; value: SectionSalaries }>();
 
 export async function sectionSalaries(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < config.cacheSeconds * 1000) return hit.value;
+  if (config.cacheSeconds > 0 && hit && Date.now() - hit.at < config.cacheSeconds * 1000) return hit.value;
   const value = await load(key);
   cache.set(key, { at: Date.now(), value });
   return value;

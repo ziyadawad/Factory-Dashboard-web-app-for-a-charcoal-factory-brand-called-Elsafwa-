@@ -552,6 +552,13 @@ export interface EmployeeSalary {
   id: string; // Employee ID
   kind: "monthly" | "daily" | "none"; // daily = اليومية حسابها خارجي، none = مش متسجل في السيستم
   total: number; // الأجر الشامل - salary (base + allowance)
+  // المصدر: هيكل المرتب (Salary Structure Assignment) أو ملف الموظف (Employee.ctc) - where total came from
+  source: "structure" | "employee" | null;
+  // المرتب في ملف الموظف مختلف عن هيكل المرتب - Employee.ctc differs from the assignment
+  mismatch: { ctc: number; structure: number } | null;
+  perDay: number; // يومية = الشامل ÷ daysPerMonth
+  daysPassed: number; // الأيام اللي عدّت من أول الشهر (أو التعيين) لحد النهارده، بالجمعة - days so far, Fridays included
+  earned: number; // المرتب لحد النهارده = يومية × الأيام − خصم الغياب - earned so far
   absentDays: number; // أيام الغياب حتى النهارده (نص اليوم = 0.5) - absent days so far (half day = 0.5)
   absence: number; // خصم الغياب حتى النهارده - absence deduction so far
   advances: SalaryValue; // سلف الشهر
@@ -567,5 +574,5 @@ export interface SectionSalaries {
   today: string;
   daysPerMonth: number;
   people: EmployeeSalary[];
-  totals: { total: number; absence: number; expectedNet: number; monthly: number }; // الشهريين بس - monthly staff only
+  totals: { total: number; absence: number; earned: number; expectedNet: number; monthly: number }; // الشهريين بس - monthly staff only
 }
