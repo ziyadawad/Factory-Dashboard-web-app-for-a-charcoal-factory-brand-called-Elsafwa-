@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, ChevronLeft, Users, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, ExternalLink, Users, X } from "lucide-react";
 import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeSalary, PersonStatus, SalaryValue, SectionSalaries } from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
@@ -39,6 +39,46 @@ function TodayPill({ status, punch }: { status: PersonStatus; punch: string | nu
   }
   if (status === "leave") return <span className="inline-flex rounded-full bg-gray-500/20 text-gray-300 px-3 font-bold">إجازة</span>;
   return <span className="inline-flex rounded-full bg-statusRed/15 text-statusRed px-3 font-bold">غائب</span>;
+}
+
+// مبصمش النهارده: عشان الـ HR يسجلهم في ERPNext (اللينك بيفتح بحساب الـ HR نفسه في تابة جديدة)
+// Not punched today: for HR to mark in ERPNext (the link opens with HR's own login in a new tab)
+function NotPunchedToday({ data }: { data: AttendanceDetails }) {
+  if (data.todayOff) return null;
+  const list = data.notPunchedToday;
+  return (
+    <div className="mx-3 mt-3 rounded-xl border border-statusRed/40 bg-statusRed/5 px-4 py-2 text-[16px]">
+      <p className="font-extrabold text-statusRed">
+        مبصمش النهارده {n(list.length)}
+        {list.length === 0 && <span className="text-gray-400 font-semibold"> — كله بصم أو متسجل</span>}
+      </p>
+      {list.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-1.5 mb-1">
+          {list.map((p) => (
+            <span key={p.id} className="inline-flex items-center gap-2 rounded-full border border-cardBorder bg-background/70 px-3 leading-[2]">
+              <span className="text-white font-semibold">{p.name}</span>
+              {p.code && (
+                <span dir="ltr" className="font-numbers tabular-nums text-gray-500 text-[14px]">
+                  {p.code}
+                </span>
+              )}
+              {data.erpUrl && (
+                <a
+                  href={`${data.erpUrl}/app/attendance/new?employee=${encodeURIComponent(p.id)}&attendance_date=${data.today}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-brandOrange font-bold hover:underline"
+                >
+                  سجّل حضور
+                  <ExternalLink size={14} />
+                </a>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // قايمة القسم - the section list
@@ -468,7 +508,10 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
           ) : showSalary ? (
             <SectionSalaryList data={data} state={salaryState} onPick={setEmployeeId} />
           ) : (
-            <SectionList data={data} onPick={setEmployeeId} />
+            <>
+              <NotPunchedToday data={data} />
+              <SectionList data={data} onPick={setEmployeeId} />
+            </>
           )}
         </div>
       </div>

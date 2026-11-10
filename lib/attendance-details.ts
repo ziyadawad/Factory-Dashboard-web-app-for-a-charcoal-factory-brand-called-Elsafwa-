@@ -176,6 +176,15 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
 
   // الغايب النهارده الأول وبعدين بالاسم - absent today first, then by name
   result.sort((a, b) => Number(b.today === "absent") - Number(a.today === "absent") || a.name.localeCompare(b.name, "ar"));
+  // مبصمش النهارده: من غير بصمة ولا أي Attendance متسجل النهارده (Active بس، ومش يوم إجازة)
+  // Not punched today: no checkin and no submitted Attendance today (Active only, not on a day off)
+  // اليوم بتاع كل موظف من التقويم (جمعة / إجازة رسمية / قبل التعيين = مش في القايمة)
+  // Each person's own calendar cell for today (off / holiday / before joining = not listed)
+  const todayOff = weeklyOff.has(weekdayOf(today));
+  const notPunchedToday = result
+    .filter((p) => byId.has(p.id) && !firstPunch.has(`${p.id}|${today}`) && !marked.has(`${p.id}|${today}`))
+    .filter((p) => p.days.find((d) => d.date === today)?.status === "absent")
+    .map((p) => ({ id: p.id, code: p.code, name: p.name }));
   const present = people.filter((p) => p.status === "present").length;
   const leave = people.filter((p) => p.status === "leave").length;
   return {
@@ -185,8 +194,20 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
     trackingStartDate: config.trackingStartDate,
     weeklyOff: config.weeklyOff,
     holidayListsRead: rows.holidays !== null,
+    notPunchedToday,
+    todayOff,
+    erpUrl: erpOrigin(),
     people: result,
   };
+}
+
+// أصل ERPNext بس (من غير مفاتيح) - the ERPNext origin only (never the keys)
+function erpOrigin(): string | null {
+  try {
+    return process.env.FACTORY_API_URL ? new URL(process.env.FACTORY_API_URL).origin : null;
+  } catch {
+    return null;
+  }
 }
 
 export const isAttendanceSection = (key: string): key is AttendanceSectionKey =>

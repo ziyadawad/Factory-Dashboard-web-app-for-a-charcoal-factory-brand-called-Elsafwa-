@@ -316,6 +316,11 @@ export interface AttendanceDetails {
   trackingStartDate: string;
   weeklyOff: string[];
   holidayListsRead: boolean; // false = مفيش صلاحية على Holiday List (الإجازة الأسبوعية من الكونفج بس)
+  // مبصمش النهارده: Active من غير بصمة ولا Attendance النهارده (فاضية يوم الجمعة/الإجازة الرسمية)
+  // No punch today: Active employees with no checkin and no Attendance today (empty on a day off / holiday)
+  notPunchedToday: { id: string; code: string | null; name: string }[];
+  todayOff: boolean;
+  erpUrl: string | null; // أصل ERPNext للينك "سجّل حضور" - ERPNext origin for the "mark attendance" link
   people: EmployeeAttendance[]; // الغايب النهارده الأول وبعدين بالاسم - absent today first, then by name
 }
 
