@@ -92,22 +92,47 @@ export const dashboardConfig = {
   // - خصم الغياب = الشامل ÷ daysPerMonth × أيام الغياب (من البصمة، بنفس قواعد لوحة الحضور + نص اليوم فوق؛
   //   الإجازة في غير يوم الجمعة بتتخصم زي الغياب، والجمعة عمرها ما بتتحسب غياب)
   // - السلف = Loan Disbursement على advancesAccount للموظف الشهر ده (من GL Entry)
-  // - الجزاء والتأخير من Additional Salary الشهر ده (لو مفيش = 0 ومكتوب "يدوي")
-  // - قسط القرض والتأمينات: مش متسجلين في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
+  //   + Employee Advance المدفوعة الشهر ده (لو اليوزر يقدر يقراها)
+  // - قسط القرض = Loan Repayment على نفس الحساب الشهر ده لسلف اتصرفت قبل الشهر ده (سلف الشهر نفسه محسوبة فوق)
+  // - الإضافات والخصومات = كل Additional Salary متسجلة (submitted) والـ payroll_date في الشهر ده:
+  //   Earning بتتزود و Deduction بتتخصم، وبتدخل في "المرتب لحد النهارده" و"الصافي المتوقع"
+  // - التأمينات: مش متسجلة في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
   // Salary = base + custom_allowance of the latest assignment; absence = salary / daysPerMonth × absent days
   // (biometric, same rules as the attendance panel); advances = Loan Disbursements on advancesAccount this month;
-  // penalty / late from Additional Salary this month (else 0 marked "manual"); loan installment / insurance = manual
+  // (+ paid Employee Advances when readable); loan installment = Loan Repayments this month of loans disbursed before
+  // this month; every submitted Additional Salary with payroll_date this month: Earning added, Deduction subtracted;
+  // insurance = manual
   // ============================================================
   salaries: {
     daysPerMonth: 30,
     // هياكل المرتبات اللي معناها عامل يومية (اليومية حسابها خارجي) - structures that mean a daily worker
     dailyStructures: ["عمال يومية"] as string[],
     advancesAccount: "1620 - سلف الموظفيين - AC", // حساب سلف الموظفين - employee advances account
-    // مكونات Additional Salary - Additional Salary components (days / hours / direct amounts)
-    penaltyDaysComponent: "عدد ايام الجزاء", // × الشامل ÷ 30
-    penaltyAmountComponent: "قيمة الجزاء",
-    lateHoursComponent: "عدد ساعات التأخير", // × (الأساسي ÷ 30 ÷ 8) زي ERPNext
-    lateAmountComponent: "قيمة ساعات التأخير",
+    // مكونات Additional Salary: أي مكون مش مكتوب هنا قيمته فلوس على طول، والإشارة من نوعه (Earning + / Deduction −)
+    // Additional Salary components: any component not listed here is a direct amount; the sign comes from its type
+    additionalSalary: {
+      // المبلغ عدد أيام: × الشامل ÷ الرقم ده (زي معادلات ERPNext) - the amount is a number of days: × Ts / this number
+      dayComponents: {
+        "عدد ايام الاضافي": 30,
+        "عدد ايام الجزاء": 30,
+        "عدد ايام الجزاء عمال يومية": 6,
+      } as Record<string, number>,
+      // المبلغ عدد ساعات: × الأساسي ÷ 30 ÷ 8 (زي ERPNext) - the amount is a number of hours: × base / 30 / 8
+      hourComponents: ["عدد ساعات التأخير"] as string[],
+      // متتحسبش: الغياب بيتخصم من البصمة فوق (عشان ميتخصمش مرتين) - skipped: absence already comes from the fingerprint
+      skipComponents: ["عدد ايام الغياب", "قيمة الغياب", "عدد ايام الغياب عمال يومية", "قيمة الغياب عمال يومية"] as string[],
+      // الاسم اللي بيظهر في اللوحة (غير كده بيظهر اسم المكون) - short label shown in the panel (else the component name)
+      labels: {
+        "عدد ايام الاضافي": "إضافي",
+        "قيمة الاضافي": "إضافي",
+        "عدد ايام الجزاء": "جزاء",
+        "قيمة الجزاء": "جزاء",
+        "عدد ساعات التأخير": "تأخير",
+        "قيمة ساعات التأخير": "تأخير",
+        "حوافز": "حوافز",
+        "ضريبة شهرية": "ضريبة",
+      } as Record<string, string>,
+    },
     cacheSeconds: 0, // 0 = من غير كاش: أي تعديل في ERPNext يظهر على طول - 0 = no cache: ERPNext edits show at once
   },
 

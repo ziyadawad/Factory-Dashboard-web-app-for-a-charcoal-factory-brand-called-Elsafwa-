@@ -564,9 +564,23 @@ export interface EmployeeSalary {
   advances: SalaryValue; // سلف الشهر
   loan: SalaryValue; // قسط القرض
   insurance: SalaryValue; // التأمينات
-  penalty: SalaryValue; // جزاءات
-  late: SalaryValue; // تأخير
+  // Additional Salary الشهر ده (إضافي، مكافأة، جزاء، تأخير...) - this month's Additional Salary lines
+  adjustments: SalaryAdjustment[];
+  additions: number; // مجموع الإضافات (Earning) - total earnings
+  extraDeductions: number; // مجموع خصومات Additional Salary (Deduction) - total Additional Salary deductions
+  // كل الخصومات غير الغياب: Additional Salary + سلف + قسط القرض - all deductions except absence
+  deductions: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
+}
+
+// سطر Additional Salary - one Additional Salary line
+export interface SalaryAdjustment {
+  label: string; // "إضافي" / "جزاء" / اسم المكون
+  component: string; // Salary Component
+  sign: 1 | -1; // Earning = +1، Deduction = −1
+  amount: number; // المبلغ بالجنيه (موجب) - amount in EGP (positive)
+  date: string; // payroll_date "2026-11-11"
+  units: { count: number; unit: "day" | "hour" } | null; // لو المكون أيام أو ساعات - when the component is days / hours
 }
 
 export interface SectionSalaries {
@@ -574,5 +588,6 @@ export interface SectionSalaries {
   today: string;
   daysPerMonth: number;
   people: EmployeeSalary[];
-  totals: { total: number; absence: number; earned: number; expectedNet: number; monthly: number }; // الشهريين بس - monthly staff only
+  // الشهريين بس - monthly staff only
+  totals: { total: number; absence: number; additions: number; deductions: number; earned: number; expectedNet: number; monthly: number };
 }
