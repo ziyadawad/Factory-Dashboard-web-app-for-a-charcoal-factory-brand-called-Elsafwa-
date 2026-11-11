@@ -89,7 +89,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   if (ids.length === 0) {
     return {
       month, today, daysPerMonth: config.daysPerMonth, people: [],
-      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtimeUnpaid: 0, overtimeHours: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0 },
+      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtimeUnpaid: 0, overtimeHours: 0, overtimePaid: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0 },
     };
   }
 
@@ -195,6 +195,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       paidThisMonth,
       unpaidTotal: money(unpaid.reduce((s, e) => s + e.amount, 0)),
       unpaidHours: money(unpaid.reduce((s, e) => s + e.hours, 0)),
+      paidTotal: money(paidThisMonth.reduce((s, e) => s + e.amount, 0)),
+      paidHours: money(paidThisMonth.reduce((s, e) => s + e.hours, 0)),
     };
   };
 
@@ -230,7 +232,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       return {
         id: person.id, kind, total: 0, source, mismatch: null, perDay: 0, daysPassed, earned: 0, absentDays, absence: 0,
         advances: zero, loan: zero, insurance: zero, adjustments: [], bonuses: 0, overtime, extraDeductions: 0, deductions: 0,
-        installments: 0, expectedNet: 0,
+        installments: 0, expectedNet: 0, totalWithOvertime: 0,
       };
     }
     // التأخير على الأساسي (ولو المصدر ctc يبقى الأساسي = ctc) - late uses base (ctc when that is the source)
@@ -324,6 +326,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     return {
       id: person.id, kind, total: money(total), source, mismatch, perDay: money(dayRate), daysPassed, earned, absentDays, absence,
       advances: advancesValue, loan, insurance, adjustments, bonuses, overtime, extraDeductions, deductions, installments, expectedNet,
+      // كل اللي هياخده الشهر ده: المرتب + الإضافي كله (اتصرف ولسه) - everything this month: net + all overtime
+      totalWithOvertime: money(expectedNet + overtime.paidTotal + overtime.unpaidTotal),
     };
   });
 
@@ -342,6 +346,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       // الإضافي لكل القسم (مش الشهريين بس) عشان الكاش اللي يتجهز - overtime of everyone: the cash to prepare
       overtimeUnpaid: money(people.reduce((s, p) => s + p.overtime.unpaidTotal, 0)),
       overtimeHours: money(people.reduce((s, p) => s + p.overtime.unpaidHours, 0)),
+      overtimePaid: money(people.reduce((s, p) => s + p.overtime.paidTotal, 0)),
+      totalWithOvertime: sum((p) => p.totalWithOvertime),
       installments: sum((p) => p.installments),
       earned: sum((p) => p.earned),
       expectedNet: sum((p) => p.expectedNet),

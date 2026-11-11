@@ -575,6 +575,8 @@ export interface EmployeeSalary {
   // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
   installments: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
+  // الإجمالي مع الإضافي = الصافي المتوقع + إضافي اتصرف + إضافي لسه متصرفش - net + all overtime (paid + unpaid)
+  totalWithOvertime: number;
 }
 
 // إضافي (Salary Adjustment) بيتصرف كاش - one cash-paid overtime entry
@@ -590,6 +592,8 @@ export interface OvertimeSummary {
   paidThisMonth: OvertimeEntry[]; // اتصرف (الشهر ده) - paid, dated this month
   unpaidTotal: number;
   unpaidHours: number;
+  paidTotal: number; // اتصرف الشهر ده - paid this month
+  paidHours: number;
 }
 
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
@@ -622,6 +626,8 @@ export interface SectionSalaries {
     // الإضافي اللي لسه متصرفش لكل القسم (شهري ويومية) - unpaid overtime of the whole section (monthly and daily)
     overtimeUnpaid: number;
     overtimeHours: number;
+    overtimePaid: number; // إضافي اتصرف الشهر ده - overtime paid this month
+    totalWithOvertime: number; // الشهريين بس - monthly staff only
     installments: number;
     earned: number;
     expectedNet: number;
