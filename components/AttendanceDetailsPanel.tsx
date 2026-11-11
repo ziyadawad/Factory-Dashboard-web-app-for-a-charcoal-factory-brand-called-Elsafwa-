@@ -372,10 +372,12 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
               )}
             </div>
           ))}
+      {/* المرتب النهائي = اللي اتكسب لحد النهارده (بيزيد كل يوم، وآخر الشهر هو اللي بيتقبض بالظبط)
+          Final salary = earned until today (grows daily; at month end it is exactly what is paid) */}
       <div className="flex items-center justify-between gap-4 pt-2 border-b border-cardBorder/60 pb-2">
-        <span className="text-white font-bold">المرتب لحد النهارده</span>
+        <span className="text-white font-bold">المرتب النهائي (لحد النهارده)</span>
         <span className="text-end leading-tight">
-          <span className="block text-[30px] font-extrabold text-white">
+          <span className="block text-[30px] font-extrabold text-emerald-300">
             {money(salary.earned)} <span className="text-[18px] text-gray-300">ج.م</span>
           </span>
           <span className="block text-[13px] text-gray-400">
@@ -386,19 +388,7 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
           </span>
         </span>
       </div>
-      <p className="flex items-center justify-between gap-4 pt-2">
-        <span className="text-white font-bold">الصافي المتوقع آخر الشهر</span>
-        <span className="text-[30px] font-extrabold text-statusGreen leading-tight">{money(salary.expectedNet)}</span>
-      </p>
-      <p className="text-gray-300 mt-1">
-        لو مغابش تاني، صافي آخر الشهر = <b className="text-white">{money(salary.expectedNet)}</b> ج.م
-      </p>
-      {/* المرتب + الإضافي كله (اتصرف ولسه) - salary + all overtime (paid and unpaid) */}
-      <div className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2 flex flex-col gap-1">
-        <p className="flex items-center justify-between gap-4">
-          <span className="text-gray-300">الصافي المتوقع (المرتب)</span>
-          <span className="font-bold text-white">{money(salary.expectedNet)} ج.م</span>
-        </p>
+      <div className="flex flex-col gap-1 pt-2">
         <p className="flex items-center justify-between gap-4">
           <span className="text-gray-300">الإضافي الشهر ده</span>
           <span className="font-bold text-sky-300">
@@ -408,9 +398,9 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
             </span>
           </span>
         </p>
-        <p className="flex items-center justify-between gap-4 border-t border-emerald-400/20 pt-1">
+        <p className="flex items-center justify-between gap-4 border-t border-cardBorder/60 pt-1">
           <span className="text-white font-bold">الإجمالي مع الإضافي</span>
-          <span className="text-[26px] font-extrabold text-emerald-300 leading-tight">{money(salary.totalWithOvertime)} ج.م</span>
+          <span className="text-[26px] font-extrabold text-white leading-tight">{money(salary.totalWithOvertime)} ج.م</span>
         </p>
       </div>
     </div>
@@ -457,7 +447,9 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
     </td>
   );
   // العمود الأخير: الإجمالي مع الإضافي - the final column: total with overtime
-  const grand = "text-center font-extrabold text-emerald-300 bg-emerald-400/[0.07]";
+  const grand = "text-center font-extrabold text-white bg-white/[0.04]";
+  // المرتب النهائي (لحد النهارده) - final salary (earned until today)
+  const final = "text-center font-extrabold text-emerald-300 bg-emerald-400/[0.07]";
   return (
     <table className="w-full border-separate border-spacing-0 text-[15px] min-[1600px]:text-[17px] leading-[2.2]">
       <thead className="sticky top-0 z-10 bg-card">
@@ -486,15 +478,21 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <th className={`${th} text-center`} title="قسط (Salary Adjustment) + قسط القرض">
             أقساط
           </th>
-          <th className={`${th} text-center`}>لحد النهارده</th>
-          <th className={`${th} text-center`}>الصافي المتوقع</th>
           <th
-            className={`${th} text-center !whitespace-normal leading-tight !text-emerald-300 bg-emerald-400/[0.07]`}
-            title="الصافي المتوقع + إضافي اتصرف + إضافي لسه متصرفش"
+            className={`${th} text-center !whitespace-normal leading-tight !text-white bg-white/[0.04]`}
+            title="المرتب النهائي + إضافي اتصرف + إضافي لسه متصرفش"
           >
             الإجمالي
             <br />
             مع الإضافي
+          </th>
+          <th
+            className={`${th} text-center !whitespace-normal leading-tight !text-emerald-300 bg-emerald-400/[0.07]`}
+            title="الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات − قسط الشهر + المكافآت (من غير الإضافي)"
+          >
+            المرتب
+            <br />
+            النهائي
           </th>
         </tr>
       </thead>
@@ -525,8 +523,9 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                   </td>
                   {overtimeCell(s)}
                   {paidOvertimeCell(s)}
-                  <td colSpan={5} className={td} />
+                  <td colSpan={3} className={td} />
                   <td className={`${td} ${grand} !text-gray-600`}>—</td>
+                  <td className={`${td} ${final} !text-gray-600`}>—</td>
                 </>
               ) : (
                 <>
@@ -548,9 +547,8 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                   <td className={`${td} font-bold ${s.installments ? "text-amber-400" : "text-gray-600"}`}>
                     {s.installments ? <>− {money(s.installments)}</> : "—"}
                   </td>
-                  <td className={`${td} text-white font-bold`}>{money(s.earned)}</td>
-                  <td className={`${td} text-statusGreen font-bold`}>{money(s.expectedNet)}</td>
                   <td className={`${td} ${grand}`}>{money(s.totalWithOvertime)}</td>
+                  <td className={`${td} ${final}`}>{money(s.earned)}</td>
                 </>
               )}
             </tr>
@@ -571,9 +569,8 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
           <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>
-          <td className={`${foot} text-white`}>{money(totals.earned)}</td>
-          <td className={`${foot} text-statusGreen`}>{money(totals.expectedNet)}</td>
           <td className={`${foot} ${grand}`}>{money(totals.totalWithOvertime)}</td>
+          <td className={`${foot} ${final}`}>{money(totals.earned)}</td>
         </tr>
       </tfoot>
     </table>

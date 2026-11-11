@@ -326,8 +326,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     return {
       id: person.id, kind, total: money(total), source, mismatch, perDay: money(dayRate), daysPassed, earned, absentDays, absence,
       advances: advancesValue, loan, insurance, adjustments, bonuses, overtime, extraDeductions, deductions, installments, expectedNet,
-      // كل اللي هياخده الشهر ده: المرتب + الإضافي كله (اتصرف ولسه) - everything this month: net + all overtime
-      totalWithOvertime: money(expectedNet + overtime.paidTotal + overtime.unpaidTotal),
+      // المرتب النهائي (لحد النهارده) + الإضافي كله (اتصرف ولسه) - salary earned so far + all overtime
+      totalWithOvertime: money(earned + overtime.paidTotal + overtime.unpaidTotal),
     };
   });
 

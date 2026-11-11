@@ -575,7 +575,7 @@ export interface EmployeeSalary {
   // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
   installments: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
-  // الإجمالي مع الإضافي = الصافي المتوقع + إضافي اتصرف + إضافي لسه متصرفش - net + all overtime (paid + unpaid)
+  // الإجمالي مع الإضافي = المرتب النهائي (earned) + إضافي اتصرف + إضافي لسه متصرفش - earned so far + all overtime
   totalWithOvertime: number;
 }
 
