@@ -265,26 +265,44 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
       {deduction("سلف الشهر", salary.advances)}
       {deduction("قسط القرض", salary.loan)}
       {deduction("التأمينات", salary.insurance)}
-      {/* Additional Salary الشهر ده: "إضافي: +200 ج.م (11/11)" - this month's Additional Salary lines */}
+      {/* بنود الشهر (Additional Salary + Salary Adjustment): "إضافي: 4 ساعات × 50 = +200 ج.م (11/11)"
+          This month's items (Additional Salary + Salary Adjustment) */}
       {salary.adjustments.length === 0
-        ? row("إضافات / خصومات (Additional Salary)", <span className="text-gray-500">مفيش الشهر ده</span>)
+        ? row("إضافات / خصومات / أقساط", <span className="text-gray-500">مفيش الشهر ده</span>)
         : salary.adjustments.map((a, i) => (
-            <p key={i} className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
-              <span className="text-gray-400">
-                {a.label}
-                {a.units && (
-                  <span className="ms-1.5 text-[14px] text-gray-500">
-                    ({money(a.units.count)} {a.units.unit === "day" ? "يوم" : "ساعة"})
-                  </span>
-                )}
-              </span>
-              <span className="font-semibold">
-                <span className={a.sign > 0 ? "text-statusGreen" : "text-statusRed"}>
-                  {a.sign > 0 ? "+" : "−"} {money(a.amount)} ج.م
+            <div key={i} className="border-b border-cardBorder/60 py-1.5">
+              <p className="flex items-center justify-between gap-4">
+                <span className="text-gray-400">
+                  {a.label}
+                  {a.detail && <span className="ms-1.5 text-[15px] text-gray-300">: {a.detail} =</span>}
+                  {a.units && (
+                    <span className="ms-1.5 text-[14px] text-gray-500">
+                      ({money(a.units.count)} {a.units.unit === "day" ? "يوم" : "ساعة"})
+                    </span>
+                  )}
                 </span>
-                <span className="ms-2 text-[14px] text-gray-500">({shortDate(a.date)})</span>
-              </span>
-            </p>
+                <span className="font-semibold">
+                  <span className={a.sign > 0 ? "text-statusGreen" : a.kind === "installment" ? "text-amber-400" : "text-statusRed"}>
+                    {a.sign > 0 ? "+" : "−"} {money(a.amount)} ج.م
+                  </span>
+                  {a.kind !== "installment" && <span className="ms-2 text-[14px] text-gray-500">({shortDate(a.date)})</span>}
+                </span>
+              </p>
+              {(a.reason || a.remaining) && (
+                <p className="text-[14px] text-gray-500 leading-snug">
+                  {a.remaining &&
+                    (a.remaining.amount > 0 ? (
+                      <>
+                        متبقي من القسط: <b className="text-gray-300">{money(a.remaining.amount)} ج.م</b> ({money(a.remaining.months)} شهر)
+                      </>
+                    ) : (
+                      <b className="text-gray-300">آخر قسط ✓</b>
+                    ))}
+                  {a.remaining && a.reason && " — "}
+                  {a.reason && <>السبب: {a.reason}</>}
+                </p>
+              )}
+            </div>
           ))}
       <div className="flex items-center justify-between gap-4 pt-2 border-b border-cardBorder/60 pb-2">
         <span className="text-white font-bold">المرتب لحد النهارده</span>
@@ -295,7 +313,8 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
           <span className="block text-[13px] text-gray-400">
             ({money(salary.daysPassed)} يوم × {money(salary.perDay)} ج.م − خصم غياب {money(salary.absence)} ج.م
             {salary.additions > 0 && <> + إضافات {money(salary.additions)} ج.م</>}
-            {salary.extraDeductions > 0 && <> − خصومات {money(salary.extraDeductions)} ج.م</>})
+            {salary.extraDeductions > 0 && <> − خصومات {money(salary.extraDeductions)} ج.م</>}
+            {salary.installments > 0 && <> − أقساط {money(salary.installments)} ج.م</>})
           </span>
         </span>
       </div>
@@ -330,11 +349,14 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <th className={`${th} text-center`}>الأجر الشامل</th>
           <th className={`${th} text-center`}>أيام الغياب</th>
           <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
-          <th className={`${th} text-center`} title="Additional Salary: إضافي، مكافأة، حوافز...">
+          <th className={`${th} text-center`} title="إضافي، مكافأة، حوافز (Salary Adjustment + Additional Salary)">
             إضافات
           </th>
-          <th className={`${th} text-center`} title="جزاء، تأخير (Additional Salary) + سلف الشهر + قسط القرض">
+          <th className={`${th} text-center`} title="خصم، جزاء، تأخير + سلف الشهر">
             خصومات
+          </th>
+          <th className={`${th} text-center`} title="قسط (Salary Adjustment) + قسط القرض">
+            أقساط
           </th>
           <th className={`${th} text-center`}>لحد النهارده</th>
           <th className={`${th} text-center`}>الصافي المتوقع</th>
@@ -361,7 +383,7 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                 </span>
               </td>
               {!s || s.kind !== "monthly" ? (
-                <td colSpan={7} className={`${td} text-gray-500`}>
+                <td colSpan={8} className={`${td} text-gray-500`}>
                   {s?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"}
                 </td>
               ) : (
@@ -378,6 +400,9 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                   </td>
                   <td className={`${td} font-bold ${s.deductions ? "text-statusRed" : "text-gray-600"}`}>
                     {s.deductions ? <>− {money(s.deductions)}</> : "—"}
+                  </td>
+                  <td className={`${td} font-bold ${s.installments ? "text-amber-400" : "text-gray-600"}`}>
+                    {s.installments ? <>− {money(s.installments)}</> : "—"}
                   </td>
                   <td className={`${td} text-white font-bold`}>{money(s.earned)}</td>
                   <td className={`${td} text-statusGreen font-bold`}>{money(s.expectedNet)}</td>
@@ -398,6 +423,7 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.additions)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
+          <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>
           <td className={`${foot} text-white`}>{money(totals.earned)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.expectedNet)}</td>
         </tr>

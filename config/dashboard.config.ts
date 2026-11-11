@@ -96,6 +96,10 @@ export const dashboardConfig = {
   // - قسط القرض = Loan Repayment على نفس الحساب الشهر ده لسلف اتصرفت قبل الشهر ده (سلف الشهر نفسه محسوبة فوق)
   // - الإضافات والخصومات = كل Additional Salary متسجلة (submitted) والـ payroll_date في الشهر ده:
   //   Earning بتتزود و Deduction بتتخصم، وبتدخل في "المرتب لحد النهارده" و"الصافي المتوقع"
+  // - Salary Adjustment (DocType مخصوص، submitted بس): إضافي / مكافأة بتتزود، خصم بيتخصم (اللي تاريخها في الشهر ده)،
+  //   والقسط بيتخصم monthly_installment كل شهر من شهر تاريخه لحد ما total_amount يخلص (آخر شهر الباقي بس)
+  //   Salary Adjustment (custom, submitted only): إضافي / مكافأة added, خصم subtracted (dated this month); قسط
+  //   subtracts monthly_installment every month from the month of its date until total_amount is paid
   // - التأمينات: مش متسجلة في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
   // Salary = base + custom_allowance of the latest assignment; absence = salary / daysPerMonth × absent days
   // (biometric, same rules as the attendance panel); advances = Loan Disbursements on advancesAccount this month;

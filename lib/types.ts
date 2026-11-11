@@ -566,21 +566,29 @@ export interface EmployeeSalary {
   insurance: SalaryValue; // التأمينات
   // Additional Salary الشهر ده (إضافي، مكافأة، جزاء، تأخير...) - this month's Additional Salary lines
   adjustments: SalaryAdjustment[];
-  additions: number; // مجموع الإضافات (Earning) - total earnings
-  extraDeductions: number; // مجموع خصومات Additional Salary (Deduction) - total Additional Salary deductions
-  // كل الخصومات غير الغياب: Additional Salary + سلف + قسط القرض - all deductions except absence
+  additions: number; // مجموع الإضافات (Additional Salary Earning + إضافي / مكافأة) - total additions
+  extraDeductions: number; // خصومات Additional Salary + خصم Salary Adjustment - item deductions
+  // عمود "خصومات": خصومات البنود + سلف الشهر - the "خصومات" column: item deductions + advances
   deductions: number;
+  // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
+  installments: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
 }
 
-// سطر Additional Salary - one Additional Salary line
+// سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
 export interface SalaryAdjustment {
-  label: string; // "إضافي" / "جزاء" / اسم المكون
-  component: string; // Salary Component
-  sign: 1 | -1; // Earning = +1، Deduction = −1
+  source: "additional_salary" | "salary_adjustment";
+  kind: "addition" | "deduction" | "installment";
+  label: string; // "إضافي" / "خصم نص يوم" / "قسط" / اسم المكون
+  component: string; // Salary Component أو adjustment_type
+  sign: 1 | -1; // إضافة = +1، خصم/قسط = −1
   amount: number; // المبلغ بالجنيه (موجب) - amount in EGP (positive)
-  date: string; // payroll_date "2026-11-11"
+  date: string; // "2026-11-11"
   units: { count: number; unit: "day" | "hour" } | null; // لو المكون أيام أو ساعات - when the component is days / hours
+  detail: string | null; // "4 ساعات × 50"
+  reason: string | null; // السبب (لو متسجل) - reason, when recorded
+  // القسط: الباقي بعد قسط الشهر ده وعدد الشهور - installment: remaining after this month, and months left
+  remaining: { amount: number; months: number } | null;
 }
 
 export interface SectionSalaries {
@@ -589,5 +597,14 @@ export interface SectionSalaries {
   daysPerMonth: number;
   people: EmployeeSalary[];
   // الشهريين بس - monthly staff only
-  totals: { total: number; absence: number; additions: number; deductions: number; earned: number; expectedNet: number; monthly: number };
+  totals: {
+    total: number;
+    absence: number;
+    additions: number;
+    deductions: number;
+    installments: number;
+    earned: number;
+    expectedNet: number;
+    monthly: number;
+  };
 }
