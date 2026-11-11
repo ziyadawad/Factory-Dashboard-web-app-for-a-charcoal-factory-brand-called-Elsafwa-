@@ -2,10 +2,10 @@
 // Salaries of an attendance section: requested only when the "💰 المرتب" button is pressed (never on the main screen)
 // قراية بس من ERPNext. ممنوع تسجيل أي مبلغ في اللوج - read-only; never log any amount
 import { dashboardConfig } from "@/config/dashboard.config";
-import { addDays, attendanceDetails, rangeStartOf, weekStartOf, weekdayOf } from "./attendance-details";
+import { addDays, attendanceDetails, cashWeekOf, cashWeekStarts, rangeStartOf, weekStartOf } from "./attendance-details";
 import { AttendanceSectionKey } from "./data-source";
 import { ErpError, erpPost } from "./erp";
-import { DailyWeek, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, SalaryAdjustment, SectionSalaries } from "./types";
+import { DailyWeek, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SectionSalaries } from "./types";
 
 const config = dashboardConfig.salaries;
 
@@ -86,19 +86,17 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const { today, month } = attendance;
   const monthStart = `${month}-01`;
   const ids = attendance.people.map((p) => p.id);
-  // أسابيع اليومية (السبت → الجمعة). الأسبوع اللي بيظهر: يوم القبض = الأسبوع اللي خلص امبارح (بيتقبض النهارده)،
-  // غير كده = من أول الأسبوع ده لحد النهارده
-  // Daily-pay weeks (Saturday → Friday). The shown week: on pay day the week that ended yesterday (paid today),
-  // otherwise this week so far
+  // أسابيع القبض الكاش (السبت → الجمعة، نفس الدالة لليومية والإضافي) - cash-pay weeks (one helper for both)
   const thisWeekStart = weekStartOf(today);
-  const paidToday = weekdayOf(today) === config.dailyPayDay;
-  const shownStart = paidToday ? weekStartOf(addDays(today, -1)) : thisWeekStart;
+  const cashWeek = cashWeekOf(today);
+  const shownStart = cashWeek.start;
+  const weekStarts = cashWeekStarts(today);
   const rangeStart = rangeStartOf(today);
-  const dailyPay = { week: { start: shownStart, end: addDays(shownStart, 6) }, paidToday };
+  const dailyPay = { week: { start: cashWeek.start, end: cashWeek.end }, paidToday: cashWeek.paidToday };
   if (ids.length === 0) {
     return {
       month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay,
-      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
+      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
     };
   }
 
@@ -185,21 +183,30 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const hourComponents = new Set(extras.hourComponents);
   const skipComponents = new Set(extras.skipComponents);
 
-  // الإضافي: كل إضافي تاريخه في الشهر ده، اتصرف ولا لأ (حقل paid مش بيتقري) - every overtime entry this month
+  // الإضافي (اتصرف ولا لأ، حقل paid مش بيتقري): الشهر كله، وأسبوع بأسبوع (بيتقبض كاش السبت)
+  // Overtime (paid or not; the paid field is ignored): the whole month, and week by week (paid in cash on Saturday)
   const overtimeEntry = (a: Adjustment): OvertimeEntry => {
     const hours = a.hours ?? 0;
     const rate = a.hour_rate ?? 0;
     return { date: String(a.date).slice(0, 10), hours, rate, amount: money(a.amount || hours * rate) };
   };
   const overtimeOf = (id: string): OvertimeSummary => {
-    const entries = salaryAdjustments
-      .filter((a) => a.employee === id && a.adjustment_type === "إضافي" && String(a.date).slice(0, 10) >= monthStart)
+    const all = salaryAdjustments
+      .filter((a) => a.employee === id && a.adjustment_type === "إضافي")
       .map(overtimeEntry)
       .filter((e) => e.amount > 0);
+    const totalOf = (list: OvertimeEntry[]) => money(list.reduce((s, e) => s + e.amount, 0));
+    const hoursOf = (list: OvertimeEntry[]) => money(list.reduce((s, e) => s + e.hours, 0));
+    const entries = all.filter((e) => e.date >= monthStart);
+    const weeks: OvertimeWeek[] = weekStarts.map((start) => {
+      const end = addDays(start, 6);
+      const inWeek = all.filter((e) => e.date >= start && e.date <= end);
+      return { start, end, entries: inWeek, total: totalOf(inWeek), hours: hoursOf(inWeek), shown: start === shownStart, current: start === thisWeekStart };
+    });
+    const shown = weeks.find((w) => w.shown);
     return {
-      entries,
-      total: money(entries.reduce((s, e) => s + e.amount, 0)),
-      hours: money(entries.reduce((s, e) => s + e.hours, 0)),
+      entries, total: totalOf(entries), hours: hoursOf(entries),
+      week: shown?.total ?? 0, weekHours: shown?.hours ?? 0, weeks,
     };
   };
 
@@ -295,8 +302,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       const additions = adjustments.filter((a) => a.kind === "addition");
       const cuts = adjustments.filter((a) => a.kind === "deduction");
       const weeks: DailyWeek[] = [];
-      const firstWeek = [weekStartOf(monthStart), shownStart].sort()[0];
-      for (let start = firstWeek; start <= thisWeekStart; start = addDays(start, 7)) {
+      for (const start of weekStarts) {
         const end = addDays(start, 6);
         const days = Array.from({ length: 7 }, (_, i) => {
           const date = addDays(start, i);
@@ -435,6 +441,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       // إضافي الجدول الشهري (الشهريين واللي مالهمش مرتب) - overtime of the monthly table (everyone but daily workers)
       overtime: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.total),
       overtimeHours: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.hours),
+      overtimeWeek: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.week),
+      overtimeWeekHours: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.weekHours),
       // عمال اليومية: مستحق هذا الأسبوع، والشهر - daily workers: this week, the month
       dailyWeek: sumIn(dailyPaid, shownTotal),
       dailyMonth: sumIn(dailyPaid, (p) => p.totalWithOvertime),

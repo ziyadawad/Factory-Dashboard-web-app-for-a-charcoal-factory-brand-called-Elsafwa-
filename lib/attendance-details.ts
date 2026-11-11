@@ -20,6 +20,24 @@ export function weekStartOf(date: string): string {
   return addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() - start + 7) % 7));
 }
 
+// أسبوع القبض الكاش (يومية العمال + إضافي الشهريين) - the cash-pay week (daily workers' pay + monthly overtime)
+// يوم القبض كله = الأسبوع اللي خلص امبارح (اللي بيتقبض النهارده)؛ غير كده = من أول الأسبوع ده لحد النهارده
+// On pay day (all day) = the week that ended yesterday (paid today); otherwise = this week so far
+export function cashWeekOf(today: string): { start: string; end: string; paidToday: boolean } {
+  const paidToday = weekdayOf(today) === dashboardConfig.salaries.dailyPayDay;
+  const start = paidToday ? weekStartOf(addDays(today, -1)) : weekStartOf(today);
+  return { start, end: addDays(start, 6), paidToday };
+}
+
+// أوائل الأسابيع اللي بتظهر في اللوحة: من أول أسبوع فيه أيام من الشهر (أو الأسبوع اللي بيظهر) لحد الأسبوع ده
+// Week starts listed in the panel: from the first week touching the month (or the shown week) to this week
+export function cashWeekStarts(today: string): string[] {
+  const first = [weekStartOf(`${today.slice(0, 7)}-01`), cashWeekOf(today).start].sort()[0];
+  const starts: string[] = [];
+  for (let start = first; start <= weekStartOf(today); start = addDays(start, 7)) starts.push(start);
+  return starts;
+}
+
 // أول يوم محتاجينه: أول الشهر، أو أول أسبوعه، أو أول الأسبوع اللي فات (للقبض) - the first day needed
 export function rangeStartOf(today: string): string {
   const monthStart = `${today.slice(0, 7)}-01`;

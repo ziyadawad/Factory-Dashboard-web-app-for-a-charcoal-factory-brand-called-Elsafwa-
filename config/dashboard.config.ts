@@ -128,6 +128,8 @@ export const dashboardConfig = {
     // ومن اليوم اللي بعده بيبدأ الأسبوع الجديد (من يوم القبض) من الصفر
     // "مستحق هذا الأسبوع": all of pay day (until 23:59) still shows the week that just ended (paid that day);
     // from the next day the new week (starting on pay day) starts from zero
+    // إضافي الشهريين بيتقبض كاش بنفس الأسبوع ونفس القاعدة (عمود "إضافي هذا الأسبوع")، ومش داخل في المرتب النهائي
+    // Monthly staff overtime is paid in cash on the same week and rule ("إضافي هذا الأسبوع"), never in the final salary
     // Daily workers are paid in cash on dailyPayDay for the previous full week (dailyWeekStart → the day before it):
     // Saturday pays Saturday → Friday. A Friday counts only when he actually punched; half day = 0.5
     dailyPayDay: "Saturday",

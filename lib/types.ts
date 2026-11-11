@@ -619,11 +619,26 @@ export interface OvertimeEntry {
   amount: number;
 }
 
-// كل إضافي تاريخه في الشهر ده (اتصرف ولا لأ) - every overtime entry dated this month (paid or not)
+// إضافي أسبوع (السبت → الجمعة) بيتصرف كاش - one week of overtime (Saturday → Friday), paid in cash
+export interface OvertimeWeek {
+  start: string;
+  end: string;
+  entries: OvertimeEntry[];
+  total: number;
+  hours: number;
+  shown: boolean; // أسبوع "إضافي هذا الأسبوع" - the "this week" week
+  current: boolean; // الأسبوع اللي فيه النهارده - the week holding today
+}
+
+// entries / total / hours = إضافي الشهر كله (اتصرف ولا لأ)، week = إضافي هذا الأسبوع (بيتقبض كاش السبت)
+// entries / total / hours = the whole month (paid or not); week = this week's overtime (paid in cash on Saturday)
 export interface OvertimeSummary {
   entries: OvertimeEntry[];
   total: number;
   hours: number;
+  week: number;
+  weekHours: number;
+  weeks: OvertimeWeek[];
 }
 
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
@@ -648,7 +663,8 @@ export interface SectionSalaries {
   daysPerMonth: number;
   people: EmployeeSalary[];
   // أسابيع اليومية: الأسبوع اللي فات ويوم قبضه، والأسبوع ده لحد النهارده - daily-pay weeks
-  // الأسبوع اللي بيظهر (يوم القبض = الأسبوع اللي خلص، غير كده = الأسبوع الحالي) - the week shown
+  // أسبوع القبض الكاش (يومية العمال + إضافي الشهريين): يوم القبض = الأسبوع اللي خلص، غير كده = الأسبوع الحالي
+  // The cash-pay week (daily pay + monthly overtime): on pay day the week that ended, otherwise this week
   dailyPay: { week: { start: string; end: string }; paidToday: boolean };
   // جدول الشهريين: الشهريين بس. daily* = عمال اليومية اللي ليهم يومية
   // The monthly table: monthly staff only. daily* = daily workers with a rate
@@ -657,8 +673,10 @@ export interface SectionSalaries {
     absence: number;
     bonuses: number;
     deductions: number;
-    overtime: number; // الإضافي لكل القسم - overtime of the whole section
+    overtime: number; // إضافي الشهر - this month's overtime
     overtimeHours: number;
+    overtimeWeek: number; // إجمالي إضافي هذا الأسبوع (الكاش اللي يتجهز السبت) - this week's overtime cash
+    overtimeWeekHours: number;
     dailyWeek: number; // إجمالي مستحق هذا الأسبوع - this week's total (the shown week)
     dailyMonth: number; // إجمالي الشهر لعمال اليومية
     totalWithOvertime: number;

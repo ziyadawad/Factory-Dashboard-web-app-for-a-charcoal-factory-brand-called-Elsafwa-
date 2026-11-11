@@ -11,6 +11,7 @@ import {
   EmployeeSalary,
   OvertimeEntry,
   OvertimeSummary,
+  OvertimeWeek,
   PersonStatus,
   SalaryValue,
   SectionSalaries,
@@ -243,31 +244,61 @@ const overtimeText = (e: OvertimeEntry) => (
   </>
 );
 
-// الإضافي الشهر ده (اتصرف ولا لأ) - مش داخل في المرتب النهائي
-// This month's overtime (paid or not) - never part of the final salary
-function OvertimeBox({ overtime }: { overtime: OvertimeSummary }) {
+// أسبوع إضافي واحد: التواريخ، كل إضافي (ساعات × سعر)، وإجمالي الأسبوع - one overtime week
+function OvertimeWeekRow({ week, paidToday }: { week: OvertimeWeek; paidToday: boolean }) {
   return (
-    <div className="rounded-xl bg-background border border-sky-400/30 p-4 flex flex-col text-[17px]">
-      <p className="text-sky-300 font-extrabold text-[19px] mb-1">💵 إضافي — الشهر ده</p>
-      {overtime.entries.length === 0 ? (
-        <p className="text-gray-500 py-1">مفيش إضافي الشهر ده</p>
+    <div
+      className={`rounded-lg border px-3 py-2 flex flex-col ${
+        week.shown ? "border-sky-400/70 bg-sky-400/[0.08]" : "border-cardBorder/70 opacity-80"
+      }`}
+    >
+      <p className="flex items-center justify-between gap-3 text-[15px]">
+        <span className="text-gray-300 font-semibold">
+          السبت {shortDate(week.start)} ← الجمعة {shortDate(week.end)}
+        </span>
+        {week.shown && (
+          <span className="rounded-full bg-sky-400/20 text-sky-300 px-2.5 text-[13px] font-bold">
+            {paidToday ? "💵 بيتقبض النهارده" : "هذا الأسبوع (لحد النهارده)"}
+          </span>
+        )}
+      </p>
+      {week.entries.length === 0 ? (
+        <p className="text-gray-500 text-[14px]">مفيش إضافي</p>
       ) : (
-        <>
-          {overtime.entries.map((e, i) => (
-            <p key={i} className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
-              <span className="text-gray-300">{overtimeText(e)}</span>
-              <span className="font-semibold text-sky-300">= {money(e.amount)} ج.م</span>
-            </p>
-          ))}
-          <p className="flex items-center justify-between gap-4 pt-2">
-            <span className="text-white font-bold">إجمالي الإضافي</span>
-            <span className="text-[26px] font-extrabold text-sky-300 leading-tight">
-              {money(overtime.total)} <span className="text-[16px] text-gray-300">ج.م</span>
-              {overtime.hours > 0 && <span className="ms-2 text-[15px] text-gray-400">({money(overtime.hours)} س)</span>}
-            </span>
+        week.entries.map((e, i) => (
+          <p key={i} className="flex items-center justify-between gap-4 text-[15px]">
+            <span className="text-gray-300">{overtimeText(e)}</span>
+            <span className="text-sky-300">= {money(e.amount)} ج.م</span>
           </p>
-        </>
+        ))
       )}
+      <p className="flex items-center justify-between gap-4 border-t border-cardBorder/60 mt-1 pt-1">
+        <span className="text-gray-400 text-[15px]">إجمالي الأسبوع{week.hours > 0 && <> ({money(week.hours)} س)</>}</span>
+        <span className={`font-extrabold text-[20px] ${week.shown ? "text-sky-300" : "text-gray-300"}`}>{money(week.total)} ج.م</span>
+      </p>
+    </div>
+  );
+}
+
+// الإضافي أسبوع بأسبوع (بيتقبض كاش السبت) - مش داخل في المرتب النهائي
+// Overtime week by week (paid in cash on Saturday) - never part of the final salary
+function OvertimeBox({ overtime, paidToday }: { overtime: OvertimeSummary; paidToday: boolean }) {
+  return (
+    <div className="rounded-xl bg-background border border-sky-400/30 p-4 flex flex-col gap-2 text-[17px]">
+      <p className="flex items-center justify-between gap-3">
+        <span className="text-sky-300 font-extrabold text-[19px]">💵 إضافي — بيتقبض كاش كل سبت</span>
+        <span className="text-[13px] text-gray-500">مش داخل في المرتب النهائي</span>
+      </p>
+      {overtime.weeks.map((w) => (
+        <OvertimeWeekRow key={w.start} week={w} paidToday={paidToday} />
+      ))}
+      <p className="flex items-center justify-between gap-4 pt-1">
+        <span className="text-white font-bold">إضافي الشهر كله</span>
+        <span className="text-[26px] font-extrabold text-sky-300 leading-tight">
+          {money(overtime.total)} <span className="text-[16px] text-gray-300">ج.م</span>
+          {overtime.hours > 0 && <span className="ms-2 text-[15px] text-gray-400">({money(overtime.hours)} س)</span>}
+        </span>
+      </p>
     </div>
   );
 }
@@ -276,12 +307,13 @@ function OvertimeBox({ overtime }: { overtime: OvertimeSummary }) {
 function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; state: SalaryState }) {
   if (state.error) return <SalaryMessage text="المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية" />;
   if (!state.data) return <SalaryMessage text="جاري تحميل المرتب..." />;
-  const hasOvertime = !!salary && salary.overtime.entries.length > 0;
+  const hasOvertime = !!salary && salary.overtime.weeks.some((w) => w.entries.length > 0);
+  const paidToday = state.data.dailyPay.paidToday;
   if (salary?.kind === "daily" && salary.dailyRate > 0) {
     return (
       <div className="flex flex-col gap-3">
         <DailySalaryCard salary={salary} paidToday={state.data.dailyPay.paidToday} />
-        <OvertimeBox overtime={salary.overtime} />
+        <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
       </div>
     );
   }
@@ -289,14 +321,14 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
     return (
       <div className="flex flex-col gap-3">
         <SalaryMessage text={salary?.kind === "daily" ? NO_DAILY_RATE : "المرتب مش متسجل في السيستم"} />
-        {salary && hasOvertime && <OvertimeBox overtime={salary.overtime} />}
+        {salary && hasOvertime && <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />}
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-3">
       <MonthlySalaryCard salary={salary} perDay={state.data.daysPerMonth} />
-      <OvertimeBox overtime={salary.overtime} />
+      <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
     </div>
   );
 }
@@ -687,17 +719,25 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
   const td = salaryTd;
   const foot = salaryFoot;
   const { totals } = salaries;
-  // الإضافي الشهر ده وتحته الساعات ("4 س") - this month's overtime with its hours under it
+  const { dailyPay } = salaries;
+  // إضافي هذا الأسبوع (بيتقبض كاش السبت) وتحته الساعات - this week's overtime (cash on Saturday) with its hours
+  const weekCell = "text-center bg-sky-400/[0.07]";
   const overtimeCell = (s: EmployeeSalary | undefined) => (
-    <td className={`${td} font-bold leading-tight ${s?.overtime.total ? "text-sky-300" : "text-gray-600"}`}>
-      {s?.overtime.total ? (
+    <td className={`${td} ${weekCell} font-bold leading-tight ${s?.overtime.week ? "text-sky-300" : "text-gray-600"}`}>
+      {s?.overtime.week ? (
         <>
-          {money(s.overtime.total)}
-          {s.overtime.hours > 0 && <span className="block text-[12px] text-gray-400 font-normal">{money(s.overtime.hours)} س</span>}
+          {money(s.overtime.week)}
+          {s.overtime.weekHours > 0 && <span className="block text-[12px] text-gray-400 font-normal">{money(s.overtime.weekHours)} س</span>}
         </>
       ) : (
         "—"
       )}
+    </td>
+  );
+  // إضافي الشهر كله (صغير) - the whole month's overtime (small)
+  const monthOvertimeCell = (s: EmployeeSalary | undefined) => (
+    <td className={`${td} text-[14px] ${s?.overtime.total ? "text-sky-200/80" : "text-gray-600"}`}>
+      {s?.overtime.total ? money(s.overtime.total) : "—"}
     </td>
   );
   // العمود الأخير: الإجمالي مع الإضافي - the final column: total with overtime
@@ -713,8 +753,20 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <th className={`${th} text-center`}>الأجر الشامل</th>
           <th className={`${th} text-center`}>أيام الغياب</th>
           <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
-          <th className={`${th} text-center`} title="كل إضافي الشهر ده (مش داخل في المرتب النهائي)">
-            إضافي
+          <th
+            className={`${th} text-center !whitespace-normal leading-tight !text-sky-300 bg-sky-400/[0.07]`}
+            title="إضافي (Salary Adjustment) تاريخه في الأسبوع ده (السبت ← الجمعة)، بيتقبض كاش السبت - مش داخل في المرتب النهائي"
+          >
+            إضافي هذا الأسبوع
+            <span className="block text-[13px] font-normal text-sky-300/70">
+              {dailyPay.paidToday ? (
+                "(💵 بيتقبض النهارده)"
+              ) : (
+                <>
+                  ({shortDate(dailyPay.week.start)} – {shortDate(dailyPay.week.end)})
+                </>
+              )}
+            </span>
           </th>
           <th className={`${th} text-center`} title="مكافأة + حوافز (داخلة في المرتب)">
             مكافآت
@@ -725,9 +777,14 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <th className={`${th} text-center`} title="قسط (Salary Adjustment) + قسط القرض">
             أقساط
           </th>
+          <th className={`${th} text-center !whitespace-normal leading-tight text-[14px]`} title="إضافي الشهر كله (كل الأسابيع)">
+            إضافي
+            <br />
+            الشهر
+          </th>
           <th
             className={`${th} text-center !whitespace-normal leading-tight !text-white bg-white/[0.04]`}
-            title="المرتب النهائي + الإضافي"
+            title="المرتب النهائي + إضافي الشهر كله"
           >
             الإجمالي
             <br />
@@ -756,6 +813,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                   </td>
                   {overtimeCell(s)}
                   <td colSpan={3} className={td} />
+                  {monthOvertimeCell(s)}
                   <td className={`${td} ${grand} !text-gray-600`}>—</td>
                   <td className={`${td} ${final} !text-gray-600`}>—</td>
                 </>
@@ -778,6 +836,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                   <td className={`${td} font-bold ${s.installments ? "text-amber-400" : "text-gray-600"}`}>
                     {s.installments ? <>− {money(s.installments)}</> : "—"}
                   </td>
+                  {monthOvertimeCell(s)}
                   <td className={`${td} ${grand}`}>{money(s.totalWithOvertime)}</td>
                   <td className={`${td} ${final}`}>{money(s.earned)}</td>
                 </>
@@ -795,12 +854,27 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <td className={`${foot} text-white`}>{money(totals.total)}</td>
           <td className="border-t border-cardBorder" />
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
-          <td className={`${foot} text-sky-300`}>{money(totals.overtime)}</td>
+          <td className={`${foot} ${weekCell} text-sky-300`}>{money(totals.overtimeWeek)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
           <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>
+          <td className={`${foot} text-sky-200/80 text-[15px]`}>{money(totals.overtime)}</td>
           <td className={`${foot} ${grand}`}>{money(totals.totalWithOvertime)}</td>
           <td className={`${foot} ${final}`}>{money(totals.earned)}</td>
+        </tr>
+        {/* الكاش اللي يتجهز للإضافي السبت - the overtime cash HR prepares for Saturday */}
+        <tr>
+          <td colSpan={12} className="px-3 py-1 text-center bg-sky-400/10 border-t border-sky-400/30">
+            <span className="text-sky-200 font-bold text-[18px]">
+              💵 إجمالي إضافي هذا الأسبوع{" "}
+              <span className="text-gray-400 font-normal text-[15px]">
+                ({shortDate(dailyPay.week.start)} – {shortDate(dailyPay.week.end)}
+                {dailyPay.paidToday ? "، بيتقبض النهارده" : "، بيتقبض كاش السبت"}):
+              </span>{" "}
+            </span>
+            <b className="text-sky-300 text-[26px] min-[1600px]:text-[30px]">{money(totals.overtimeWeek)} ج.م</b>
+            {totals.overtimeWeekHours > 0 && <span className="text-gray-400 text-[15px]"> ({money(totals.overtimeWeekHours)} ساعة)</span>}
+          </td>
         </tr>
       </tfoot>
     </table>
