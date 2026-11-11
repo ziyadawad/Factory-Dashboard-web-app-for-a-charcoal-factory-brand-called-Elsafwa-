@@ -122,6 +122,12 @@ export const dashboardConfig = {
     dailyStructures: ["عمال يومية"] as string[],
     // حقل اليومية في ملف الموظف (Employee) - the daily rate field on Employee
     dailyRateField: "custom_اليومية",
+    // عمال اليومية بيتقبضوا كاش يوم dailyPayDay عن الأسبوع اللي فات كله (من dailyWeekStart لليوم اللي قبله)
+    // يعني السبت بيقبضوا من السبت اللي قبله للجمعة. الجمعة بتتحسب بس لو بصم فعلا، ونص اليوم = 0.5
+    // Daily workers are paid in cash on dailyPayDay for the previous full week (dailyWeekStart → the day before it):
+    // Saturday pays Saturday → Friday. A Friday counts only when he actually punched; half day = 0.5
+    dailyPayDay: "Saturday",
+    dailyWeekStart: "Saturday",
     advancesAccount: "1620 - سلف الموظفيين - AC", // حساب سلف الموظفين - employee advances account
     // مكونات Additional Salary: أي مكون مش مكتوب هنا قيمته فلوس على طول، والإشارة من نوعه (Earning + / Deduction −)
     // Additional Salary components: any component not listed here is a direct amount; the sign comes from its type

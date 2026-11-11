@@ -307,6 +307,8 @@ export interface EmployeeAttendance {
   leaveDays: number;
   absentDates: string[];
   days: EmployeeDay[]; // كل أيام الشهر - every day of the month
+  // أيام قبل أول الشهر تبع أسابيع اليومية (السبت → الجمعة) - days before the month that belong to the daily-pay weeks
+  leadDays: EmployeeDay[];
 }
 
 export interface AttendanceDetails {
@@ -556,6 +558,8 @@ export interface EmployeeSalary {
   // أيام الحضور الشهر ده لحد النهارده (نص اليوم = 0.5) وتواريخها - present days so far (half day = 0.5) and their dates
   presentDays: number;
   presentDates: { date: string; half: boolean }[];
+  // عمال اليومية: كل أسبوع (السبت → الجمعة) فيه أيام من الشهر ده + الأسبوع اللي هيتقبض - daily workers: every week
+  weeks: DailyWeek[];
   total: number; // الأجر الشامل - salary (base + allowance)
   // المصدر: هيكل المرتب (Salary Structure Assignment) أو ملف الموظف (Employee.ctc) - where total came from
   source: "structure" | "employee" | null;
@@ -582,6 +586,29 @@ export interface EmployeeSalary {
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
   // الإجمالي مع الإضافي = المرتب النهائي (earned) + الإضافي - earned so far + this month's overtime
   totalWithOvertime: number;
+}
+
+// يوم في أسبوع عامل اليومية: worked = 1 / 0.5 / 0 - one day of a daily worker's week
+export interface DailyWeekDay {
+  date: string;
+  status: DayStatus;
+  worked: number;
+}
+
+// أسبوع عامل يومية (السبت → الجمعة): total = أيام × اليومية + إضافي − خصومات + مكافآت
+// A daily worker's week (Saturday → Friday): total = days × rate + overtime − deductions + bonuses
+export interface DailyWeek {
+  start: string;
+  end: string;
+  days: DailyWeekDay[];
+  presentDays: number;
+  pay: number; // أيام × اليومية - days × rate
+  overtime: number;
+  deductions: number;
+  bonuses: number;
+  total: number;
+  payWeek: boolean; // الأسبوع اللي فات (اللي بيتقبض يوم القبض) - the last full week, paid on pay day
+  current: boolean; // الأسبوع ده لحد النهارده - this week so far
 }
 
 // إضافي (Salary Adjustment) بيتصرف كاش - one cash-paid overtime entry
@@ -620,8 +647,10 @@ export interface SectionSalaries {
   today: string;
   daysPerMonth: number;
   people: EmployeeSalary[];
-  // الشهريين + عمال اليومية اللي ليهم يومية (الأجر الشامل والغياب للشهريين بس)
-  // monthly staff + daily workers with a rate (total and absence: monthly only)
+  // أسابيع اليومية: الأسبوع اللي فات ويوم قبضه، والأسبوع ده لحد النهارده - daily-pay weeks
+  dailyPay: { payWeek: { start: string; end: string }; payDay: string; thisWeek: { start: string; end: string } };
+  // جدول الشهريين: الشهريين بس. daily* = عمال اليومية اللي ليهم يومية
+  // The monthly table: monthly staff only. daily* = daily workers with a rate
   totals: {
     total: number;
     absence: number;
@@ -629,7 +658,9 @@ export interface SectionSalaries {
     deductions: number;
     overtime: number; // الإضافي لكل القسم - overtime of the whole section
     overtimeHours: number;
-    presentDays: number; // أيام حضور عمال اليومية - daily workers' present days
+    dailyPayWeek: number; // إجمالي اللي هيتقبض يوم القبض - cash for pay day (the last full week)
+    dailyThisWeek: number; // مستحق الأسبوع ده لحد النهارده
+    dailyMonth: number; // إجمالي الشهر لعمال اليومية
     totalWithOvertime: number;
     installments: number;
     earned: number;

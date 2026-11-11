@@ -2,10 +2,10 @@
 // Salaries of an attendance section: requested only when the "💰 المرتب" button is pressed (never on the main screen)
 // قراية بس من ERPNext. ممنوع تسجيل أي مبلغ في اللوج - read-only; never log any amount
 import { dashboardConfig } from "@/config/dashboard.config";
-import { attendanceDetails } from "./attendance-details";
+import { addDays, attendanceDetails, rangeStartOf, weekStartOf } from "./attendance-details";
 import { AttendanceSectionKey } from "./data-source";
 import { ErpError, erpPost } from "./erp";
-import { EmployeeSalary, OvertimeEntry, OvertimeSummary, SalaryAdjustment, SectionSalaries } from "./types";
+import { DailyWeek, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, SalaryAdjustment, SectionSalaries } from "./types";
 
 const config = dashboardConfig.salaries;
 
@@ -86,10 +86,20 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const { today, month } = attendance;
   const monthStart = `${month}-01`;
   const ids = attendance.people.map((p) => p.id);
+  // أسابيع اليومية (السبت → الجمعة): الأسبوع ده، واللي فات بيتقبض أول يوم في الأسبوع ده
+  // Daily-pay weeks (Saturday → Friday): this week, and the last full week, paid on this week's first day
+  const thisWeekStart = weekStartOf(today);
+  const payWeekStart = addDays(thisWeekStart, -7);
+  const rangeStart = rangeStartOf(today);
+  const dailyPay = {
+    payWeek: { start: payWeekStart, end: addDays(payWeekStart, 6) },
+    payDay: thisWeekStart,
+    thisWeek: { start: thisWeekStart, end: today },
+  };
   if (ids.length === 0) {
     return {
-      month, today, daysPerMonth: config.daysPerMonth, people: [],
-      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, presentDays: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
+      month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay,
+      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyPayWeek: 0, dailyThisWeek: 0, dailyMonth: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
     };
   }
 
@@ -111,9 +121,10 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     // Salary Adjustment (submitted): إضافي / مكافأة / خصم الشهر ده، والأقساط اللي بدأت لحد آخر الشهر
     // (fields "*" عشان حقل السبب لو مش موجود ميوقعش الطلب - "*" so a missing reason field never breaks the request)
     // Salary Adjustment (submitted): this month's إضافي / مكافأة / خصم, plus every installment started by month end
+    // (من أول أسبوع اليومية اللي فات، عشان أسابيع اليومية - from the first daily-pay week, for the weekly pay)
     listIfAllowed<Adjustment>("Salary Adjustment", {
       filters: [["employee", "in", ids], ["docstatus", "=", 1], ["date", "<=", monthEnd]],
-      or_filters: [["adjustment_type", "=", "قسط"], ["date", ">=", monthStart]],
+      or_filters: [["adjustment_type", "=", "قسط"], ["date", ">=", rangeStart]],
       fields: ["*"],
       order_by: "date asc, creation asc",
     }),
@@ -194,6 +205,9 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   };
 
   const daily = new Set(config.dailyStructures);
+  // يوم شغل لعامل اليومية: 1 / نص يوم 0.5 / الجمعة أو الإجازة الرسمية بس لو بصم - a daily worker's worked day
+  const workedOf = (d: EmployeeDay) =>
+    d.status === "present" ? (d.half ? 0.5 : 1) : (d.status === "off" || d.status === "holiday") && d.firstPunch ? 1 : 0;
   const perDay = config.daysPerMonth;
 
   const people: EmployeeSalary[] = attendance.people.map((person) => {
@@ -212,8 +226,9 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const kind: EmployeeSalary["kind"] = isDaily ? "daily" : source ? "monthly" : "none";
     const total = source === "structure" ? structureTotal : source === "employee" ? ctc : 0;
     const mismatch = !isDaily && structureTotal > 0 && ctc > 0 && ctc !== structureTotal ? { ctc, structure: structureTotal } : null;
-    // أيام الحضور: نفس قواعد لوحة الحضور (بصمة أو Attendance Present)، نص اليوم = 0.5 - present days, half day = 0.5
-    const presentDates = person.days.filter((d) => d.status === "present").map((d) => ({ date: d.date, half: !!d.half }));
+    // أيام الحضور: نفس قواعد لوحة الحضور (بصمة أو Attendance Present)، نص اليوم = 0.5، والجمعة / الإجازة لو بصم فعلا
+    // Present days: same rules as the attendance panel, half day = 0.5, a Friday / holiday only when he punched
+    const presentDates = person.days.filter((d) => workedOf(d) > 0).map((d) => ({ date: d.date, half: workedOf(d) === 0.5 }));
     const presentDays = presentDates.reduce((s, d) => s + (d.half ? 0.5 : 1), 0);
 
     // نفس عدّ لوحة الحضور، نص اليوم = 0.5، والإجازة (مش جمعة) = غياب - same counting, half day = 0.5, leave = absent
@@ -228,7 +243,10 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const overtime = overtimeOf(person.id);
 
     const zero = { value: 0, manual: true };
-    const common = { id: person.id, kind, source, daysPassed, absentDays, dailyRate: isDaily ? dailyRate : 0, presentDays, presentDates, overtime };
+    const common = {
+      id: person.id, kind, source, daysPassed, absentDays, dailyRate: isDaily ? dailyRate : 0, presentDays, presentDates, overtime,
+      weeks: [] as DailyWeek[],
+    };
     if (kind === "none" || (kind === "daily" && dailyRate <= 0)) {
       return {
         ...common, total: 0, mismatch: null, perDay: 0, earned: 0, absence: 0,
@@ -239,10 +257,18 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     if (kind === "daily") {
       // عامل يومية: أيام الحضور × اليومية − خصم + مكافأة (Salary Adjustment الشهر ده)
       // Daily worker: present days × rate − خصم + مكافأة (Salary Adjustment this month)
+      // كل البنود من أول أسابيع اليومية (الإضافي في الأسابيع بس، وفي الشهر من overtime)
+      // Every item since the first daily-pay week (overtime goes to the weeks; the month uses overtime above)
       const adjustments: SalaryAdjustment[] = [];
+      const weekOvertime: { date: string; amount: number }[] = [];
       for (const a of salaryAdjustments) {
-        if (a.employee !== person.id || String(a.date).slice(0, 10) < monthStart) continue;
+        if (a.employee !== person.id || String(a.date).slice(0, 10) < rangeStart) continue;
         const date = String(a.date).slice(0, 10);
+        if (a.adjustment_type === "إضافي") {
+          const e = overtimeEntry(a);
+          if (e.amount > 0) weekOvertime.push({ date, amount: e.amount });
+          continue;
+        }
         const reason = a.reason ? String(a.reason).trim() || null : null;
         const line = { source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null, detail: null };
         if (a.adjustment_type === "مكافأة") {
@@ -256,13 +282,41 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
           if (amount > 0) adjustments.push({ ...line, kind: "deduction", label, sign: -1, amount });
         }
       }
-      const sumOf = (k: SalaryAdjustment["kind"]) => money(adjustments.filter((a) => a.kind === k).reduce((s, a) => s + a.amount, 0));
+      const sumIn = (list: { date: string; amount: number }[], from: string, to: string) =>
+        money(list.filter((x) => x.date >= from && x.date <= to).reduce((s, x) => s + x.amount, 0));
+      const monthAdjustments = adjustments.filter((a) => a.date >= monthStart);
+      const sumOf = (k: SalaryAdjustment["kind"]) => money(monthAdjustments.filter((a) => a.kind === k).reduce((s, a) => s + a.amount, 0));
       const bonuses = sumOf("addition");
       const deductions = sumOf("deduction");
       const earned = money(presentDays * dailyRate - deductions + bonuses);
+
+      // الأسابيع (السبت → الجمعة) من أول أسبوع فيه أيام من الشهر (أو الأسبوع اللي فات) لحد الأسبوع ده
+      // The weeks (Saturday → Friday) from the first one touching this month (or the last full week) to this week
+      const dayOf = new Map([...person.leadDays, ...person.days].map((d) => [d.date, d]));
+      const additions = adjustments.filter((a) => a.kind === "addition");
+      const cuts = adjustments.filter((a) => a.kind === "deduction");
+      const weeks: DailyWeek[] = [];
+      const firstWeek = [weekStartOf(monthStart), payWeekStart].sort()[0];
+      for (let start = firstWeek; start <= thisWeekStart; start = addDays(start, 7)) {
+        const end = addDays(start, 6);
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const date = addDays(start, i);
+          const d = dayOf.get(date);
+          return { date, status: d?.status ?? (date > today ? "future" : "none"), worked: d ? workedOf(d) : 0 } as const;
+        });
+        const presentInWeek = days.reduce((s, d) => s + d.worked, 0);
+        const pay = money(presentInWeek * dailyRate);
+        const weekOt = sumIn(weekOvertime, start, end);
+        const weekCuts = sumIn(cuts, start, end);
+        const weekAdds = sumIn(additions, start, end);
+        weeks.push({
+          start, end, days, presentDays: presentInWeek, pay, overtime: weekOt, deductions: weekCuts, bonuses: weekAdds,
+          total: money(pay + weekOt - weekCuts + weekAdds), payWeek: start === payWeekStart, current: start === thisWeekStart,
+        });
+      }
       return {
-        ...common, total: 0, mismatch: null, perDay: dailyRate, earned, absence: 0,
-        advances: zero, loan: zero, insurance: zero, adjustments, bonuses, extraDeductions: deductions, deductions,
+        ...common, weeks, total: 0, mismatch: null, perDay: dailyRate, earned, absence: 0,
+        advances: zero, loan: zero, insurance: zero, adjustments: monthAdjustments, bonuses, extraDeductions: deductions, deductions,
         installments: 0, expectedNet: earned, totalWithOvertime: money(earned + overtime.total),
       };
     }
@@ -307,6 +361,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     for (const a of salaryAdjustments) {
       if (a.employee !== person.id) continue;
       const date = String(a.date).slice(0, 10);
+      if (a.adjustment_type !== "قسط" && date < monthStart) continue; // أيام قبل الشهر (لأسابيع اليومية بس)
       const reason = a.reason ? String(a.reason).trim() || null : null;
       const line = { source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null };
       if (a.adjustment_type === "قسط") {
@@ -364,23 +419,27 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
 
   const monthly = people.filter((p) => p.kind === "monthly");
   const dailyPaid = people.filter((p) => p.kind === "daily" && p.dailyRate > 0);
-  const paid = [...monthly, ...dailyPaid];
   const sumIn = (list: EmployeeSalary[], pick: (p: EmployeeSalary) => number) => money(list.reduce((s, p) => s + pick(p), 0));
-  const sum = (pick: (p: EmployeeSalary) => number) => sumIn(paid, pick);
+  const sum = (pick: (p: EmployeeSalary) => number) => sumIn(monthly, pick);
+  const weekTotal = (p: EmployeeSalary, which: "payWeek" | "current") => p.weeks.find((w) => w[which])?.total ?? 0;
   return {
     month,
     today,
     daysPerMonth: perDay,
     people,
+    dailyPay,
     totals: {
       total: sumIn(monthly, (p) => p.total),
       absence: sumIn(monthly, (p) => p.absence),
       bonuses: sum((p) => p.bonuses),
       deductions: sum((p) => p.deductions),
-      // الإضافي لكل القسم - overtime of everyone in the section
-      overtime: sumIn(people, (p) => p.overtime.total),
-      overtimeHours: sumIn(people, (p) => p.overtime.hours),
-      presentDays: sumIn(dailyPaid, (p) => p.presentDays),
+      // إضافي الجدول الشهري (الشهريين واللي مالهمش مرتب) - overtime of the monthly table (everyone but daily workers)
+      overtime: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.total),
+      overtimeHours: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.hours),
+      // عمال اليومية: اللي هيتقبض يوم القبض، الأسبوع ده، والشهر - daily workers: pay day cash, this week, the month
+      dailyPayWeek: sumIn(dailyPaid, (p) => weekTotal(p, "payWeek")),
+      dailyThisWeek: sumIn(dailyPaid, (p) => weekTotal(p, "current")),
+      dailyMonth: sumIn(dailyPaid, (p) => p.totalWithOvertime),
       totalWithOvertime: sum((p) => p.totalWithOvertime),
       installments: sum((p) => p.installments),
       earned: sum((p) => p.earned),

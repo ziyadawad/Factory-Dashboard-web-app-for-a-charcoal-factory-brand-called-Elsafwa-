@@ -3,7 +3,18 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, ChevronLeft, ExternalLink, Users, X } from "lucide-react";
-import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeSalary, OvertimeEntry, OvertimeSummary, PersonStatus, SalaryValue, SectionSalaries } from "@/lib/types";
+import {
+  AttendanceDetails,
+  DailyWeek,
+  DayStatus,
+  EmployeeAttendance,
+  EmployeeSalary,
+  OvertimeEntry,
+  OvertimeSummary,
+  PersonStatus,
+  SalaryValue,
+  SectionSalaries,
+} from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -269,7 +280,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
   if (salary?.kind === "daily" && salary.dailyRate > 0) {
     return (
       <div className="flex flex-col gap-3">
-        <DailySalaryCard salary={salary} />
+        <DailySalaryCard salary={salary} payDay={state.data.dailyPay.payDay} today={state.data.today} />
         <OvertimeBox overtime={salary.overtime} />
       </div>
     );
@@ -377,44 +388,83 @@ function FinalLines({ salary, formula }: { salary: EmployeeSalary; formula: Reac
   );
 }
 
-// عامل اليومية: أيام الحضور × اليومية − الخصومات + المكافآت - daily worker: present days × rate − deductions + bonuses
-function DailySalaryCard({ salary }: { salary: EmployeeSalary }) {
-  const row = (label: string, value: React.ReactNode, tone = "text-white") => (
-    <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
-      <span className="text-gray-400">{label}</span>
-      <span className={`font-semibold ${tone}`}>{value}</span>
-    </p>
-  );
+// لون يوم في أسبوع اليومية - a day's colour in a daily worker's week
+const weekDayStyle = (d: DailyWeek["days"][number]) =>
+  d.worked === 1
+    ? "bg-statusGreen/20 border-statusGreen/60 text-statusGreen"
+    : d.worked === 0.5
+      ? "bg-amber-400/15 border-amber-400/60 text-amber-300"
+      : d.status === "absent" || d.status === "leave"
+        ? "bg-statusRed/15 border-statusRed/50 text-statusRed"
+        : d.status === "off" || d.status === "holiday"
+          ? "bg-white/[0.04] border-cardBorder text-gray-500"
+          : "border-cardBorder/50 text-gray-600";
+
+// أسبوع واحد: التواريخ، الأيام (أخضر/أحمر)، اليومية، الإضافي، الخصومات، والإجمالي
+// One week: its dates, the days (green / red), the pay, overtime, deductions and the week total
+function DailyWeekRow({ week, rate, payDay, today }: { week: DailyWeek; rate: number; payDay: string; today: string }) {
   return (
-    <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col text-[17px]">
-      <p className="text-amber-300 font-extrabold text-[19px] mb-1">💰 اليومية — الشهر ده لحد النهارده</p>
-      {row("اليومية", <>{money(salary.dailyRate)} ج.م</>)}
-      {row("أيام الحضور", money(salary.presentDays), salary.presentDays ? "text-statusGreen" : "text-gray-400")}
-      <div className="border-b border-cardBorder/60 py-1.5 text-[15px] text-gray-400 leading-relaxed">
-        {salary.presentDates.length === 0 ? (
-          <span className="text-gray-500">محضرش أي يوم الشهر ده</span>
-        ) : (
-          <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-            {salary.presentDates.map((d) => (
-              <span key={d.date} className={d.half ? "text-amber-300" : "text-gray-300"}>
-                {shortDate(d.date)}
-                {d.half && <span className="text-[12px]"> (نص يوم)</span>}
-              </span>
-            ))}
+    <div
+      className={`rounded-lg border px-3 py-2 flex flex-col gap-1.5 ${
+        week.payWeek ? "border-emerald-400/70 bg-emerald-400/[0.08]" : "border-cardBorder/70"
+      }`}
+    >
+      <p className="flex items-center justify-between gap-3 text-[15px]">
+        <span className="text-gray-300 font-semibold">
+          السبت {shortDate(week.start)} ← الجمعة {shortDate(week.end)}
+        </span>
+        {week.payWeek && (
+          <span className="rounded-full bg-emerald-400/20 text-emerald-300 px-2.5 text-[13px] font-bold">
+            💵 يتقبض {payDay === today ? "النهارده" : "السبت"} {shortDate(payDay)}
           </span>
         )}
+        {week.current && <span className="rounded-full bg-sky-400/15 text-sky-300 px-2.5 text-[13px] font-bold">الأسبوع ده (لحد النهارده)</span>}
+      </p>
+      <div className="grid grid-cols-7 gap-1">
+        {week.days.map((d) => (
+          <div key={d.date} className={`rounded border text-center text-[12px] leading-[1.7] font-semibold ${weekDayStyle(d)}`}>
+            {shortDate(d.date)}
+            {d.worked === 0.5 && <span className="block text-[10px] leading-none pb-0.5">نص</span>}
+          </div>
+        ))}
       </div>
-      <AdjustmentLines salary={salary} empty="مكافآت / خصومات" />
-      <FinalLines
-        salary={salary}
-        formula={
-          <>
-            {money(salary.presentDays)} يوم × {money(salary.dailyRate)} ج.م
-            {salary.deductions > 0 && <> − خصومات {money(salary.deductions)} ج.م</>}
-            {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>}
-          </>
-        }
-      />
+      <p className="flex items-center justify-between gap-3 text-[14px]">
+        <span className="text-gray-400">
+          {money(week.presentDays)} يوم × {money(rate)} = <b className="text-gray-200">{money(week.pay)}</b>
+          {week.overtime > 0 && <span className="text-sky-300"> + إضافي {money(week.overtime)}</span>}
+          {week.deductions > 0 && <span className="text-statusRed"> − خصومات {money(week.deductions)}</span>}
+          {week.bonuses > 0 && <span className="text-statusGreen"> + مكافآت {money(week.bonuses)}</span>}
+        </span>
+        <span className={`font-extrabold text-[20px] ${week.payWeek ? "text-emerald-300" : "text-white"}`}>{money(week.total)} ج.م</span>
+      </p>
+    </div>
+  );
+}
+
+// عامل اليومية: بيتقبض كاش كل سبت عن الأسبوع اللي فات - daily worker: paid in cash every Saturday for the last week
+function DailySalaryCard({ salary, payDay, today }: { salary: EmployeeSalary; payDay: string; today: string }) {
+  return (
+    <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col gap-2 text-[17px]">
+      <p className="flex items-center justify-between gap-3">
+        <span className="text-amber-300 font-extrabold text-[19px]">💰 اليومية — بتتقبض كاش كل سبت</span>
+        <span className="font-semibold text-white">{money(salary.dailyRate)} ج.م / يوم</span>
+      </p>
+      {salary.weeks.map((w) => (
+        <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} payDay={payDay} today={today} />
+      ))}
+      <div className="flex flex-col">
+        <AdjustmentLines salary={salary} empty="مكافآت / خصومات الشهر ده" />
+        <FinalLines
+          salary={salary}
+          formula={
+            <>
+              {money(salary.presentDays)} يوم × {money(salary.dailyRate)} ج.م
+              {salary.deductions > 0 && <> − خصومات {money(salary.deductions)} ج.م</>}
+              {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>}
+            </>
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -476,17 +526,168 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
   );
 }
 
-// جدول مرتبات القسم - the section salaries table
+// جدول مرتبات القسم: الشهريين، وتحتهم عمال اليومية في جدول لوحده
+// The section salaries: the monthly table, and the daily workers in their own table under it
 function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; state: SalaryState; onPick: (id: string) => void }) {
   if (state.error) {
     return <div className="h-full flex items-center justify-center text-xl text-gray-400">المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية</div>;
   }
   if (!state.data) return <div className="h-full flex items-center justify-center text-xl text-gray-400">جاري تحميل المرتبات...</div>;
-  const byId = new Map(state.data.people.map((p) => [p.id, p]));
-  const th = "px-2 min-[1600px]:px-3 py-2 font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
-  const td = "px-2 min-[1600px]:px-3 text-center whitespace-nowrap border-b border-cardBorder/60";
-  const foot = "px-2 min-[1600px]:px-3 text-center whitespace-nowrap border-t border-cardBorder font-extrabold";
-  const { totals } = state.data;
+  const salaries = state.data;
+  const byId = new Map(salaries.people.map((p) => [p.id, p]));
+  const isDaily = (id: string) => byId.get(id)?.kind === "daily";
+  const monthlyPeople = data.people.filter((p) => !isDaily(p.id));
+  const dailyPeople = data.people.filter((p) => isDaily(p.id));
+  return (
+    <div className="flex flex-col gap-6">
+      {monthlyPeople.length > 0 && <MonthlySalaryTable people={monthlyPeople} salaries={salaries} onPick={onPick} />}
+      {dailyPeople.length > 0 && <DailySalaryTable people={dailyPeople} salaries={salaries} onPick={onPick} />}
+    </div>
+  );
+}
+
+const salaryTh = "px-2 min-[1600px]:px-3 py-2 font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+const salaryTd = "px-2 min-[1600px]:px-3 text-center whitespace-nowrap border-b border-cardBorder/60";
+const salaryFoot = "px-2 min-[1600px]:px-3 text-center whitespace-nowrap border-t border-cardBorder font-extrabold";
+
+// خانة الكود والاسم - the code and name cells
+function NameCells({ person }: { person: EmployeeAttendance }) {
+  return (
+    <>
+      <td className={`${salaryTd} text-gray-300`}>
+        {person.code ? (
+          <span dir="ltr" className="font-numbers tabular-nums">
+            {person.code}
+          </span>
+        ) : (
+          <span className="text-gray-600">—</span>
+        )}
+      </td>
+      <td className="px-3 border-b border-cardBorder/60 text-white font-semibold">
+        <span className="inline-flex items-center gap-1.5">
+          {person.name}
+          <ChevronLeft size={16} className="text-gray-600" />
+        </span>
+      </td>
+    </>
+  );
+}
+
+// عمال اليومية: بيتقبضوا كاش كل سبت عن الأسبوع اللي فات (السبت → الجمعة)
+// Daily workers: paid in cash every Saturday for the last full week (Saturday → Friday)
+function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttendance[]; salaries: SectionSalaries; onPick: (id: string) => void }) {
+  const byId = new Map(salaries.people.map((p) => [p.id, p]));
+  const { totals, dailyPay, today } = salaries;
+  const th = `${salaryTh} text-center !whitespace-normal leading-tight`;
+  const td = salaryTd;
+  const pay = "text-center font-extrabold text-emerald-300 bg-emerald-400/[0.07]";
+  const weekOf = (s: EmployeeSalary, which: "payWeek" | "current") => s.weeks.find((w) => w[which]);
+  const extras = (w: DailyWeek | undefined) =>
+    w && (w.overtime > 0 || w.deductions > 0 || w.bonuses > 0) ? (
+      <span className="block text-[12px] font-normal leading-tight">
+        {w.overtime > 0 && <span className="text-sky-300">+إضافي {money(w.overtime)} </span>}
+        {w.deductions > 0 && <span className="text-statusRed">−خصم {money(w.deductions)} </span>}
+        {w.bonuses > 0 && <span className="text-statusGreen">+مكافأة {money(w.bonuses)}</span>}
+      </span>
+    ) : null;
+  const range = (a: string, b: string) => (
+    <span className="block text-[13px] font-normal text-gray-500">
+      ({shortDate(a)} – {shortDate(b)})
+    </span>
+  );
+  return (
+    <table className="w-full border-separate border-spacing-0 text-[15px] min-[1600px]:text-[17px] leading-[2.2]">
+      <thead className="sticky top-0 z-10 bg-card">
+        <tr>
+          <th colSpan={8} className="px-3 pt-2 pb-1 text-start text-amber-300 font-extrabold text-[18px]">
+            💵 عمال اليومية — بيتقبضوا كاش كل سبت عن الأسبوع اللي فات (السبت ← الجمعة)
+          </th>
+        </tr>
+        <tr>
+          <th className={`${salaryTh} text-center w-[140px]`}>كود البصمة</th>
+          <th className={`${salaryTh} text-start`}>الاسم</th>
+          <th className={th}>اليومية</th>
+          <th className={th}>
+            أيام الأسبوع اللي فات
+            {range(dailyPay.payWeek.start, dailyPay.payWeek.end)}
+          </th>
+          <th className={`${th} !text-emerald-300 bg-emerald-400/[0.07]`}>
+            يتقبض السبت
+            <span className="block text-[13px] font-normal text-emerald-300/70">
+              ({dailyPay.payDay === today ? "النهارده " : ""}
+              {shortDate(dailyPay.payDay)})
+            </span>
+          </th>
+          <th className={th}>
+            أيام الأسبوع ده لحد النهارده
+            {range(dailyPay.thisWeek.start, dailyPay.thisWeek.end)}
+          </th>
+          <th className={th}>مستحق الأسبوع ده لحد النهارده</th>
+          <th className={th} title="كل أيام الحضور الشهر ده × اليومية + الإضافي − الخصومات + المكافآت (للمرجع)">
+            إجمالي الشهر
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {people.map((person) => {
+          const s = byId.get(person.id);
+          const last = s ? weekOf(s, "payWeek") : undefined;
+          const current = s ? weekOf(s, "current") : undefined;
+          return (
+            <tr key={person.id} onClick={() => onPick(person.id)} className="cursor-pointer hover:bg-white/5">
+              <NameCells person={person} />
+              {!s || s.dailyRate <= 0 ? (
+                <>
+                  <td colSpan={6} className={`${td} text-gray-500`}>
+                    {NO_DAILY_RATE}
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className={`${td} text-white font-bold`}>{money(s.dailyRate)} ج.م</td>
+                  <td className={`${td} font-bold ${last?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>{money(last?.presentDays ?? 0)}</td>
+                  <td className={`${td} ${pay} leading-tight py-1`}>
+                    <span className="text-[18px] min-[1600px]:text-[20px]">{money(last?.total ?? 0)}</span>
+                    {extras(last)}
+                  </td>
+                  <td className={`${td} font-bold ${current?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>
+                    {money(current?.presentDays ?? 0)}
+                  </td>
+                  <td className={`${td} font-bold text-white leading-tight py-1`}>
+                    {money(current?.total ?? 0)}
+                    {extras(current)}
+                  </td>
+                  <td className={`${td} font-bold text-gray-300`}>{money(s.totalWithOvertime)}</td>
+                </>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot className="sticky bottom-0 bg-card">
+        <tr>
+          <td className="border-t border-cardBorder" />
+          <td colSpan={3} className="px-3 border-t border-cardBorder text-emerald-300 font-extrabold text-[20px] min-[1600px]:text-[22px]">
+            إجمالي اللي هيتقبض السبت{" "}
+            <span className="text-gray-400 font-semibold text-[15px]">({money(totals.daily)} عامل)</span>
+          </td>
+          <td className={`${salaryFoot} ${pay} text-[26px] min-[1600px]:text-[30px] leading-[1.6]`}>{money(totals.dailyPayWeek)} ج.م</td>
+          <td className="border-t border-cardBorder" />
+          <td className={`${salaryFoot} text-white text-[18px]`}>{money(totals.dailyThisWeek)}</td>
+          <td className={`${salaryFoot} text-gray-300 text-[18px]`}>{money(totals.dailyMonth)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
+// جدول الشهريين - the monthly staff table
+function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAttendance[]; salaries: SectionSalaries; onPick: (id: string) => void }) {
+  const byId = new Map(salaries.people.map((p) => [p.id, p]));
+  const th = salaryTh;
+  const td = salaryTd;
+  const foot = salaryFoot;
+  const { totals } = salaries;
   // الإضافي الشهر ده وتحته الساعات ("4 س") - this month's overtime with its hours under it
   const overtimeCell = (s: EmployeeSalary | undefined) => (
     <td className={`${td} font-bold leading-tight ${s?.overtime.total ? "text-sky-300" : "text-gray-600"}`}>
@@ -500,7 +701,6 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
       )}
     </td>
   );
-  const dash = <span className="text-gray-600">—</span>;
   // العمود الأخير: الإجمالي مع الإضافي - the final column: total with overtime
   const grand = "text-center font-extrabold text-white bg-white/[0.04]";
   // المرتب النهائي (لحد النهارده) - final salary (earned until today)
@@ -513,9 +713,6 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <th className={`${th} text-start`}>الاسم الكامل</th>
           <th className={`${th} text-center`}>الأجر الشامل</th>
           <th className={`${th} text-center`}>أيام الغياب</th>
-          <th className={`${th} text-center`} title="عمال اليومية: أيام الحضور لحد النهارده (نص اليوم = 0.5)">
-            أيام الحضور
-          </th>
           <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
           <th className={`${th} text-center`} title="كل إضافي الشهر ده (مش داخل في المرتب النهائي)">
             إضافي
@@ -539,7 +736,7 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           </th>
           <th
             className={`${th} text-center !whitespace-normal leading-tight !text-emerald-300 bg-emerald-400/[0.07]`}
-            title="شهري: الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات − قسط الشهر + المكافآت · يومية: أيام الحضور × اليومية − الخصومات + المكافآت (من غير الإضافي)"
+            title="الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات − قسط الشهر + المكافآت (من غير الإضافي)"
           >
             المرتب
             <br />
@@ -548,47 +745,15 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
         </tr>
       </thead>
       <tbody>
-        {data.people.map((person) => {
+        {people.map((person) => {
           const s = byId.get(person.id);
           return (
             <tr key={person.id} onClick={() => onPick(person.id)} className="cursor-pointer hover:bg-white/5">
-              <td className={`${td} text-gray-300`}>
-                {person.code ? (
-                  <span dir="ltr" className="font-numbers tabular-nums">
-                    {person.code}
-                  </span>
-                ) : (
-                  <span className="text-gray-600">—</span>
-                )}
-              </td>
-              <td className="px-3 border-b border-cardBorder/60 text-white font-semibold">
-                <span className="inline-flex items-center gap-1.5">
-                  {person.name}
-                  <ChevronLeft size={16} className="text-gray-600" />
-                </span>
-              </td>
-              {s?.kind === "daily" && s.dailyRate > 0 ? (
-                // عامل يومية - a daily worker
+              <NameCells person={person} />
+              {!s || s.kind !== "monthly" ? (
                 <>
-                  <td className={`${td} text-white font-bold`}>يومية {money(s.dailyRate)} ج.م</td>
-                  <td className={td}>{dash}</td>
-                  <td className={`${td} font-bold ${s.presentDays ? "text-statusGreen" : "text-gray-600"}`}>{money(s.presentDays)}</td>
-                  <td className={td}>{dash}</td>
-                  {overtimeCell(s)}
-                  <td className={`${td} font-bold ${s.bonuses ? "text-statusGreen" : "text-gray-600"}`}>
-                    {s.bonuses ? <>+ {money(s.bonuses)}</> : "—"}
-                  </td>
-                  <td className={`${td} font-bold ${s.deductions ? "text-statusRed" : "text-gray-600"}`}>
-                    {s.deductions ? <>− {money(s.deductions)}</> : "—"}
-                  </td>
-                  <td className={td}>{dash}</td>
-                  <td className={`${td} ${grand}`}>{money(s.totalWithOvertime)}</td>
-                  <td className={`${td} ${final}`}>{money(s.earned)}</td>
-                </>
-              ) : !s || s.kind !== "monthly" ? (
-                <>
-                  <td colSpan={4} className={`${td} text-gray-500`}>
-                    {s?.kind === "daily" ? NO_DAILY_RATE : "المرتب مش متسجل في السيستم"}
+                  <td colSpan={3} className={`${td} text-gray-500`}>
+                    المرتب مش متسجل في السيستم
                   </td>
                   {overtimeCell(s)}
                   <td colSpan={3} className={td} />
@@ -603,7 +768,6 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                     <span className="block text-gray-500 text-[12px] font-normal leading-tight">{s.source ? SOURCE_LABEL[s.source] : ""}</span>
                   </td>
                   <td className={`${td} font-bold ${s.absentDays ? "text-statusRed" : "text-gray-600"}`}>{s.absentDays ? money(s.absentDays) : "—"}</td>
-                  <td className={td}>{dash}</td>
                   <td className={`${td} font-bold ${s.absence ? "text-statusRed" : "text-gray-600"}`}>{s.absence ? money(s.absence) : "—"}</td>
                   {overtimeCell(s)}
                   <td className={`${td} font-bold ${s.bonuses ? "text-statusGreen" : "text-gray-600"}`}>
@@ -627,14 +791,10 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
         <tr className="text-[18px]">
           <td className="border-t border-cardBorder" />
           <td className="px-3 border-t border-cardBorder text-white font-extrabold">
-            إجمالي القسم{" "}
-            <span className="text-gray-400 font-semibold text-[15px]">
-              ({money(totals.monthly)} شهري{totals.daily > 0 && <> + {money(totals.daily)} يومية</>})
-            </span>
+            إجمالي القسم <span className="text-gray-400 font-semibold text-[15px]">({money(totals.monthly)} شهري)</span>
           </td>
           <td className={`${foot} text-white`}>{money(totals.total)}</td>
           <td className="border-t border-cardBorder" />
-          <td className={`${foot} text-statusGreen`}>{totals.daily > 0 ? money(totals.presentDays) : ""}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
           <td className={`${foot} text-sky-300`}>{money(totals.overtime)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>

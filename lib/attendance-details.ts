@@ -11,6 +11,21 @@ const CACHE_MS = 60_000;
 const PRESENT_STATUSES = ["Present", "Half Day", "Work From Home"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+// "2026-11-07" + n يوم - add n days to a date
+export const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+// أول يوم في أسبوع اليومية (السبت) اللي فيه التاريخ ده - the start (Saturday) of the daily-pay week holding this date
+export function weekStartOf(date: string): string {
+  const start = Math.max(0, WEEKDAYS.indexOf(dashboardConfig.salaries.dailyWeekStart));
+  return addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() - start + 7) % 7));
+}
+
+// أول يوم محتاجينه: أول الشهر، أو أول أسبوعه، أو أول الأسبوع اللي فات (للقبض) - the first day needed
+export function rangeStartOf(today: string): string {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  return [monthStart, weekStartOf(monthStart), addDays(weekStartOf(today), -7)].sort()[0];
+}
+
 type EmployeeRow = TodayAttendanceRows["employees"][number] & { date_of_joining: string | null; holiday_list: string | null };
 type AttendanceRow = { employee: string; employee_name: string | null; status: string; attendance_date: string };
 type CheckinRow = { employee: string; time: string; log_type: string | null };
@@ -50,15 +65,16 @@ async function loadHolidays(names: string[]): Promise<Map<string, Set<string>> |
 
 async function loadMonth(today: string): Promise<MonthRows> {
   const { trackingStartDate } = dashboardConfig.attendance;
-  const monthStart = `${today.slice(0, 7)}-01`;
-  const from = trackingStartDate > monthStart ? trackingStartDate : monthStart;
+  // من أول الأسبوع اللي فيه أول الشهر (أو الأسبوع اللي فات) عشان أسابيع اليومية - from the first daily-pay week
+  const rangeStart = rangeStartOf(today);
+  const from = trackingStartDate > rangeStart ? trackingStartDate : rangeStart;
   const [employees, attendance, checkins, companies] = await Promise.all([
     list<EmployeeRow>("Employee", {
       filters: [["status", "=", "Active"]],
       fields: ["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "date_of_joining", "holiday_list"],
     }),
     list<AttendanceRow>("Attendance", {
-      filters: [["attendance_date", ">=", monthStart], ["attendance_date", "<=", today], ["docstatus", "=", 1]],
+      filters: [["attendance_date", ">=", rangeStart], ["attendance_date", "<=", today], ["docstatus", "=", 1]],
       fields: ["employee", "employee_name", "status", "attendance_date"],
     }),
     list<CheckinRow>("Employee Checkin", {
@@ -127,6 +143,9 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
   const byId = new Map(rows.employees.map((e) => [e.name, e]));
   const attendanceNames = new Map(rows.attendance.map((a) => [a.employee, a.employee_name]));
   const dates = monthDates(today);
+  // الأيام اللي قبل أول الشهر في أسابيع اليومية - the days before the month in the daily-pay weeks
+  const leadDates: string[] = [];
+  for (let d = rangeStartOf(today); d < dates[0]; d = addDays(d, 1)) leadDates.push(d);
 
   const result: EmployeeAttendance[] = people.map((person) => {
     const employee = byId.get(person.id);
@@ -136,7 +155,7 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
     const holidayList = employee?.holiday_list || rows.defaultHolidayList;
     const holidays = holidayList ? rows.holidays?.get(holidayList) : undefined;
 
-    const days: EmployeeDay[] = dates.map((date) => {
+    const dayFor = (date: string): EmployeeDay => {
       const punch = firstPunch.get(`${person.id}|${date}`) ?? null;
       const mark = marked.get(`${person.id}|${date}`);
       let status: DayStatus;
@@ -155,7 +174,8 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
         date < today &&
         (halfMarked.has(k) || (punchCount.get(k) === 1 && !!punch && punch < halfDay.singlePunchBefore));
       return { date, status, firstPunch: punch, ...(half ? { half: true } : {}) };
-    });
+    };
+    const days = dates.map(dayFor);
     const count = (status: DayStatus) => days.filter((d) => d.status === status).length;
     return {
       id: person.id,
@@ -171,6 +191,7 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
       leaveDays: count("leave"),
       absentDates: days.filter((d) => d.status === "absent").map((d) => d.date),
       days,
+      leadDays: leadDates.map(dayFor),
     };
   });
 
