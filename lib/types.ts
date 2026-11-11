@@ -550,7 +550,12 @@ export interface SalaryValue {
 
 export interface EmployeeSalary {
   id: string; // Employee ID
-  kind: "monthly" | "daily" | "none"; // daily = اليومية حسابها خارجي، none = مش متسجل في السيستم
+  kind: "monthly" | "daily" | "none"; // daily = عامل يومية (أيام الحضور × اليومية)، none = مش متسجل في السيستم
+  // اليومية من ملف الموظف (عمال اليومية بس، 0 = مش متسجلة) - the daily rate (daily workers only, 0 = not recorded)
+  dailyRate: number;
+  // أيام الحضور الشهر ده لحد النهارده (نص اليوم = 0.5) وتواريخها - present days so far (half day = 0.5) and their dates
+  presentDays: number;
+  presentDates: { date: string; half: boolean }[];
   total: number; // الأجر الشامل - salary (base + allowance)
   // المصدر: هيكل المرتب (Salary Structure Assignment) أو ملف الموظف (Employee.ctc) - where total came from
   source: "structure" | "employee" | null;
@@ -567,7 +572,7 @@ export interface EmployeeSalary {
   // Additional Salary الشهر ده (إضافي، مكافأة، جزاء، تأخير...) - this month's Additional Salary lines
   adjustments: SalaryAdjustment[];
   bonuses: number; // مكافآت (مكافأة + Additional Salary Earning) بتدخل في المرتب - bonuses, part of the salary
-  // الإضافي بيتصرف كاش (مش مع المرتب) ومش داخل في الصافي - overtime is paid in cash, never part of the net
+  // الإضافي الشهر ده (اتصرف ولا لأ) ومش داخل في المرتب النهائي - this month's overtime, never in the final salary
   overtime: OvertimeSummary;
   extraDeductions: number; // خصومات Additional Salary + خصم Salary Adjustment - item deductions
   // عمود "خصومات": خصومات البنود + سلف الشهر - the "خصومات" column: item deductions + advances
@@ -575,7 +580,7 @@ export interface EmployeeSalary {
   // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
   installments: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
-  // الإجمالي مع الإضافي = المرتب النهائي (earned) + إضافي اتصرف + إضافي لسه متصرفش - earned so far + all overtime
+  // الإجمالي مع الإضافي = المرتب النهائي (earned) + الإضافي - earned so far + this month's overtime
   totalWithOvertime: number;
 }
 
@@ -587,13 +592,11 @@ export interface OvertimeEntry {
   amount: number;
 }
 
+// كل إضافي تاريخه في الشهر ده (اتصرف ولا لأ) - every overtime entry dated this month (paid or not)
 export interface OvertimeSummary {
-  unpaid: OvertimeEntry[]; // لسه متصرفش (أي تاريخ) - not paid yet (any date)
-  paidThisMonth: OvertimeEntry[]; // اتصرف (الشهر ده) - paid, dated this month
-  unpaidTotal: number;
-  unpaidHours: number;
-  paidTotal: number; // اتصرف الشهر ده - paid this month
-  paidHours: number;
+  entries: OvertimeEntry[];
+  total: number;
+  hours: number;
 }
 
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
@@ -617,20 +620,21 @@ export interface SectionSalaries {
   today: string;
   daysPerMonth: number;
   people: EmployeeSalary[];
-  // الشهريين بس - monthly staff only
+  // الشهريين + عمال اليومية اللي ليهم يومية (الأجر الشامل والغياب للشهريين بس)
+  // monthly staff + daily workers with a rate (total and absence: monthly only)
   totals: {
     total: number;
     absence: number;
     bonuses: number;
     deductions: number;
-    // الإضافي اللي لسه متصرفش لكل القسم (شهري ويومية) - unpaid overtime of the whole section (monthly and daily)
-    overtimeUnpaid: number;
+    overtime: number; // الإضافي لكل القسم - overtime of the whole section
     overtimeHours: number;
-    overtimePaid: number; // إضافي اتصرف الشهر ده - overtime paid this month
-    totalWithOvertime: number; // الشهريين بس - monthly staff only
+    presentDays: number; // أيام حضور عمال اليومية - daily workers' present days
+    totalWithOvertime: number;
     installments: number;
     earned: number;
     expectedNet: number;
     monthly: number;
+    daily: number; // عمال اليومية اللي ليهم يومية - daily workers with a rate
   };
 }

@@ -98,13 +98,17 @@ export const dashboardConfig = {
   //   Earning بتتزود و Deduction بتتخصم، وبتدخل في "المرتب لحد النهارده" و"الصافي المتوقع"
   // - Salary Adjustment (DocType مخصوص، submitted بس): مكافأة بتتزود، خصم بيتخصم (اللي تاريخها في الشهر ده)،
   //   والقسط بيتخصم monthly_installment كل شهر من شهر تاريخه لحد ما total_amount يخلص (آخر شهر الباقي بس)
-  // - الإضافي بيتصرف كاش (مش مع المرتب): مش داخل في "لحد النهارده" ولا "الصافي"، وبيظهر لوحده:
-  //   "لسه متصرفش" = كل إضافي paid = 0 (أي تاريخ)، و"اتصرف" = paid = 1 في الشهر ده
+  // - الإضافي = كل إضافي (Salary Adjustment، submitted) تاريخه في الشهر ده، اتصرف ولا لأ (حقل paid مش بيتقري)؛
+  //   مش داخل في "المرتب النهائي"، و"الإجمالي مع الإضافي" = المرتب النهائي + الإضافي
+  // - عمال اليومية: اليومية من ملف الموظف (dailyRateField). العامل يبقى يومية لو اليومية > 0 ومالوش مرتب شهري
+  //   (أو هيكله من dailyStructures، أو في قسم عمال يومية من غير مرتب). المرتب النهائي = أيام الحضور × اليومية
+  //   − الخصومات (خصم Salary Adjustment الشهر ده) + المكافآت. أيام الحضور = نفس قواعد الحضور (نص اليوم = 0.5)
   // - لحد النهارده = الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات (خصم + سلف) − قسط الشهر + المكافآت
   // - الصافي المتوقع = الشامل − الغياب − الخصومات − قسط الشهر + المكافآت
   //   Salary Adjustment (custom, submitted only): مكافأة added, خصم subtracted (dated this month); قسط subtracts
   //   monthly_installment every month from the month of its date until total_amount is paid. إضافي is paid in cash:
-  //   never in the earned / net figures, shown on its own (unpaid = paid 0 any date; paid = paid 1 this month)
+  //   overtime = every إضافي dated this month (paid or not); never in the final salary, added in "total with overtime".
+  //   Daily workers: rate from Employee.<dailyRateField>; final = present days × rate − خصم + مكافأة (this month)
   // - التأمينات: مش متسجلة في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
   // Salary = base + custom_allowance of the latest assignment; absence = salary / daysPerMonth × absent days
   // (biometric, same rules as the attendance panel); advances = Loan Disbursements on advancesAccount this month;
@@ -116,6 +120,8 @@ export const dashboardConfig = {
     daysPerMonth: 30,
     // هياكل المرتبات اللي معناها عامل يومية (اليومية حسابها خارجي) - structures that mean a daily worker
     dailyStructures: ["عمال يومية"] as string[],
+    // حقل اليومية في ملف الموظف (Employee) - the daily rate field on Employee
+    dailyRateField: "custom_اليومية",
     advancesAccount: "1620 - سلف الموظفيين - AC", // حساب سلف الموظفين - employee advances account
     // مكونات Additional Salary: أي مكون مش مكتوب هنا قيمته فلوس على طول، والإشارة من نوعه (Earning + / Deduction −)
     // Additional Salary components: any component not listed here is a direct amount; the sign comes from its type
