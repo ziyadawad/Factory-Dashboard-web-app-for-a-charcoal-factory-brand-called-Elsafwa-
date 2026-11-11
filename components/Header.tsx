@@ -4,7 +4,6 @@ import { useState, useEffect, ReactNode } from "react";
 import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
-import FullscreenHint from "./FullscreenHint";
 
 interface HeaderProps {
   // false بس لو جلب البيانات فشل - false only when the data fetch failed
@@ -16,6 +15,8 @@ interface HeaderProps {
   // رقم الصفحة الحالية (من 1) وعدد الصفحات - current page number (1-based) and page count
   pageNumber?: number;
   pageCount?: number;
+  // الصفحة متثبتة (التقليب واقف) - the page is pinned (rotation stopped)
+  pinned?: boolean;
 }
 
 // أيقونة كل صفحة حسب الـ id بتاعها - icon for each page id
@@ -36,7 +37,7 @@ function toggleFullscreen() {
   request?.catch((error) => console.log("Fullscreen error:", error));
 }
 
-export default function Header({ isConnected, nav, page, pageNumber, pageCount }: HeaderProps) {
+export default function Header({ isConnected, nav, page, pageNumber, pageCount, pinned }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -127,7 +128,7 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
     <header className="relative shrink-0 bg-card border-b border-cardBorder px-6 py-3 flex items-center justify-between">
       {/* اسم الصفحة الحالية في النص (مش بيزود ارتفاع الهيدر) - current page title, centered without adding height */}
       {page && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3 bg-background border border-brandOrange/50 shadow-[0_0_14px_rgba(255,122,0,0.35)] rounded-full px-6 py-1 pointer-events-none">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3 bg-background border border-brandOrange/50 shadow-[0_0_14px_rgba(255,122,0,0.35),0_0_44px_rgba(255,122,0,0.12)] rounded-full px-6 py-1 pointer-events-none">
           {PageIcon && <PageIcon className="text-brandOrange shrink-0" size={sizes.pageTitleIconSize} />}
           <div className="flex flex-col items-center">
             <span
@@ -137,8 +138,12 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
               {page.title}
             </span>
             {pageNumber && pageCount && (
-              <span className="text-gray-400 whitespace-nowrap leading-none" style={{ fontSize: `${sizes.pageCounterFontSize}px` }}>
-                صفحة {pageNumber} من {pageCount}
+              // "متثبتة" على نفس سطر العداد عشان ارتفاع الهيدر ميتغيرش - the pinned chip shares the counter line so the header height stays the same
+              <span className="flex items-center gap-1.5 whitespace-nowrap leading-none" style={{ fontSize: `${sizes.pageCounterFontSize}px` }}>
+                <span className="text-gray-400">
+                  صفحة {pageNumber} من {pageCount}
+                </span>
+                {pinned && <span className="rounded-full bg-brandOrange/15 px-1.5 font-bold text-brandOrange">📌 متثبتة</span>}
               </span>
             )}
           </div>
@@ -200,7 +205,6 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount }
         </button>
 
         {nav}
-        <FullscreenHint />
       </div>
     </header>
   );

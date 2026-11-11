@@ -578,6 +578,12 @@ export const dashboardConfig = {
       fadeMs: 500, // مدة الاختفاء/الظهور بين الصفحات بالملي ثانية - fade duration between pages (ms)
     },
 
+    // الإضاءة الخفيفة ورا الكروت (بقع نور برتقالي وأزرق بتتحرك ببطء شديد) - soft ambient glow behind the cards
+    ambient: {
+      enabled: true, // true = شغالة، false = مقفولة خالص - on/off
+      opacity: 0.18, // قوة الإضاءة من 0 لـ 1 (كل ما تكبر تبان أكتر، متعديش 0.3 عشان الكلام) - intensity 0..1 (keep under 0.3)
+    },
+
     // الكروت - البطاقات اللي بتظهر البيانات
     // Cards - the cards showing data
     cards: {

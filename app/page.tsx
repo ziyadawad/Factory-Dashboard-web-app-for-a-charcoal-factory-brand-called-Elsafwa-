@@ -37,6 +37,11 @@ const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false
 const treasuryField = dashboardConfig.erp.treasury.balance;
 const TREASURY_ACCOUNT_NUMBER = treasuryField.source === "erp" ? treasuryField.account.split(" - ")[0].trim() : "1110";
 
+// مفتاح حفظ تثبيت الصفحة - localStorage key for the page pin
+const PIN_KEY = "elsafwa:pinned";
+// الإضاءة الخفيفة ورا الكروت - ambient light settings
+const ambient = dashboardConfig.sizes.ambient;
+
 // ?page=2 (رقم الصفحة) أو ?page=stock (اسمها) - page from the URL: 1-based number or page id
 function pageFromUrl(): number {
   const param = new URLSearchParams(window.location.search).get("page");
@@ -95,6 +100,23 @@ export default function Dashboard() {
   // المحفظة المفتوحة (من كروت صفحة الخزن والمحافظ) - the open wallet (from the wallets page cards)
   const [wallet, setWallet] = useState<{ accountNumber: string; title: string } | null>(null);
   const closeWallet = useCallback(() => setWallet(null), []);
+  // تثبيت الصفحة (محفوظ في المتصفح عشان يفضل بعد الريفرش، وقفل اللوحة مش بيلغيه)
+  // Page pin, kept in localStorage so it survives a refresh (closing a panel never unpins)
+  const [pinned, setPinned] = useState(false);
+  useEffect(() => {
+    try {
+      setPinned(window.localStorage.getItem(PIN_KEY) === "1");
+    } catch {}
+  }, []);
+  const togglePin = useCallback(() => {
+    setPinned((was) => {
+      const next = !was;
+      try {
+        window.localStorage.setItem(PIN_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
   const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null;
 
   const changePage = useCallback((index: number) => {
@@ -121,10 +143,10 @@ export default function Dashboard() {
   // (the timer restarts after every switch, manual or automatic)
   useEffect(() => {
     const seconds = PAGES[pageIndex]?.durationSeconds;
-    if (paused || !autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
+    if (paused || pinned || !autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
     const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [pageIndex, switchCount, paused, autoRotate, changePage]);
+  }, [pageIndex, switchCount, paused, pinned, autoRotate, changePage]);
 
   useEffect(() => {
     if (data && prevDataRef.current) {
@@ -275,7 +297,7 @@ export default function Dashboard() {
 
   const dashboard = (
     <div
-      className={`${fit.scale ? "" : "h-screen "}flex flex-col overflow-hidden bg-background`}
+      className={`${fit.scale ? "" : "relative h-screen "}flex flex-col overflow-hidden bg-background`}
       style={
         fit.scale
           ? {
@@ -289,15 +311,25 @@ export default function Dashboard() {
           : undefined
       }
     >
+      {/* إضاءة خفيفة ورا الكروت (CSS بس) - soft ambient glow behind the cards (CSS only) */}
+      {ambient.enabled && (
+        <div className="ambient-light" aria-hidden style={{ opacity: ambient.opacity }}>
+          <span className="ambient-blob ambient-blob-1" />
+          <span className="ambient-blob ambient-blob-2" />
+          <span className="ambient-blob ambient-blob-3" />
+        </div>
+      )}
+
       <Header
+        pinned={pinned}
         isConnected={isConnected}
         page={PAGES[pageIndex]}
         pageNumber={pageIndex + 1}
         pageCount={PAGES.length}
-        nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} />}
+        nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} pinned={pinned} onTogglePin={togglePin} />}
       />
 
-      <main className="flex-1 min-h-0 p-4 overflow-hidden">
+      <main className="relative flex-1 min-h-0 p-4 overflow-hidden">
         {data ? (
           // كل الصفحات فوق بعض والحالية بس اللي ظاهرة - pages are stacked; only the active one is visible
           <div className="relative h-full">

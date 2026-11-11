@@ -90,3 +90,76 @@ body {
     }
   }
 }
+
+/* ============================================================
+   الإضاءة الخفيفة ورا الكروت - ambient light behind the cards
+   CSS بس: transform بس (على كارت الشاشة)، من غير blur ولا JS - CSS only, GPU friendly
+   ============================================================ */
+.ambient-light {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-blob {
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  will-change: transform;
+  animation: ambient-drift 52s ease-in-out infinite alternate;
+}
+
+/* برتقالي دافي - warm orange */
+.ambient-blob-1 {
+  top: -30vmax;
+  right: -18vmax;
+  background: radial-gradient(closest-side, rgba(255, 122, 0, 0.9), rgba(255, 122, 0, 0));
+}
+
+/* كهرماني - amber */
+.ambient-blob-2 {
+  bottom: -34vmax;
+  left: 18vmax;
+  background: radial-gradient(closest-side, rgba(255, 193, 7, 0.55), rgba(255, 193, 7, 0));
+  animation-duration: 58s;
+  animation-delay: -20s;
+}
+
+/* أزرق غامق من اللوجو - deep blue from the logo */
+.ambient-blob-3 {
+  top: -10vmax;
+  left: -30vmax;
+  background: radial-gradient(closest-side, rgba(47, 128, 237, 0.8), rgba(47, 128, 237, 0));
+  animation-duration: 46s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes ambient-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-6vmax, 4vmax, 0) scale(1.08); }
+  100% { transform: translate3d(5vmax, -3vmax, 0) scale(0.95); }
+}
+
+/* الكروت: لمعة خفيفة فوق من جوه، ونور برتقالي بس لما الماوس يعدي
+   Cards: faint top inner highlight, soft orange outer glow on hover only
+   (الكروت اللي ليها ظل خاص بيها متتلمسش - cards with their own shadow are left alone) */
+main .bg-card.rounded-2xl:not([class*="shadow-"]) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: box-shadow 0.3s ease;
+}
+
+main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 22px rgba(255, 122, 0, 0.16);
+}
+
+/* حركة أقل: الإضاءة ثابتة - reduced motion: static glow */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob {
+    animation: none;
+  }
+  main .bg-card.rounded-2xl:not([class*="shadow-"]) {
+    transition: none;
+  }
+}
