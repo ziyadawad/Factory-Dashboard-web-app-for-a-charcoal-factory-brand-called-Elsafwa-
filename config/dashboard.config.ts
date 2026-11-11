@@ -124,6 +124,10 @@ export const dashboardConfig = {
     dailyRateField: "custom_اليومية",
     // عمال اليومية بيتقبضوا كاش يوم dailyPayDay عن الأسبوع اللي فات كله (من dailyWeekStart لليوم اللي قبله)
     // يعني السبت بيقبضوا من السبت اللي قبله للجمعة. الجمعة بتتحسب بس لو بصم فعلا، ونص اليوم = 0.5
+    // عمود "مستحق هذا الأسبوع": يوم القبض كله (لحد 23:59) بيفضل يعرض الأسبوع اللي خلص (اللي بيتقبض النهارده)،
+    // ومن اليوم اللي بعده بيبدأ الأسبوع الجديد (من يوم القبض) من الصفر
+    // "مستحق هذا الأسبوع": all of pay day (until 23:59) still shows the week that just ended (paid that day);
+    // from the next day the new week (starting on pay day) starts from zero
     // Daily workers are paid in cash on dailyPayDay for the previous full week (dailyWeekStart → the day before it):
     // Saturday pays Saturday → Friday. A Friday counts only when he actually punched; half day = 0.5
     dailyPayDay: "Saturday",

@@ -607,8 +607,8 @@ export interface DailyWeek {
   deductions: number;
   bonuses: number;
   total: number;
-  payWeek: boolean; // الأسبوع اللي فات (اللي بيتقبض يوم القبض) - the last full week, paid on pay day
-  current: boolean; // الأسبوع ده لحد النهارده - this week so far
+  shown: boolean; // الأسبوع اللي في عمود "مستحق هذا الأسبوع" - the week in the "this week" column
+  current: boolean; // الأسبوع اللي فيه النهارده - the week holding today
 }
 
 // إضافي (Salary Adjustment) بيتصرف كاش - one cash-paid overtime entry
@@ -648,7 +648,8 @@ export interface SectionSalaries {
   daysPerMonth: number;
   people: EmployeeSalary[];
   // أسابيع اليومية: الأسبوع اللي فات ويوم قبضه، والأسبوع ده لحد النهارده - daily-pay weeks
-  dailyPay: { payWeek: { start: string; end: string }; payDay: string; thisWeek: { start: string; end: string } };
+  // الأسبوع اللي بيظهر (يوم القبض = الأسبوع اللي خلص، غير كده = الأسبوع الحالي) - the week shown
+  dailyPay: { week: { start: string; end: string }; paidToday: boolean };
   // جدول الشهريين: الشهريين بس. daily* = عمال اليومية اللي ليهم يومية
   // The monthly table: monthly staff only. daily* = daily workers with a rate
   totals: {
@@ -658,8 +659,7 @@ export interface SectionSalaries {
     deductions: number;
     overtime: number; // الإضافي لكل القسم - overtime of the whole section
     overtimeHours: number;
-    dailyPayWeek: number; // إجمالي اللي هيتقبض يوم القبض - cash for pay day (the last full week)
-    dailyThisWeek: number; // مستحق الأسبوع ده لحد النهارده
+    dailyWeek: number; // إجمالي مستحق هذا الأسبوع - this week's total (the shown week)
     dailyMonth: number; // إجمالي الشهر لعمال اليومية
     totalWithOvertime: number;
     installments: number;

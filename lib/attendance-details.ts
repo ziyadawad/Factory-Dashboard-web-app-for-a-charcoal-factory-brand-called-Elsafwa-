@@ -103,7 +103,7 @@ function monthDates(today: string): string[] {
   return Array.from({ length: count }, (_, i) => `${today.slice(0, 7)}-${String(i + 1).padStart(2, "0")}`);
 }
 
-const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
+export const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
 
 function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
   const { today } = rows;

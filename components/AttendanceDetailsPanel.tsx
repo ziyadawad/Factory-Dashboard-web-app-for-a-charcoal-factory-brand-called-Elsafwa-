@@ -280,7 +280,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
   if (salary?.kind === "daily" && salary.dailyRate > 0) {
     return (
       <div className="flex flex-col gap-3">
-        <DailySalaryCard salary={salary} payDay={state.data.dailyPay.payDay} today={state.data.today} />
+        <DailySalaryCard salary={salary} paidToday={state.data.dailyPay.paidToday} />
         <OvertimeBox overtime={salary.overtime} />
       </div>
     );
@@ -402,23 +402,22 @@ const weekDayStyle = (d: DailyWeek["days"][number]) =>
 
 // أسبوع واحد: التواريخ، الأيام (أخضر/أحمر)، اليومية، الإضافي، الخصومات، والإجمالي
 // One week: its dates, the days (green / red), the pay, overtime, deductions and the week total
-function DailyWeekRow({ week, rate, payDay, today }: { week: DailyWeek; rate: number; payDay: string; today: string }) {
+function DailyWeekRow({ week, rate, paidToday }: { week: DailyWeek; rate: number; paidToday: boolean }) {
   return (
     <div
       className={`rounded-lg border px-3 py-2 flex flex-col gap-1.5 ${
-        week.payWeek ? "border-emerald-400/70 bg-emerald-400/[0.08]" : "border-cardBorder/70"
+        week.shown ? "border-emerald-400/70 bg-emerald-400/[0.08]" : "border-cardBorder/70 opacity-80"
       }`}
     >
       <p className="flex items-center justify-between gap-3 text-[15px]">
         <span className="text-gray-300 font-semibold">
           السبت {shortDate(week.start)} ← الجمعة {shortDate(week.end)}
         </span>
-        {week.payWeek && (
+        {week.shown && (
           <span className="rounded-full bg-emerald-400/20 text-emerald-300 px-2.5 text-[13px] font-bold">
-            💵 يتقبض {payDay === today ? "النهارده" : "السبت"} {shortDate(payDay)}
+            {paidToday ? "💵 بيتقبض النهارده" : "هذا الأسبوع (لحد النهارده)"}
           </span>
         )}
-        {week.current && <span className="rounded-full bg-sky-400/15 text-sky-300 px-2.5 text-[13px] font-bold">الأسبوع ده (لحد النهارده)</span>}
       </p>
       <div className="grid grid-cols-7 gap-1">
         {week.days.map((d) => (
@@ -435,22 +434,37 @@ function DailyWeekRow({ week, rate, payDay, today }: { week: DailyWeek; rate: nu
           {week.deductions > 0 && <span className="text-statusRed"> − خصومات {money(week.deductions)}</span>}
           {week.bonuses > 0 && <span className="text-statusGreen"> + مكافآت {money(week.bonuses)}</span>}
         </span>
-        <span className={`font-extrabold text-[20px] ${week.payWeek ? "text-emerald-300" : "text-white"}`}>{money(week.total)} ج.م</span>
+        <span className={`font-extrabold text-[20px] ${week.shown ? "text-emerald-300" : "text-gray-300"}`}>{money(week.total)} ج.م</span>
       </p>
     </div>
   );
 }
 
-// عامل اليومية: بيتقبض كاش كل سبت عن الأسبوع اللي فات - daily worker: paid in cash every Saturday for the last week
-function DailySalaryCard({ salary, payDay, today }: { salary: EmployeeSalary; payDay: string; today: string }) {
+// عامل اليومية: مستحق هذا الأسبوع فوق، وتحته أسابيع الشهر للمرجع
+// Daily worker: this week on top, then the month's weeks for reference
+function DailySalaryCard({ salary, paidToday }: { salary: EmployeeSalary; paidToday: boolean }) {
+  const shown = salary.weeks.find((w) => w.shown);
+  const others = salary.weeks.filter((w) => !w.shown);
   return (
     <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col gap-2 text-[17px]">
       <p className="flex items-center justify-between gap-3">
         <span className="text-amber-300 font-extrabold text-[19px]">💰 اليومية — بتتقبض كاش كل سبت</span>
         <span className="font-semibold text-white">{money(salary.dailyRate)} ج.م / يوم</span>
       </p>
-      {salary.weeks.map((w) => (
-        <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} payDay={payDay} today={today} />
+      {shown && (
+        <>
+          <p className="flex items-center justify-between gap-3">
+            <span className="text-white font-bold">مستحق هذا الأسبوع</span>
+            <span className="text-[30px] font-extrabold text-emerald-300 leading-tight">
+              {money(shown.total)} <span className="text-[18px] text-gray-300">ج.م</span>
+            </span>
+          </p>
+          <DailyWeekRow week={shown} rate={salary.dailyRate} paidToday={paidToday} />
+        </>
+      )}
+      {others.length > 0 && <p className="text-gray-400 font-semibold text-[15px] mt-1">أسابيع الشهر (للمرجع)</p>}
+      {others.map((w) => (
+        <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} paidToday={paidToday} />
       ))}
       <div className="flex flex-col">
         <AdjustmentLines salary={salary} empty="مكافآت / خصومات الشهر ده" />
@@ -577,11 +591,10 @@ function NameCells({ person }: { person: EmployeeAttendance }) {
 // Daily workers: paid in cash every Saturday for the last full week (Saturday → Friday)
 function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttendance[]; salaries: SectionSalaries; onPick: (id: string) => void }) {
   const byId = new Map(salaries.people.map((p) => [p.id, p]));
-  const { totals, dailyPay, today } = salaries;
+  const { totals, dailyPay } = salaries;
   const th = `${salaryTh} text-center !whitespace-normal leading-tight`;
   const td = salaryTd;
   const pay = "text-center font-extrabold text-emerald-300 bg-emerald-400/[0.07]";
-  const weekOf = (s: EmployeeSalary, which: "payWeek" | "current") => s.weeks.find((w) => w[which]);
   const extras = (w: DailyWeek | undefined) =>
     w && (w.overtime > 0 || w.deductions > 0 || w.bonuses > 0) ? (
       <span className="block text-[12px] font-normal leading-tight">
@@ -599,7 +612,7 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
     <table className="w-full border-separate border-spacing-0 text-[15px] min-[1600px]:text-[17px] leading-[2.2]">
       <thead className="sticky top-0 z-10 bg-card">
         <tr>
-          <th colSpan={8} className="px-3 pt-2 pb-1 text-start text-amber-300 font-extrabold text-[18px]">
+          <th colSpan={6} className="px-3 pt-2 pb-1 text-start text-amber-300 font-extrabold text-[18px]">
             💵 عمال اليومية — بيتقبضوا كاش كل سبت عن الأسبوع اللي فات (السبت ← الجمعة)
           </th>
         </tr>
@@ -608,21 +621,17 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
           <th className={`${salaryTh} text-start`}>الاسم</th>
           <th className={th}>اليومية</th>
           <th className={th}>
-            أيام الأسبوع اللي فات
-            {range(dailyPay.payWeek.start, dailyPay.payWeek.end)}
+            أيام هذا الأسبوع
+            {range(dailyPay.week.start, dailyPay.week.end)}
           </th>
           <th className={`${th} !text-emerald-300 bg-emerald-400/[0.07]`}>
-            يتقبض السبت
-            <span className="block text-[13px] font-normal text-emerald-300/70">
-              ({dailyPay.payDay === today ? "النهارده " : ""}
-              {shortDate(dailyPay.payDay)})
-            </span>
+            مستحق هذا الأسبوع
+            {dailyPay.paidToday ? (
+              <span className="block text-[13px] font-normal text-emerald-300/80">(💵 بيتقبض النهارده)</span>
+            ) : (
+              range(dailyPay.week.start, dailyPay.week.end)
+            )}
           </th>
-          <th className={th}>
-            أيام الأسبوع ده لحد النهارده
-            {range(dailyPay.thisWeek.start, dailyPay.thisWeek.end)}
-          </th>
-          <th className={th}>مستحق الأسبوع ده لحد النهارده</th>
           <th className={th} title="كل أيام الحضور الشهر ده × اليومية + الإضافي − الخصومات + المكافآت (للمرجع)">
             إجمالي الشهر
           </th>
@@ -631,31 +640,23 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
       <tbody>
         {people.map((person) => {
           const s = byId.get(person.id);
-          const last = s ? weekOf(s, "payWeek") : undefined;
-          const current = s ? weekOf(s, "current") : undefined;
+          const week = s?.weeks.find((w) => w.shown);
           return (
             <tr key={person.id} onClick={() => onPick(person.id)} className="cursor-pointer hover:bg-white/5">
               <NameCells person={person} />
               {!s || s.dailyRate <= 0 ? (
                 <>
-                  <td colSpan={6} className={`${td} text-gray-500`}>
+                  <td colSpan={4} className={`${td} text-gray-500`}>
                     {NO_DAILY_RATE}
                   </td>
                 </>
               ) : (
                 <>
                   <td className={`${td} text-white font-bold`}>{money(s.dailyRate)} ج.م</td>
-                  <td className={`${td} font-bold ${last?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>{money(last?.presentDays ?? 0)}</td>
+                  <td className={`${td} font-bold ${week?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>{money(week?.presentDays ?? 0)}</td>
                   <td className={`${td} ${pay} leading-tight py-1`}>
-                    <span className="text-[18px] min-[1600px]:text-[20px]">{money(last?.total ?? 0)}</span>
-                    {extras(last)}
-                  </td>
-                  <td className={`${td} font-bold ${current?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>
-                    {money(current?.presentDays ?? 0)}
-                  </td>
-                  <td className={`${td} font-bold text-white leading-tight py-1`}>
-                    {money(current?.total ?? 0)}
-                    {extras(current)}
+                    <span className="text-[18px] min-[1600px]:text-[20px]">{money(week?.total ?? 0)}</span>
+                    {extras(week)}
                   </td>
                   <td className={`${td} font-bold text-gray-300`}>{money(s.totalWithOvertime)}</td>
                 </>
@@ -668,12 +669,10 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
         <tr>
           <td className="border-t border-cardBorder" />
           <td colSpan={3} className="px-3 border-t border-cardBorder text-emerald-300 font-extrabold text-[20px] min-[1600px]:text-[22px]">
-            إجمالي اللي هيتقبض السبت{" "}
+            إجمالي مستحق هذا الأسبوع{" "}
             <span className="text-gray-400 font-semibold text-[15px]">({money(totals.daily)} عامل)</span>
           </td>
-          <td className={`${salaryFoot} ${pay} text-[26px] min-[1600px]:text-[30px] leading-[1.6]`}>{money(totals.dailyPayWeek)} ج.م</td>
-          <td className="border-t border-cardBorder" />
-          <td className={`${salaryFoot} text-white text-[18px]`}>{money(totals.dailyThisWeek)}</td>
+          <td className={`${salaryFoot} ${pay} text-[26px] min-[1600px]:text-[30px] leading-[1.6]`}>{money(totals.dailyWeek)} ج.م</td>
           <td className={`${salaryFoot} text-gray-300 text-[18px]`}>{money(totals.dailyMonth)}</td>
         </tr>
       </tfoot>
