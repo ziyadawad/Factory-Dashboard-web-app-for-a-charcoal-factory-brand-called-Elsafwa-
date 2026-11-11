@@ -163,3 +163,60 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     transition: none;
   }
 }
+
+/* زراير تصدير الكشوف: تدرج هادي، إضاءة خفيفة حواليه، ولمعة بتعدي عليه وقت الـ hover
+   Export buttons: soft gradient, faint ambient glow, a gentle shine sweeping across on hover */
+.export-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: box-shadow 0.3s ease, transform 0.2s ease, filter 0.2s ease;
+}
+.export-btn--green {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(5, 150, 105, 0.14));
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  color: #a7f3d0;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.18);
+}
+.export-btn--amber {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.28), rgba(217, 119, 6, 0.14));
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.18);
+}
+.export-btn--green:hover:not(:disabled) {
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.35);
+}
+.export-btn--amber:hover:not(:disabled) {
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.35);
+}
+.export-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+.export-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.8s ease;
+}
+.export-btn:hover:not(:disabled)::after {
+  transform: translateX(120%);
+}
+.export-btn:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-btn,
+  .export-btn::after {
+    transition: none;
+  }
+  .export-btn:hover:not(:disabled) {
+    transform: none;
+  }
+}

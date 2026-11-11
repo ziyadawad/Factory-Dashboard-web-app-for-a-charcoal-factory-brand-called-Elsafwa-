@@ -3,7 +3,7 @@
 // قراية بس من ERPNext. ممنوع تسجيل أي مبلغ في اللوج - read-only; never log any amount
 import { dashboardConfig } from "@/config/dashboard.config";
 import { addDays, attendanceDetails, cashWeekOf, cashWeekStarts, rangeStartOf, weekStartOf } from "./attendance-details";
-import { AttendanceSectionKey } from "./data-source";
+import { AttendanceSectionKey, outsideMode } from "./data-source";
 import { ErpError, erpPost } from "./erp";
 import { DailyWeek, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SectionSalaries } from "./types";
 
@@ -96,7 +96,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   if (ids.length === 0) {
     return {
       month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay,
-      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
+      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, advances: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
     };
   }
 
@@ -238,8 +238,12 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const presentDays = presentDates.reduce((s, d) => s + (d.half ? 0.5 : 1), 0);
 
     // نفس عدّ لوحة الحضور، نص اليوم = 0.5، والإجازة (مش جمعة) = غياب - same counting, half day = 0.5, leave = absent
+    // خارج البصمة "fixed": عمره ما بيتخصم منه غياب - outside the biometric "fixed": never an absence deduction
+    const mode = outsideMode(person.id);
     const absentDays =
-      person.days.filter((d) => d.status === "absent" || d.status === "leave").length + person.days.filter((d) => d.half).length * 0.5;
+      mode === "fixed"
+        ? 0
+        : person.days.filter((d) => d.status === "absent" || d.status === "leave").length + person.days.filter((d) => d.half).length * 0.5;
     // الأيام اللي عدّت: من أول الشهر (أو التعيين لو بعده) لحد النهارده، بالجمعة - days so far incl. Fridays
     const joined = employee?.date_of_joining ? String(employee.date_of_joining).slice(0, 10) : "";
     const from = joined > monthStart ? joined : monthStart;
@@ -251,13 +255,13 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const zero = { value: 0, manual: true };
     const common = {
       id: person.id, kind, source, daysPassed, absentDays, dailyRate: isDaily ? dailyRate : 0, presentDays, presentDates, overtime,
-      weeks: [] as DailyWeek[],
+      weeks: [] as DailyWeek[], outsideMode: mode,
     };
     if (kind === "none" || (kind === "daily" && dailyRate <= 0)) {
       return {
         ...common, total: 0, mismatch: null, perDay: 0, earned: 0, absence: 0,
         advances: zero, loan: zero, insurance: zero, adjustments: [], bonuses: 0, extraDeductions: 0, deductions: 0,
-        installments: 0, expectedNet: 0, totalWithOvertime: 0,
+        installments: 0, advanceTotal: 0, expectedNet: 0, totalWithOvertime: 0,
       };
     }
     if (kind === "daily") {
@@ -286,6 +290,10 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
           const amount = money(a.amount || (type === "مبلغ ثابت" ? 0 : dailyRate * days));
           const label = type && type !== "مبلغ ثابت" ? `خصم ${type}` : "خصم";
           if (amount > 0) adjustments.push({ ...line, kind: "deduction", label, sign: -1, amount });
+        } else if (a.adjustment_type === "سلفة") {
+          // السلفة بتتخصم زي الخصم - an advance is deducted like a deduction
+          const amount = money(a.amount ?? 0);
+          if (amount > 0) adjustments.push({ ...line, kind: "advance", label: "سلفة", sign: -1, amount });
         }
       }
       const sumIn = (list: { date: string; amount: number }[], from: string, to: string) =>
@@ -293,14 +301,15 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       const monthAdjustments = adjustments.filter((a) => a.date >= monthStart);
       const sumOf = (k: SalaryAdjustment["kind"]) => money(monthAdjustments.filter((a) => a.kind === k).reduce((s, a) => s + a.amount, 0));
       const bonuses = sumOf("addition");
-      const deductions = sumOf("deduction");
+      const advanceTotal = sumOf("advance");
+      const deductions = money(sumOf("deduction") + advanceTotal); // الخصومات + السلف - deductions incl. advances
       const earned = money(presentDays * dailyRate - deductions + bonuses);
 
       // الأسابيع (السبت → الجمعة) من أول أسبوع فيه أيام من الشهر (أو الأسبوع اللي فات) لحد الأسبوع ده
       // The weeks (Saturday → Friday) from the first one touching this month (or the last full week) to this week
       const dayOf = new Map([...person.leadDays, ...person.days].map((d) => [d.date, d]));
       const additions = adjustments.filter((a) => a.kind === "addition");
-      const cuts = adjustments.filter((a) => a.kind === "deduction");
+      const cuts = adjustments.filter((a) => a.kind === "deduction" || a.kind === "advance");
       const weeks: DailyWeek[] = [];
       for (const start of weekStarts) {
         const end = addDays(start, 6);
@@ -322,7 +331,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       return {
         ...common, weeks, total: 0, mismatch: null, perDay: dailyRate, earned, absence: 0,
         advances: zero, loan: zero, insurance: zero, adjustments: monthAdjustments, bonuses, extraDeductions: deductions, deductions,
-        installments: 0, expectedNet: earned, totalWithOvertime: money(earned + overtime.total),
+        installments: 0, advanceTotal, expectedNet: earned, totalWithOvertime: money(earned + overtime.total),
       };
     }
     // التأخير على الأساسي (ولو المصدر ctc يبقى الأساسي = ctc) - late uses base (ctc when that is the source)
@@ -394,6 +403,11 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
         if (amount <= 0) continue;
         const label = type && type !== "مبلغ ثابت" ? `خصم ${type}` : "خصم";
         adjustments.push({ ...line, kind: "deduction", label, sign: -1, amount, detail: null });
+      } else if (a.adjustment_type === "سلفة") {
+        // سلفة (Salary Adjustment): بتتخصم في عمود "سلف" - an advance, deducted in the "سلف" column
+        const amount = money(a.amount ?? 0);
+        if (amount <= 0) continue;
+        adjustments.push({ ...line, kind: "advance", label: "سلفة", sign: -1, amount, detail: null });
       }
     }
 
@@ -405,18 +419,20 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const advancesValue = { value: money(advancesOf.get(person.id) ?? 0), manual: false };
     const loan = { value: money(loanOf.get(person.id) ?? 0), manual: false };
     const insurance = { value: 0, manual: true };
-    // الخصومات = خصم Salary Adjustment + خصومات Additional Salary + سلف الشهر - deductions incl. this month's advances
-    const deductions = money(extraDeductions + advancesValue.value);
+    // الخصومات = خصم Salary Adjustment + خصومات Additional Salary؛ السلف لوحدها = سلف الشهر (Loan) + سلفة (Salary Adjustment)
+    // Deductions = Salary Adjustment خصم + Additional Salary deductions; advances apart = loan advances + سلفة
+    const deductions = extraDeductions;
+    const advanceTotal = money(advancesValue.value + sumOf("advance"));
     const installments = money(adjustmentInstallments + loan.value); // قسط الشهر - this month's installments
     // لحد النهارده = (الشامل ÷ 30 × الأيام اللي عدّت) − خصم الغياب − الخصومات − قسط الشهر + المكافآت (الإضافي لأ)
     // الصافي المتوقع = الشامل − خصم الغياب − الخصومات − قسط الشهر + المكافآت (الإضافي لأ)
     // Earned so far = Ts / 30 × days passed − absence − deductions − installments + bonuses (never overtime)
     // Expected net = Ts − absence − deductions − installments + bonuses (never overtime)
-    const earned = money(dayRate * daysPassed - absence - deductions - installments + bonuses);
-    const expectedNet = money(total - absence - deductions - installments + bonuses - insurance.value);
+    const earned = money(dayRate * daysPassed - absence - deductions - advanceTotal - installments + bonuses);
+    const expectedNet = money(total - absence - deductions - advanceTotal - installments + bonuses - insurance.value);
     return {
       ...common, total: money(total), mismatch, perDay: money(dayRate), earned, absence,
-      advances: advancesValue, loan, insurance, adjustments, bonuses, extraDeductions, deductions, installments, expectedNet,
+      advances: advancesValue, loan, insurance, adjustments, bonuses, extraDeductions, deductions, installments, advanceTotal, expectedNet,
       // المرتب النهائي (لحد النهارده) + الإضافي الشهر ده - salary earned so far + this month's overtime
       totalWithOvertime: money(earned + overtime.total),
     };
@@ -438,6 +454,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       absence: sumIn(monthly, (p) => p.absence),
       bonuses: sum((p) => p.bonuses),
       deductions: sum((p) => p.deductions),
+      advances: sum((p) => p.advanceTotal),
       // إضافي الجدول الشهري (الشهريين واللي مالهمش مرتب) - overtime of the monthly table (everyone but daily workers)
       overtime: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.total),
       overtimeHours: sumIn(people.filter((p) => p.kind !== "daily"), (p) => p.overtime.hours),

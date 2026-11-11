@@ -141,6 +141,23 @@ export function branchSection(branch: string | null | undefined): AttendanceSect
   return undefined;
 }
 
+// خارج البصمة: الطريقة لموظف (null = على البصمة) - the outside-the-biometric mode of an employee
+export function outsideMode(id: string): "fixed" | "default_present" | null {
+  return dashboardConfig.attendance.outsideBiometric[id] ?? null;
+}
+
+// حالة واحد خارج البصمة يوم ما: fixed = حاضر دايما، default_present = حاضر إلا لو اتسجل Absent (أو إجازة)
+// An outside-the-biometric status for a day: fixed = always present; default_present = present unless marked
+export function outsideStatus(mode: "fixed" | "default_present", mark: PersonStatus | undefined): PersonStatus {
+  if (mode === "fixed") return "present";
+  return mark === "absent" ? "absent" : mark === "leave" ? "leave" : "present";
+}
+
+// حالة الـ Attendance المتسجلة بس (من غير البصمات) - the submitted Attendance status only (no check-ins)
+function markedStatuses(rows: TodayAttendanceRows): Map<string, PersonStatus> {
+  return employeeStatuses({ ...rows, checkins: [] });
+}
+
 // كل موظف في قسمه بالكود، والحاضر اللي مالوش قسم بيروح اليومية
 // Each employee into its section by code; anyone present without a section goes to daily
 export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSectionKey, SectionPerson[]> {
@@ -151,8 +168,17 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     SectionPerson[]
   >;
   const statuses = employeeStatuses(rows);
+  const marks = markedStatuses(rows);
   // المستبعدين مش بيظهروا في أي حتة - excluded employees never show anywhere
   const placed = new Set<string>(dashboardConfig.attendance.excludedEmployees);
+  // خارج البصمة الأول (ومش بيدخلوا أي قسم تاني) - outside the biometric first (never in another section)
+  for (const employee of rows.employees) {
+    const mode = outsideMode(employee.name);
+    if (!mode || placed.has(employee.name)) continue;
+    placed.add(employee.name);
+    const status = outsideStatus(mode, marks.get(employee.name));
+    result.outside.push({ id: employee.name, name: shortName(employee.employee_name || employee.name), status });
+  }
   for (const employee of rows.employees) {
     if (placed.has(employee.name)) continue;
     const code = deviceCode(employee.attendance_device_id);
@@ -213,6 +239,7 @@ function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
     drivers: group("drivers"),
     reps: group("reps"),
     guards: group("guards"),
+    outside: group("outside"),
   };
 }
 

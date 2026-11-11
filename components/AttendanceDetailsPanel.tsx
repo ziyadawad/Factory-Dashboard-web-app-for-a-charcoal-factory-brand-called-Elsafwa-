@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, ChevronLeft, ExternalLink, Users, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, Download, ExternalLink, Loader2, Users, X } from "lucide-react";
 import {
   AttendanceDetails,
   DailyWeek,
@@ -546,6 +546,16 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
           <SourceTag salary={salary} />
         </>
       )}
+      {salary.outsideMode === "fixed" && (
+        <p className="mb-1 rounded-lg bg-sky-500/10 border border-sky-500/40 px-3 py-1 text-[14px] text-sky-300 font-semibold">
+          خارج البصمة (ثابت): حاضر دايما ومرتبه كامل — مفيش خصم غياب
+        </p>
+      )}
+      {salary.outsideMode === "default_present" && (
+        <p className="mb-1 rounded-lg bg-sky-500/10 border border-sky-500/40 px-3 py-1 text-[14px] text-sky-300 font-semibold">
+          خارج البصمة: حاضر كل يوم شغل، وغائب بس لو الـ HR سجّل Absent
+        </p>
+      )}
       {row("أيام الغياب حتى النهارده", money(salary.absentDays), salary.absentDays ? "text-statusRed" : "text-gray-400")}
       {row(
         `خصم الغياب حتى النهارده (الشامل ÷ ${perDay} × الأيام)`,
@@ -563,6 +573,7 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
           <>
             {money(salary.daysPassed)} يوم × {money(salary.perDay)} ج.م − خصم غياب {money(salary.absence)} ج.م
             {salary.deductions > 0 && <> − خصومات {money(salary.deductions)} ج.م</>}
+            {salary.advanceTotal > 0 && <> − سلف {money(salary.advanceTotal)} ج.م</>}
             {salary.installments > 0 && <> − أقساط {money(salary.installments)} ج.م</>}
             {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>}
           </>
@@ -771,8 +782,11 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <th className={`${th} text-center`} title="مكافأة + حوافز (داخلة في المرتب)">
             مكافآت
           </th>
-          <th className={`${th} text-center`} title="خصم، جزاء، تأخير + سلف الشهر">
+          <th className={`${th} text-center`} title="خصم، جزاء، تأخير">
             خصومات
+          </th>
+          <th className={`${th} text-center`} title="سلف الشهر (Loan) + سلفة (Salary Adjustment)">
+            سلف
           </th>
           <th className={`${th} text-center`} title="قسط (Salary Adjustment) + قسط القرض">
             أقساط
@@ -812,7 +826,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                     المرتب مش متسجل في السيستم
                   </td>
                   {overtimeCell(s)}
-                  <td colSpan={3} className={td} />
+                  <td colSpan={4} className={td} />
                   {monthOvertimeCell(s)}
                   <td className={`${td} ${grand} !text-gray-600`}>—</td>
                   <td className={`${td} ${final} !text-gray-600`}>—</td>
@@ -832,6 +846,9 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                   </td>
                   <td className={`${td} font-bold ${s.deductions ? "text-statusRed" : "text-gray-600"}`}>
                     {s.deductions ? <>− {money(s.deductions)}</> : "—"}
+                  </td>
+                  <td className={`${td} font-bold ${s.advanceTotal ? "text-statusRed" : "text-gray-600"}`}>
+                    {s.advanceTotal ? <>− {money(s.advanceTotal)}</> : "—"}
                   </td>
                   <td className={`${td} font-bold ${s.installments ? "text-amber-400" : "text-gray-600"}`}>
                     {s.installments ? <>− {money(s.installments)}</> : "—"}
@@ -857,6 +874,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <td className={`${foot} ${weekCell} text-sky-300`}>{money(totals.overtimeWeek)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
+          <td className={`${foot} text-statusRed`}>{money(totals.advances)}</td>
           <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>
           <td className={`${foot} text-sky-200/80 text-[15px]`}>{money(totals.overtime)}</td>
           <td className={`${foot} ${grand}`}>{money(totals.totalWithOvertime)}</td>
@@ -864,7 +882,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
         </tr>
         {/* الكاش اللي يتجهز للإضافي السبت - the overtime cash HR prepares for Saturday */}
         <tr>
-          <td colSpan={12} className="px-3 py-1 text-center bg-sky-400/10 border-t border-sky-400/30">
+          <td colSpan={13} className="px-3 py-1 text-center bg-sky-400/10 border-t border-sky-400/30">
             <span className="text-sky-200 font-bold text-[18px]">
               💵 إجمالي إضافي هذا الأسبوع{" "}
               <span className="text-gray-400 font-normal text-[15px]">
@@ -965,6 +983,50 @@ function EmployeeView({
   );
 }
 
+// زرار تنزيل كشف Excel (بيتعمل على السيرفر من نفس الأرقام) مع spinner لحد ما يخلص
+// A download button for an Excel sheet (built on the server from the same numbers), with a spinner while it builds
+function ExportButton({ url, label, tone }: { url: string; label: string; tone: "green" | "amber" }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      const res = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // اسم الملف من Content-Disposition (filename*) - the file name from Content-Disposition
+      const header = res.headers.get("Content-Disposition") ?? "";
+      const match = header.match(/filename\*=UTF-8''([^;]+)/i);
+      const name = match ? decodeURIComponent(match[1]) : "export.xlsx";
+      const href = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10_000);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={busy}
+      title={failed ? "التنزيل فشل — جرب تاني" : undefined}
+      className={`export-btn export-btn--${tone} flex items-center gap-2 rounded-full px-4 font-bold text-[16px] leading-[2.1]`}
+    >
+      {busy ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+      {failed ? "⚠ جرب تاني" : label}
+    </button>
+  );
+}
+
 // لوحة تفاصيل قسم حضور: قايمة الموظفين، والضغط على اسم يفتح تفاصيله
 // An attendance section's panel: the employee list; clicking a name opens that employee
 export default function AttendanceDetailsPanel({ section, onClose }: { section: string; onClose: () => void }) {
@@ -1030,6 +1092,11 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
                   >
                     💰 المرتبات
                   </button>
+                )}
+                {/* تصدير الكشوف (بيظهر مع المرتبات بس) - sheet exports (only with the salaries on) */}
+                {showSalary && <ExportButton url="/api/salaries/export" label="كشف المرتبات (Excel)" tone="green" />}
+                {showSalary && section === "daily" && (
+                  <ExportButton url="/api/salaries/export-daily" label="كشف اليومية (Excel)" tone="amber" />
                 )}
               </>
             )}

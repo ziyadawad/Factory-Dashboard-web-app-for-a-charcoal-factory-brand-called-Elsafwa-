@@ -11,6 +11,7 @@ import {
   Wrench,
   Cog,
   CalendarDays,
+  UserCheck,
   X,
   LucideIcon,
 } from "lucide-react";
@@ -131,6 +132,20 @@ export default function FloorWorkersSection({ data, offline = false, onOpenSecti
   );
 }
 
+// كارت "خارج البصمة" الصغير (نفس شكل كارت الغفر، أسامي كبسولات و"حاضر / إجمالي")، بيتحط لوحده في عمود الأفران
+// The small "outside the biometric" card (same look as the guards box: name chips and "present / total"),
+// placed on its own in the kilns column
+export function OutsideBiometricCard({ group, onOpen }: { group: AttendanceGroup; onOpen?: () => void }) {
+  const text = useWorkerSizes();
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    const remeasure = () => setRound((r) => r + 1);
+    window.addEventListener("resize", remeasure);
+    return () => window.removeEventListener("resize", remeasure);
+  }, []);
+  return <GroupBox group={group} icon={UserCheck} text={text} round={round} standalone onOpen={onOpen} />;
+}
+
 // عنوان القسم: الأيقونة والاسم والعدد وشريط النسبة - group header: icon, name, count and progress bar
 // الشريط = حاضر ÷ (الإجمالي − إجازة) - bar = present / (total − on leave)
 function GroupHeader({
@@ -225,6 +240,7 @@ function GroupBox({
   text,
   round,
   nested,
+  standalone,
   onOpen,
 }: {
   group: AttendanceGroup;
@@ -232,6 +248,7 @@ function GroupBox({
   text: WorkerSizes;
   round: number;
   nested?: boolean;
+  standalone?: boolean; // كارت لوحده برّه "حضور عمال" - its own card outside the workers card
   onOpen?: () => void;
 }) {
   const minFontSize = dashboardConfig.sizes.page1.minWorkerChipFontSize;
@@ -256,10 +273,10 @@ function GroupBox({
   return (
     <div
       onClick={onOpen}
-      className={`rounded-xl min-w-0 min-h-0 flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""} ${
-        nested ? "bg-card border border-cardBorder" : "bg-background"
+      className={`min-w-0 min-h-0 flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""} ${
+        standalone ? "bg-card border border-cardBorder rounded-2xl" : nested ? "rounded-xl bg-card border border-cardBorder" : "rounded-xl bg-background"
       }`}
-      style={{ padding: `${nested ? text.workerNestedBoxPadding : text.workerBoxPadding}px` }}
+      style={{ padding: `${nested ? text.workerNestedBoxPadding : standalone ? text.workerBoxPadding + 4 : text.workerBoxPadding}px` }}
     >
       <GroupHeader
         label={group.label}

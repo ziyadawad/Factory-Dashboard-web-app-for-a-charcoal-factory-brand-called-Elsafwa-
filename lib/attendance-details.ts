@@ -3,7 +3,7 @@
 // قراية بس من ERPNext - read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpGet, erpToday } from "./erp";
-import { AttendanceSectionKey, TodayAttendanceRows, employeeStatuses, splitBySection } from "./data-source";
+import { AttendanceSectionKey, TodayAttendanceRows, employeeStatuses, outsideMode, outsideStatus, splitBySection } from "./data-source";
 import { toEnglishDigits } from "./format";
 import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeDay } from "./types";
 
@@ -172,6 +172,9 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
     const startsAt = joined > config.trackingStartDate ? joined : config.trackingStartDate;
     const holidayList = employee?.holiday_list || rows.defaultHolidayList;
     const holidays = holidayList ? rows.holidays?.get(holidayList) : undefined;
+    // خارج البصمة: حاضر من غير بصمة (fixed دايما، default_present إلا لو اتسجل غياب)
+    // Outside the biometric: present without a punch (fixed always; default_present unless marked absent)
+    const mode = outsideMode(person.id);
 
     const dayFor = (date: string): EmployeeDay => {
       const punch = firstPunch.get(`${person.id}|${date}`) ?? null;
@@ -181,6 +184,7 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
       else if (date < startsAt) status = "none";
       else if (weeklyOff.has(weekdayOf(date))) status = "off";
       else if (holidays?.has(date)) status = "holiday";
+      else if (mode) status = outsideStatus(mode, mark);
       else if (punch || mark === "present") status = "present";
       else if (mark === "leave") status = "leave";
       else status = "absent";
@@ -202,7 +206,7 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
         .replace(/\s+/g, " ")
         .trim(),
       section: config.sections[key].label,
-      today: todayStatuses.get(person.id) ?? person.status,
+      today: outsideMode(person.id) ? person.status : todayStatuses.get(person.id) ?? person.status,
       todayFirstPunch: firstPunch.get(`${person.id}|${today}`) ?? null,
       presentDays: count("present"),
       absentDays: count("absent"),
@@ -221,7 +225,7 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
   // Each person's own calendar cell for today (off / holiday / before joining = not listed)
   const todayOff = weeklyOff.has(weekdayOf(today));
   const notPunchedToday = result
-    .filter((p) => byId.has(p.id) && !firstPunch.has(`${p.id}|${today}`) && !marked.has(`${p.id}|${today}`))
+    .filter((p) => byId.has(p.id) && !outsideMode(p.id) && !firstPunch.has(`${p.id}|${today}`) && !marked.has(`${p.id}|${today}`))
     .filter((p) => p.days.find((d) => d.date === today)?.status === "absent")
     .map((p) => ({ id: p.id, code: p.code, name: p.name }));
   const present = people.filter((p) => p.status === "present").length;

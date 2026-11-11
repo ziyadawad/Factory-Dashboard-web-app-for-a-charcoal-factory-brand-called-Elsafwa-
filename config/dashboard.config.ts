@@ -42,21 +42,38 @@ export const dashboardConfig = {
       drivers: { label: "سواقين", codes: [[1046, 1048]] } as ConfigAttendanceSection, // سواقين
       reps: { label: "مناديب", codes: [[1049, 1054]] } as ConfigAttendanceSection, // مناديب
       guards: { label: "غفر", codes: [[1061, 1063]] } as ConfigAttendanceSection, // غفر
+      // خارج البصمة: مالوش أكواد، الناس فيه من outsideBiometric تحت - no codes: its people come from outsideBiometric
+      outside: { label: "خارج البصمة", codes: [] } as ConfigAttendanceSection, // خارج البصمة
     },
+    // ===== خارج البصمة: موظفين مش على جهاز البصمة (Employee ID ← الطريقة) =====
+    // - "fixed": حاضر دايما، وبياخد مرتبه كامل حتى لو غاب (عمره ما بيتخصم منه غياب)
+    // - "default_present": حاضر كل يوم شغل من غير بصمة، وغائب بس لو الـ HR سجّل له Attendance بحالة Absent اليوم ده
+    //   (On Leave = إجازة)
+    // - مش بيتحسبوا في أي قسم تاني، وعمرهم ما بيظهروا في "مبصمش النهارده"
+    // ===== Outside the biometric: employees not on the device (Employee ID -> mode) =====
+    // - "fixed": always present, full salary even when absent (never an absence deduction)
+    // - "default_present": present every working day with no punch; absent only when HR submits an Attendance
+    //   with status Absent for that day (On Leave = leave)
+    // - never counted in any other section, never listed as "not punched today"
+    outsideBiometric: {
+      "محمد عبدالمقصود محمد": "fixed", // محمد عبدالمقصود محمد - سواق (كود 1046)
+      "فضل عمرو فضل": "default_present", // فضل عمرو فضل
+      "HR-EMP-00191": "default_present", // صلاح محمد عبد الرحمن
+    } as Record<string, "fixed" | "default_present">,
     // مستبعدين من الحضور خالص (مش حاضر ولا غائب ولا في أي إجمالي) - اكتب Employee ID من ERPNext
     // Excluded from attendance entirely (not present, not absent, in no total) - ERPNext Employee IDs
     excludedEmployees: [
       "HR-EMP-00197", // عيد صقر (كود 1027)
       "HR-EMP-00201", // فاطمة محمد هاشم (كود 1057)
       "احمد حمدي ابراهيم", // احمد حمدي ابراهيم (كود 1059)
-      "محمد عبدالمقصود محمد", // محمد عبدالمقصود محمد - سواق (كود 1046)
+      // محمد عبدالمقصود محمد (سواق، كود 1046) اتنقل لـ "خارج البصمة" (outsideBiometric) - moved to outsideBiometric
     ],
     factoryLabel: "مصنع إنتاج", // اسم الكارت اللي فيه عمال إنتاج والورشة والأوبريتر - factory card name
     // الفرع (Branch في ERPNext) ← القسم: بيتستخدم بس لو كود البصمة مش في الجدول فوق أو فاضي
     // (اللي كوده فاضي بيتحط بالفرع بس لو حاضر النهارده، عشان الغايبين من غير كود ميملوش الكروت)
     // لو لا الكود ولا الفرع اتطابقوا، الحاضر بيروح "عمال يومية" زي الأول
     // الأسامي بتتطابق بعد التوحيد (أ/إ/آ = ا، ة = ه، ى = ي، والمسافات) فـ"مصنع الإنتاج" = "مصنع الانتاج"
-    // عشان تضيف فرع: "اسم الفرع": "اسم القسم" (management / production / workshop / operators / packing / daily / drivers / reps / guards)
+    // عشان تضيف فرع: "اسم الفرع": "اسم القسم" (management / production / workshop / operators / packing / daily / drivers / reps / guards / outside)
     // Branch -> section, used only when the device code is empty or not in the table above
     branchSections: {
       "مصنع التعبئة": "packing", // مصنع التعبئة ← عمال تعبئة

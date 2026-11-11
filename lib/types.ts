@@ -44,6 +44,7 @@ export interface Attendance {
   drivers: AttendanceGroup;
   reps: AttendanceGroup;
   guards: AttendanceGroup;
+  outside: AttendanceGroup; // خارج البصمة - not on the biometric
 }
 
 // نوع واحد جوه الكارت (عادي/كامل، ناعم/خشن/مكمورة...) - one type inside a stock card
@@ -583,6 +584,10 @@ export interface EmployeeSalary {
   deductions: number;
   // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
   installments: number;
+  // عمود "سلف": سلف الشهر (Loan) + سلفة (Salary Adjustment) - the "سلف" column: loan advances + Salary Adjustment سلفة
+  advanceTotal: number;
+  // خارج البصمة: fixed / default_present (null = على البصمة) - outside-the-biometric mode (null = on the device)
+  outsideMode: "fixed" | "default_present" | null;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
   // الإجمالي مع الإضافي = المرتب النهائي (earned) + الإضافي - earned so far + this month's overtime
   totalWithOvertime: number;
@@ -644,7 +649,7 @@ export interface OvertimeSummary {
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
 export interface SalaryAdjustment {
   source: "additional_salary" | "salary_adjustment";
-  kind: "addition" | "deduction" | "installment";
+  kind: "addition" | "deduction" | "installment" | "advance"; // advance = سلفة (Salary Adjustment)
   label: string; // "إضافي" / "خصم نص يوم" / "قسط" / اسم المكون
   component: string; // Salary Component أو adjustment_type
   sign: 1 | -1; // إضافة = +1، خصم/قسط = −1
@@ -673,6 +678,7 @@ export interface SectionSalaries {
     absence: number;
     bonuses: number;
     deductions: number;
+    advances: number; // سلف - advances
     overtime: number; // إضافي الشهر - this month's overtime
     overtimeHours: number;
     overtimeWeek: number; // إجمالي إضافي هذا الأسبوع (الكاش اللي يتجهز السبت) - this week's overtime cash
