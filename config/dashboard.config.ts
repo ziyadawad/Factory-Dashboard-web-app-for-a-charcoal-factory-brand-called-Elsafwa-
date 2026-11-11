@@ -96,10 +96,15 @@ export const dashboardConfig = {
   // - قسط القرض = Loan Repayment على نفس الحساب الشهر ده لسلف اتصرفت قبل الشهر ده (سلف الشهر نفسه محسوبة فوق)
   // - الإضافات والخصومات = كل Additional Salary متسجلة (submitted) والـ payroll_date في الشهر ده:
   //   Earning بتتزود و Deduction بتتخصم، وبتدخل في "المرتب لحد النهارده" و"الصافي المتوقع"
-  // - Salary Adjustment (DocType مخصوص، submitted بس): إضافي / مكافأة بتتزود، خصم بيتخصم (اللي تاريخها في الشهر ده)،
+  // - Salary Adjustment (DocType مخصوص، submitted بس): مكافأة بتتزود، خصم بيتخصم (اللي تاريخها في الشهر ده)،
   //   والقسط بيتخصم monthly_installment كل شهر من شهر تاريخه لحد ما total_amount يخلص (آخر شهر الباقي بس)
-  //   Salary Adjustment (custom, submitted only): إضافي / مكافأة added, خصم subtracted (dated this month); قسط
-  //   subtracts monthly_installment every month from the month of its date until total_amount is paid
+  // - الإضافي بيتصرف كاش (مش مع المرتب): مش داخل في "لحد النهارده" ولا "الصافي"، وبيظهر لوحده:
+  //   "لسه متصرفش" = كل إضافي paid = 0 (أي تاريخ)، و"اتصرف" = paid = 1 في الشهر ده
+  // - لحد النهارده = الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات (خصم + سلف) − قسط الشهر + المكافآت
+  // - الصافي المتوقع = الشامل − الغياب − الخصومات − قسط الشهر + المكافآت
+  //   Salary Adjustment (custom, submitted only): مكافأة added, خصم subtracted (dated this month); قسط subtracts
+  //   monthly_installment every month from the month of its date until total_amount is paid. إضافي is paid in cash:
+  //   never in the earned / net figures, shown on its own (unpaid = paid 0 any date; paid = paid 1 this month)
   // - التأمينات: مش متسجلة في ERPNext بشكل يتقري = 0 ومكتوب "يدوي"
   // Salary = base + custom_allowance of the latest assignment; absence = salary / daysPerMonth × absent days
   // (biometric, same rules as the attendance panel); advances = Loan Disbursements on advancesAccount this month;

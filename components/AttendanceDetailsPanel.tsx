@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, ChevronLeft, ExternalLink, Users, X } from "lucide-react";
-import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeSalary, PersonStatus, SalaryValue, SectionSalaries } from "@/lib/types";
+import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeSalary, OvertimeEntry, OvertimeSummary, PersonStatus, SalaryValue, SectionSalaries } from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -220,14 +220,82 @@ function SalaryMessage({ text }: { text: string }) {
   return <div className="rounded-xl bg-background border border-cardBorder p-4 text-center text-[18px] text-gray-300">{text}</div>;
 }
 
-// كارت مرتب موظف - one employee's salary card
+// "1/11 — 4 س × 25" (من غير ساعات لو المبلغ ثابت) - one overtime entry's description
+const overtimeText = (e: OvertimeEntry) => (
+  <>
+    {shortDate(e.date)}
+    {e.hours > 0 && e.rate > 0 && (
+      <>
+        {" "}— {money(e.hours)} س × {money(e.rate)}
+      </>
+    )}
+  </>
+);
+
+// الإضافي بيتصرف كاش (غالبا السبت) ومش داخل في المرتب ولا الصافي
+// Overtime is paid in cash (usually Saturday) and is never part of the salary or the net
+function OvertimeBox({ overtime }: { overtime: OvertimeSummary }) {
+  return (
+    <div className="rounded-xl bg-background border border-sky-400/30 p-4 flex flex-col text-[17px]">
+      <p className="text-sky-300 font-extrabold text-[19px]">💵 إضافي — بيتصرف كاش</p>
+      <p className="text-[13px] text-gray-500 mb-1">مش داخل في المرتب ولا الصافي</p>
+      {overtime.unpaid.length === 0 ? (
+        <p className="text-gray-500 py-1">مفيش إضافي لسه متصرفش</p>
+      ) : (
+        <>
+          {overtime.unpaid.map((e, i) => (
+            <p key={i} className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
+              <span className="text-gray-300">{overtimeText(e)}</span>
+              <span className="font-semibold text-sky-300">= {money(e.amount)} ج.م</span>
+            </p>
+          ))}
+          <p className="flex items-center justify-between gap-4 pt-2">
+            <span className="text-white font-bold">لسه متصرفش</span>
+            <span className="text-[26px] font-extrabold text-sky-300 leading-tight">
+              {money(overtime.unpaidTotal)} <span className="text-[16px] text-gray-300">ج.م</span>
+              {overtime.unpaidHours > 0 && <span className="ms-2 text-[15px] text-gray-400">({money(overtime.unpaidHours)} س)</span>}
+            </span>
+          </p>
+        </>
+      )}
+      {overtime.paidThisMonth.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-cardBorder/60 text-[14px] text-gray-500">
+          <p className="font-semibold text-gray-400">اتصرف (الشهر ده)</p>
+          {overtime.paidThisMonth.map((e, i) => (
+            <p key={i} className="flex items-center justify-between gap-4">
+              <span>{overtimeText(e)}</span>
+              <span>{money(e.amount)} ج.م ✓</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// كارت مرتب موظف + صندوق الإضافي - one employee's salary card + the overtime box
 function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; state: SalaryState }) {
   if (state.error) return <SalaryMessage text="المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية" />;
   if (!state.data) return <SalaryMessage text="جاري تحميل المرتب..." />;
-  if (!salary || salary.kind === "none") return <SalaryMessage text="المرتب مش متسجل في السيستم" />;
-  if (salary.kind === "daily") return <SalaryMessage text="اليومية حسابها خارجي" />;
+  const hasOvertime = !!salary && (salary.overtime.unpaid.length > 0 || salary.overtime.paidThisMonth.length > 0);
+  if (!salary || salary.kind !== "monthly") {
+    return (
+      <div className="flex flex-col gap-3">
+        <SalaryMessage text={salary?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"} />
+        {salary && hasOvertime && <OvertimeBox overtime={salary.overtime} />}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <MonthlySalaryCard salary={salary} perDay={state.data.daysPerMonth} />
+      <OvertimeBox overtime={salary.overtime} />
+    </div>
+  );
+}
 
-  const perDay = state.data.daysPerMonth;
+// المرتب الشهري - the monthly salary card
+function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay: number }) {
   const row = (label: string, value: React.ReactNode, tone = "text-white") => (
     <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
       <span className="text-gray-400">{label}</span>
@@ -265,10 +333,10 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
       {deduction("سلف الشهر", salary.advances)}
       {deduction("قسط القرض", salary.loan)}
       {deduction("التأمينات", salary.insurance)}
-      {/* بنود الشهر (Additional Salary + Salary Adjustment): "إضافي: 4 ساعات × 50 = +200 ج.م (11/11)"
-          This month's items (Additional Salary + Salary Adjustment) */}
+      {/* بنود الشهر (Additional Salary + Salary Adjustment، من غير الإضافي): "مكافأة: +300 ج.م (2/11)"
+          This month's items (Additional Salary + Salary Adjustment, overtime excluded) */}
       {salary.adjustments.length === 0
-        ? row("إضافات / خصومات / أقساط", <span className="text-gray-500">مفيش الشهر ده</span>)
+        ? row("مكافآت / خصومات / أقساط", <span className="text-gray-500">مفيش الشهر ده</span>)
         : salary.adjustments.map((a, i) => (
             <div key={i} className="border-b border-cardBorder/60 py-1.5">
               <p className="flex items-center justify-between gap-4">
@@ -312,9 +380,9 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
           </span>
           <span className="block text-[13px] text-gray-400">
             ({money(salary.daysPassed)} يوم × {money(salary.perDay)} ج.م − خصم غياب {money(salary.absence)} ج.م
-            {salary.additions > 0 && <> + إضافات {money(salary.additions)} ج.م</>}
-            {salary.extraDeductions > 0 && <> − خصومات {money(salary.extraDeductions)} ج.م</>}
-            {salary.installments > 0 && <> − أقساط {money(salary.installments)} ج.م</>})
+            {salary.deductions > 0 && <> − خصومات {money(salary.deductions)} ج.م</>}
+            {salary.installments > 0 && <> − أقساط {money(salary.installments)} ج.م</>}
+            {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>})
           </span>
         </span>
       </div>
@@ -340,6 +408,21 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
   const td = "px-3 text-center border-b border-cardBorder/60";
   const foot = "px-3 text-center border-t border-cardBorder font-extrabold";
   const { totals } = state.data;
+  // الإضافي اللي لسه متصرفش وتحته الساعات ("4 س") - unpaid overtime with its hours under it
+  const overtimeCell = (s: EmployeeSalary | undefined) => (
+    <td className={`${td} font-bold leading-tight ${s?.overtime.unpaidTotal ? "text-sky-300" : "text-gray-600"}`}>
+      {s?.overtime.unpaidTotal ? (
+        <>
+          {money(s.overtime.unpaidTotal)}
+          {s.overtime.unpaidHours > 0 && (
+            <span className="block text-[12px] text-gray-400 font-normal">{money(s.overtime.unpaidHours)} س</span>
+          )}
+        </>
+      ) : (
+        "—"
+      )}
+    </td>
+  );
   return (
     <table className="w-full border-separate border-spacing-0 text-[17px] leading-[2.2]">
       <thead className="sticky top-0 z-10 bg-card">
@@ -349,8 +432,13 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <th className={`${th} text-center`}>الأجر الشامل</th>
           <th className={`${th} text-center`}>أيام الغياب</th>
           <th className={`${th} text-center`}>خصم الغياب حتى النهارده</th>
-          <th className={`${th} text-center`} title="إضافي، مكافأة، حوافز (Salary Adjustment + Additional Salary)">
-            إضافات
+          <th className={`${th} text-center !whitespace-normal leading-tight`} title="بيتصرف كاش، مش داخل في المرتب ولا الصافي">
+            إضافي لسه
+            <br />
+            متصرفش
+          </th>
+          <th className={`${th} text-center`} title="مكافأة + حوافز (داخلة في المرتب)">
+            مكافآت
           </th>
           <th className={`${th} text-center`} title="خصم، جزاء، تأخير + سلف الشهر">
             خصومات
@@ -383,9 +471,13 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                 </span>
               </td>
               {!s || s.kind !== "monthly" ? (
-                <td colSpan={8} className={`${td} text-gray-500`}>
-                  {s?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"}
-                </td>
+                <>
+                  <td colSpan={3} className={`${td} text-gray-500`}>
+                    {s?.kind === "daily" ? "اليومية حسابها خارجي" : "المرتب مش متسجل في السيستم"}
+                  </td>
+                  {overtimeCell(s)}
+                  <td colSpan={5} className={td} />
+                </>
               ) : (
                 <>
                   <td className={`${td} text-white font-bold`}>
@@ -395,8 +487,9 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
                   </td>
                   <td className={`${td} font-bold ${s.absentDays ? "text-statusRed" : "text-gray-600"}`}>{s.absentDays ? money(s.absentDays) : "—"}</td>
                   <td className={`${td} font-bold ${s.absence ? "text-statusRed" : "text-gray-600"}`}>{s.absence ? money(s.absence) : "—"}</td>
-                  <td className={`${td} font-bold ${s.additions ? "text-statusGreen" : "text-gray-600"}`}>
-                    {s.additions ? <>+ {money(s.additions)}</> : "—"}
+                  {overtimeCell(s)}
+                  <td className={`${td} font-bold ${s.bonuses ? "text-statusGreen" : "text-gray-600"}`}>
+                    {s.bonuses ? <>+ {money(s.bonuses)}</> : "—"}
                   </td>
                   <td className={`${td} font-bold ${s.deductions ? "text-statusRed" : "text-gray-600"}`}>
                     {s.deductions ? <>− {money(s.deductions)}</> : "—"}
@@ -421,11 +514,21 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
           <td className={`${foot} text-white`}>{money(totals.total)}</td>
           <td className="border-t border-cardBorder" />
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
-          <td className={`${foot} text-statusGreen`}>{money(totals.additions)}</td>
+          <td className={`${foot} text-sky-300`}>{money(totals.overtimeUnpaid)}</td>
+          <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
           <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>
           <td className={`${foot} text-white`}>{money(totals.earned)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.expectedNet)}</td>
+        </tr>
+        {/* الكاش اللي يتجهز للإضافي - the cash HR should prepare for overtime */}
+        <tr>
+          <td colSpan={12} className="px-3 py-1 text-center text-[16px] bg-sky-400/10 border-t border-sky-400/30">
+            <span className="text-gray-300">💵 إجمالي الإضافي اللي لسه متصرفش: </span>
+            <b className="text-sky-300 text-[19px]">{money(totals.overtimeUnpaid)} ج.م</b>
+            {totals.overtimeHours > 0 && <span className="text-gray-400"> ({money(totals.overtimeHours)} ساعة)</span>}
+            <span className="text-gray-500 text-[14px]"> — بيتصرف كاش، مش داخل في الصافي</span>
+          </td>
         </tr>
       </tfoot>
     </table>

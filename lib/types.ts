@@ -566,13 +566,30 @@ export interface EmployeeSalary {
   insurance: SalaryValue; // التأمينات
   // Additional Salary الشهر ده (إضافي، مكافأة، جزاء، تأخير...) - this month's Additional Salary lines
   adjustments: SalaryAdjustment[];
-  additions: number; // مجموع الإضافات (Additional Salary Earning + إضافي / مكافأة) - total additions
+  bonuses: number; // مكافآت (مكافأة + Additional Salary Earning) بتدخل في المرتب - bonuses, part of the salary
+  // الإضافي بيتصرف كاش (مش مع المرتب) ومش داخل في الصافي - overtime is paid in cash, never part of the net
+  overtime: OvertimeSummary;
   extraDeductions: number; // خصومات Additional Salary + خصم Salary Adjustment - item deductions
   // عمود "خصومات": خصومات البنود + سلف الشهر - the "خصومات" column: item deductions + advances
   deductions: number;
   // عمود "أقساط": قسط Salary Adjustment + قسط القرض - the "أقساط" column: Salary Adjustment installments + loan
   installments: number;
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
+}
+
+// إضافي (Salary Adjustment) بيتصرف كاش - one cash-paid overtime entry
+export interface OvertimeEntry {
+  date: string; // "2026-11-01"
+  hours: number;
+  rate: number; // سعر الساعة - hour rate
+  amount: number;
+}
+
+export interface OvertimeSummary {
+  unpaid: OvertimeEntry[]; // لسه متصرفش (أي تاريخ) - not paid yet (any date)
+  paidThisMonth: OvertimeEntry[]; // اتصرف (الشهر ده) - paid, dated this month
+  unpaidTotal: number;
+  unpaidHours: number;
 }
 
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
@@ -600,8 +617,11 @@ export interface SectionSalaries {
   totals: {
     total: number;
     absence: number;
-    additions: number;
+    bonuses: number;
     deductions: number;
+    // الإضافي اللي لسه متصرفش لكل القسم (شهري ويومية) - unpaid overtime of the whole section (monthly and daily)
+    overtimeUnpaid: number;
+    overtimeHours: number;
     installments: number;
     earned: number;
     expectedNet: number;
