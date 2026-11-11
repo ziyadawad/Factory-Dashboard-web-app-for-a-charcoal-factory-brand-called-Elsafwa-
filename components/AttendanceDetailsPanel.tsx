@@ -880,20 +880,6 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <td className={`${foot} ${grand}`}>{money(totals.totalWithOvertime)}</td>
           <td className={`${foot} ${final}`}>{money(totals.earned)}</td>
         </tr>
-        {/* الكاش اللي يتجهز للإضافي السبت - the overtime cash HR prepares for Saturday */}
-        <tr>
-          <td colSpan={13} className="px-3 py-1 text-center bg-sky-400/10 border-t border-sky-400/30">
-            <span className="text-sky-200 font-bold text-[18px]">
-              💵 إجمالي إضافي هذا الأسبوع{" "}
-              <span className="text-gray-400 font-normal text-[15px]">
-                ({shortDate(dailyPay.week.start)} – {shortDate(dailyPay.week.end)}
-                {dailyPay.paidToday ? "، بيتقبض النهارده" : "، بيتقبض كاش السبت"}):
-              </span>{" "}
-            </span>
-            <b className="text-sky-300 text-[26px] min-[1600px]:text-[30px]">{money(totals.overtimeWeek)} ج.م</b>
-            {totals.overtimeWeekHours > 0 && <span className="text-gray-400 text-[15px]"> ({money(totals.overtimeWeekHours)} ساعة)</span>}
-          </td>
-        </tr>
       </tfoot>
     </table>
   );
@@ -1094,7 +1080,10 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
                   </button>
                 )}
                 {/* تصدير الكشوف (بيظهر مع المرتبات بس) - sheet exports (only with the salaries on) */}
-                {showSalary && <ExportButton url="/api/salaries/export" label="كشف المرتبات (Excel)" tone="green" />}
+                {/* كشف المرتبات (كل الشهريين) في لوحة "خارج البصمة" بس - the full salary sheet, only in the outside panel */}
+                {showSalary && section === "outside" && (
+                  <ExportButton url="/api/salaries/export" label="كشف المرتبات (Excel)" tone="green" />
+                )}
                 {showSalary && section === "daily" && (
                   <ExportButton url="/api/salaries/export-daily" label="كشف اليومية (Excel)" tone="amber" />
                 )}
