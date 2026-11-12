@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import AttendanceSection from "@/components/AttendanceSection";
 import StockSection from "@/components/StockSection";
 import KilnsSection from "@/components/KilnsSection";
-import FloorWorkersSection, { OutsideBiometricCard } from "@/components/FloorWorkersSection";
+import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
 import BatchesSection from "@/components/BatchesSection";
@@ -254,12 +254,6 @@ export default function Dashboard() {
                   <KilnsSection data={data.kilns} offline={cards.kilns.offline} />
                 )}
               </div>
-              {/* خارج البصمة: كارت صغير على قد أساميه - outside the biometric: a small card sized by its names */}
-              {data.attendance.outside && !cards.attendance.missing && (
-                <div className={`shrink-0 ${flashClass("floorWorkers")}`}>
-                  <OutsideBiometricCard group={data.attendance.outside} onOpen={() => setAttendanceSection("outside")} />
-                </div>
-              )}
               <div className={`flex-1 ${flashClass("batches")}`}>
                 <BatchesSection data={data.batches} />
               </div>

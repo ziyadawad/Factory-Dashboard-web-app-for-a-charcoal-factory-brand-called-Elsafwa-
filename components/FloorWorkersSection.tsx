@@ -29,15 +29,6 @@ interface FloorWorkersSectionProps {
   onOpenSection?: (section: string) => void;
 }
 
-type FactoryGroupKey = keyof Attendance["workers"]["productionFactory"]["groups"];
-
-// مجموعات مصنع الإنتاج - production factory sub-groups
-const FACTORY_GROUPS: { key: FactoryGroupKey; icon: LucideIcon }[] = [
-  { key: "production", icon: HardHat },
-  { key: "workshop", icon: Wrench },
-  { key: "operators", icon: Cog },
-];
-
 // useLayoutEffect بيطلع تحذير على السيرفر - useLayoutEffect warns during SSR
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -107,10 +98,19 @@ export default function FloorWorkersSection({ data, offline = false, onOpenSecti
         {/* مصنع الإنتاج ومجموعاته التلاتة - production factory and its 3 sub-groups */}
         <div className="bg-background rounded-xl p-2.5 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <GroupHeader label={factory.label} icon={Factory} group={factory} titleFontSize={text.workerTitleFontSize} text={text} />
+          {/* من اليمين: خارج البصمة | عمال إنتاج | أوبريتر فوق وورشة تحت. خارج البصمة مش في إجمالي الكارت
+              Right to left: outside the biometric | production | operators above workshop. Outside is not in the card's totals */}
           <div className="flex-1 min-h-0 grid grid-cols-3 gap-2">
-            {FACTORY_GROUPS.map(({ key, icon }) => (
-              <GroupBox key={key} group={factory.groups[key]} icon={icon} {...boxProps} nested onOpen={open(key)} />
-            ))}
+            {data.outside ? (
+              <GroupBox group={data.outside} icon={UserCheck} {...boxProps} nested onOpen={open("outside")} />
+            ) : (
+              <div />
+            )}
+            <GroupBox group={factory.groups.production} icon={HardHat} {...boxProps} nested onOpen={open("production")} />
+            <div className="min-h-0 grid gap-2" style={{ gridTemplateRows: CONTENT_ROWS_2 }}>
+              <GroupBox group={factory.groups.operators} icon={Cog} {...boxProps} nested onOpen={open("operators")} />
+              <GroupBox group={factory.groups.workshop} icon={Wrench} {...boxProps} nested onOpen={open("workshop")} />
+            </div>
           </div>
         </div>
 
@@ -130,20 +130,6 @@ export default function FloorWorkersSection({ data, offline = false, onOpenSecti
       </div>
     </div>
   );
-}
-
-// كارت "خارج البصمة" الصغير (نفس شكل كارت الغفر، أسامي كبسولات و"حاضر / إجمالي")، بيتحط لوحده في عمود الأفران
-// The small "outside the biometric" card (same look as the guards box: name chips and "present / total"),
-// placed on its own in the kilns column
-export function OutsideBiometricCard({ group, onOpen }: { group: AttendanceGroup; onOpen?: () => void }) {
-  const text = useWorkerSizes();
-  const [round, setRound] = useState(0);
-  useEffect(() => {
-    const remeasure = () => setRound((r) => r + 1);
-    window.addEventListener("resize", remeasure);
-    return () => window.removeEventListener("resize", remeasure);
-  }, []);
-  return <GroupBox group={group} icon={UserCheck} text={text} round={round} standalone onOpen={onOpen} />;
 }
 
 // عنوان القسم: الأيقونة والاسم والعدد وشريط النسبة - group header: icon, name, count and progress bar
@@ -240,7 +226,6 @@ function GroupBox({
   text,
   round,
   nested,
-  standalone,
   onOpen,
 }: {
   group: AttendanceGroup;
@@ -248,10 +233,9 @@ function GroupBox({
   text: WorkerSizes;
   round: number;
   nested?: boolean;
-  standalone?: boolean; // كارت لوحده برّه "حضور عمال" - its own card outside the workers card
   onOpen?: () => void;
 }) {
-  const minFontSize = dashboardConfig.sizes.page1.minWorkerChipFontSize;
+  const minFontSize = text.minWorkerChipFontSize;
   const shown = shownPeople(group);
   const absent = absentPeople(group);
   const chipsRef = useRef<HTMLDivElement>(null);
@@ -274,9 +258,9 @@ function GroupBox({
     <div
       onClick={onOpen}
       className={`min-w-0 min-h-0 flex flex-col overflow-hidden ${onOpen ? "cursor-pointer" : ""} ${
-        standalone ? "bg-card border border-cardBorder rounded-2xl" : nested ? "rounded-xl bg-card border border-cardBorder" : "rounded-xl bg-background"
+        nested ? "rounded-xl bg-card border border-cardBorder" : "rounded-xl bg-background"
       }`}
-      style={{ padding: `${nested ? text.workerNestedBoxPadding : standalone ? text.workerBoxPadding + 4 : text.workerBoxPadding}px` }}
+      style={{ padding: `${nested ? text.workerNestedBoxPadding : text.workerBoxPadding}px` }}
     >
       <GroupHeader
         label={group.label}
