@@ -81,13 +81,17 @@ export default function Dashboard() {
   const [flashSection, setFlashSection] = useState<string | null>(null);
   const prevDataRef = useRef<DashboardData | null>(null);
   const cols = dashboardConfig.sizes.topRowColumns;
-  const fadeMs = dashboardConfig.sizes.pageNav.fadeMs;
+  const { slideMs, slideDistance } = dashboardConfig.sizes.pageNav;
   const autoRotate = dashboardConfig.pages.autoRotate;
 
   // الصفحة الحالية - current page index (data stays in SWR, so switching never refetches)
   const [pageIndex, setPageIndex] = useState(0);
   // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
   const [switchCount, setSwitchCount] = useState(0);
+  // اتجاه آخر تقليب: 1 = الجاية (من تحت)، -1 = اللي فاتت (من فوق) - last switch direction: 1 next, -1 previous
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const prevPageRef = useRef(0);
   useEffect(() => setPageIndex(pageFromUrl()), []);
   // لوحة تفاصيل مفتوحة = التقليب واقف (والأسهم كمان) - a details panel is open: rotation (and arrow keys) paused
   const [salesDetailsOpen, setSalesDetailsOpen] = useState(false);
@@ -119,7 +123,8 @@ export default function Dashboard() {
   }, []);
   const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null;
 
-  const changePage = useCallback((index: number) => {
+  const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
+    setDirection(dir);
     setPageIndex(index);
     setSwitchCount((count) => count + 1);
     const url = new URL(window.location.href);
@@ -127,13 +132,19 @@ export default function Dashboard() {
     window.history.replaceState(null, "", url);
   }, []);
 
-  // أسهم الكيبورد: الشمال = التالي، اليمين = السابق (عشان الصفحة عربي)
-  // Keyboard arrows: left = next, right = previous (RTL)
+  // الكيبورد: تحت / PageDown / الشمال = الجاية، فوق / PageUp / اليمين = اللي فاتت (وبتلف)
+  // Keyboard: ArrowDown / PageDown / ArrowLeft = next, ArrowUp / PageUp / ArrowRight = previous (wraps around)
   useEffect(() => {
+    const NEXT_KEYS = ["ArrowDown", "PageDown", "ArrowLeft"];
+    const PREV_KEYS = ["ArrowUp", "PageUp", "ArrowRight"];
     const onKey = (e: KeyboardEvent) => {
-      if (paused || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-      const step = e.key === "ArrowLeft" ? 1 : -1;
-      changePage((pageIndex + step + PAGES.length) % PAGES.length);
+      const step = NEXT_KEYS.includes(e.key) ? 1 : PREV_KEYS.includes(e.key) ? -1 : 0;
+      if (paused || step === 0) return;
+      // مش جوه خانة كتابة - not while typing in a field
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      e.preventDefault();
+      changePage((pageIndex + step + PAGES.length) % PAGES.length, step);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -144,9 +155,34 @@ export default function Dashboard() {
   useEffect(() => {
     const seconds = PAGES[pageIndex]?.durationSeconds;
     if (paused || pinned || !autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
-    const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length), seconds * 1000);
+    const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length, 1), seconds * 1000);
     return () => clearTimeout(timer);
   }, [pageIndex, switchCount, paused, pinned, autoRotate, changePage]);
+
+  // حركة التقليب: الجديدة بتدخل من تحت (الجاية) أو من فوق (اللي فاتت)، والقديمة بتخرج عكسها وهي بتختفي.
+  // "حركة أقل" في الجهاز: من غير حركة، ظهور تدريجي بس
+  // Switch animation: the new page enters from below (next) or above (previous), the old one leaves the other
+  // way while fading. prefers-reduced-motion: no movement, the fade only
+  useEffect(() => {
+    const previous = prevPageRef.current;
+    prevPageRef.current = pageIndex;
+    if (switchCount === 0 || previous === pageIndex) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const options: KeyframeAnimationOptions = { duration: slideMs, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+    const shift = direction * slideDistance;
+    const entering = pageRefs.current[pageIndex]?.animate(
+      [{ transform: `translateY(${shift}px)` }, { transform: "translateY(0)" }],
+      options
+    );
+    const leaving = pageRefs.current[previous]?.animate(
+      [{ transform: "translateY(0)" }, { transform: `translateY(${-shift}px)` }],
+      options
+    );
+    return () => {
+      entering?.finish();
+      leaving?.finish();
+    };
+  }, [pageIndex, switchCount, direction, slideMs, slideDistance]);
 
   useEffect(() => {
     if (data && prevDataRef.current) {
@@ -338,11 +374,14 @@ export default function Dashboard() {
               return (
                 <div
                   key={page.id}
+                  ref={(el) => {
+                    pageRefs.current[index] = el;
+                  }}
                   aria-hidden={!active}
                   className={`absolute inset-0 transition-[opacity,visibility] ${
                     active ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
                   }`}
-                  style={{ transitionDuration: `${fadeMs}ms` }}
+                  style={{ transitionDuration: `${slideMs}ms` }}
                 >
                   {renderPage(page.id, data)}
                 </div>

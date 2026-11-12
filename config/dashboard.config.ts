@@ -648,8 +648,11 @@ export const dashboardConfig = {
 
     // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)
     pageNav: {
-      iconSize: 18, // حجم سهم التالي/السابق - next/previous arrow size
-      fadeMs: 500, // مدة الاختفاء/الظهور بين الصفحات بالملي ثانية - fade duration between pages (ms)
+      iconSize: 18, // حجم سهم الجاية/اللي فاتت - next/previous arrow size
+      // التقليب: الصفحة الجاية بتطلع من تحت واللي فاتت بتنزل من فوق (مع ظهور تدريجي)
+      // Page switch: the next page slides in from below, the previous one from above (with a fade)
+      slideMs: 420, // مدة الحركة بالملي ثانية - slide duration (ms)
+      slideDistance: 56, // المسافة اللي الصفحة بتتحركها بالبكسل - slide distance (px)
     },
 
     // الإضاءة الخفيفة ورا الكروت (بقع نور برتقالي وأزرق بتتحرك ببطء شديد) - soft ambient glow behind the cards
