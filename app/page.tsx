@@ -16,6 +16,7 @@ import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
 import AccountDetailsPanel from "@/components/AccountDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
+import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -104,6 +105,9 @@ export default function Dashboard() {
   // المحفظة المفتوحة (من كروت صفحة الخزن والمحافظ) - the open wallet (from the wallets page cards)
   const [wallet, setWallet] = useState<{ accountNumber: string; title: string } | null>(null);
   const closeWallet = useCallback(() => setWallet(null), []);
+  // تفاصيل كارت في أرصدة المخازن - the open stock card details
+  const [stockItem, setStockItem] = useState<StockPanelTarget | null>(null);
+  const closeStockItem = useCallback(() => setStockItem(null), []);
   // تثبيت الصفحة (محفوظ في المتصفح عشان يفضل بعد الريفرش، وقفل اللوحة مش بيلغيه)
   // Page pin, kept in localStorage so it survives a refresh (closing a panel never unpins)
   const [pinned, setPinned] = useState(false);
@@ -121,7 +125,7 @@ export default function Dashboard() {
       return next;
     });
   }, []);
-  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null;
+  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -297,7 +301,7 @@ export default function Dashboard() {
           </div>
         );
       case "stock":
-        return <StockSection data={data.stock} className="h-full min-h-0" />;
+        return <StockSection data={data.stock} className="h-full min-h-0" onOpenItem={setStockItem} />;
       case "sales":
         return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setSalesDetailsOpen} />;
       case "distributors":
@@ -400,6 +404,7 @@ export default function Dashboard() {
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
       )}
       {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
+      {stockItem && <StockDetailsPanel key={`${stockItem.group}|${stockItem.name}|${stockItem.variant ?? ""}`} target={stockItem} onClose={closeStockItem} />}
     </div>
   );
 

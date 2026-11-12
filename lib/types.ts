@@ -700,3 +700,58 @@ export interface SectionSalaries {
     daily: number; // عمال اليومية اللي ليهم يومية - daily workers with a rate
   };
 }
+
+// ===== تفاصيل صنف في أرصدة المخازن (الضغط على كارت في الصفحة 2) - stock item details (click a page 2 card) =====
+export type StockGroup = "packaged" | "sacks" | "wood" | "packaging";
+export type StockCategory = "إنتاج" | "بيع" | "تحويل" | "تسوية" | "شراء";
+
+// حركة مخزن واحدة (Stock Ledger Entry) - one stock movement
+export interface StockMove {
+  id: string;
+  postingDate: string; // "2026-11-07"
+  postingTime: string; // "14:45"
+  creation: string; // "2026-11-08 09:12" وقت التسجيل - when it was entered
+  lateDays: number; // اتسجلت بعد تاريخها بكام يوم - days entered after its posting date
+  itemCode: string;
+  warehouse: string;
+  qty: number; // + وارد / − منصرف (فرق الرصيد في المخزن ده) - + in / − out (the warehouse balance change)
+  balanceAfter: number | null; // رصيد الكارت بعدها (null = مخزن مش داخل في الرصيد) - card balance after (null = excluded warehouse)
+  inScope: boolean;
+  category: StockCategory;
+  voucherType: string;
+  voucherNo: string;
+  voucherLabel: string; // الغرض / نوع الحركة (Manufacture، بيع الي شركه التعبئة...) - purpose / entry type
+  party: string; // العميل / المورد - customer / supplier
+  van: string; // العربية (من مخزنها) - the van (from its warehouse)
+  owner: string; // اسم اللي سجّلها - who entered it
+  remarks: string;
+}
+
+export interface StockDetails {
+  group: StockGroup;
+  name: string;
+  variant: string | null;
+  variants: string[]; // الأنواع جوه الكارت - the card's variants
+  itemCodes: string[];
+  unit: string;
+  decimals: number; // تقريب رقم الكارت - the card number's rounding
+  today: string;
+  month: string; // "2026-11"
+  from: string;
+  to: string;
+  months: { month: string; count: number }[]; // الشهور اللي فيها حركات (الأحدث الأول) - months with movements
+  balance: number; // الرصيد الحالي (نفس رقم الكارت) - current balance (same as the card)
+  warehouses: { warehouse: string; qty: number; excluded: boolean }[];
+  openingBalance: number;
+  closingBalance: number;
+  totalIn: number;
+  totalOut: number;
+  byCategory: { category: StockCategory; in: number; out: number }[];
+  daily: { date: string; in: number; out: number }[];
+  // المبيعات (المنتجات والشكاير) - sales (packaged products and sacks)
+  sales: { total: number; byRep: { name: string; qty: number }[]; byCustomer: { name: string; qty: number }[] } | null;
+  // الخامات (خشب ومواد تعبئة): الاستهلاك والوارد بالمورد - raw materials: consumption and receipts by supplier
+  raw: { consumption: number; purchasesTotal: number; bySupplier: { name: string; qty: number }[] } | null;
+  moves: StockMove[]; // الأحدث الأول - newest first
+  erpUrl: string;
+}

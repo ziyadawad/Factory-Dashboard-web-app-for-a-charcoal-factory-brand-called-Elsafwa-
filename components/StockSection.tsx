@@ -1,7 +1,8 @@
 "use client";
 
 import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PackagingItem, Stock, StockVariant, WoodType } from "@/lib/types";
+import { PackagingItem, Stock, StockGroup, StockVariant, WoodType } from "@/lib/types";
+import type { StockPanelTarget } from "./StockDetailsPanel";
 import { AlertTriangle, Box, Cylinder, Disc3, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { useFitFontSize } from "@/lib/useFitFontSize";
@@ -31,6 +32,8 @@ function withAlpha(hex: string, alpha: number) {
 interface StockSectionProps {
   data: Stock;
   className?: string;
+  // الضغط على كارت (أو رقم نوع جواه) يفتح تفاصيله - clicking a card (or a variant number in it) opens its details
+  onOpenItem?: (target: StockPanelTarget) => void;
 }
 
 // الرقم ناقص لما يكون أقل من الحد الأدنى بتاعه (config/stock-min.ts) - بالحد 0 بس الرصيد السالب
@@ -141,10 +144,12 @@ function VariantColumn({
   variant,
   numberFontSize,
   onOverflow,
+  onOpen,
 }: {
   variant: StockVariant;
   numberFontSize: number;
   onOverflow: (fontSize: number) => void;
+  onOpen?: () => void; // الضغط على النوع ده بس - clicking this variant only
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const low = isLow(variant);
@@ -164,8 +169,16 @@ function VariantColumn({
 
   return (
     <div
-      className="min-w-0 overflow-hidden grid gap-1 px-1 first:pr-0 last:pl-0"
+      className={`min-w-0 overflow-hidden grid gap-1 px-1 first:pr-0 last:pl-0 ${onOpen ? "cursor-pointer rounded-md hover:bg-white/5" : ""}`}
       style={{ gridTemplateRows: "auto auto auto", containerType: "inline-size" }}
+      onClick={
+        onOpen
+          ? (e) => {
+              e.stopPropagation();
+              onOpen();
+            }
+          : undefined
+      }
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
         <span
@@ -229,7 +242,9 @@ function VariantsCard({
   showTotal = true,
   showTotalUnit = false,
   totalMinimum = 0,
+  onOpen,
 }: {
+  onOpen?: (variant: string | null) => void; // null = الكارت كله - null = the whole card
   name: string;
   unit: string;
   variants: StockVariant[];
@@ -302,7 +317,10 @@ function VariantsCard({
   return (
     // ناقص: إطار أحمر ولمعة حمرا خفيفة بتنبض بهدوء - low: red border with a soft, slowly pulsing red glow
     <div
-      className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${anyLow ? "border-statusRed animate-low-stock" : ""}`}
+      onClick={onOpen ? () => onOpen(null) : undefined}
+      className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${anyLow ? "border-statusRed animate-low-stock" : ""} ${
+        onOpen ? "cursor-pointer transition-colors hover:bg-white/[0.03]" : ""
+      }`}
       style={{
         gridTemplateRows: showTotal ? "auto 1fr auto" : "auto 1fr",
         ...(anyLow ? {} : { borderColor: withAlpha(accent, 0.3) }),
@@ -348,7 +366,13 @@ function VariantsCard({
             style={{ gridTemplateColumns: `repeat(${variants.length}, minmax(0, 1fr))` }}
           >
             {variants.map((variant, index) => (
-              <VariantColumn key={index} variant={variant} numberFontSize={numberFontSize} onOverflow={shrinkNumber} />
+              <VariantColumn
+                key={index}
+                variant={variant}
+                numberFontSize={numberFontSize}
+                onOverflow={shrinkNumber}
+                onOpen={onOpen ? () => onOpen(variant.label) : undefined}
+              />
             ))}
           </div>
         )}
@@ -480,7 +504,29 @@ function SubGroup({
   );
 }
 
-export default function StockSection({ data, className }: StockSectionProps) {
+// بيانات اللوحة من الكارت: الأنواع وحالة النقص (نفس قواعد الكارت) - panel target from a card: variants and low state
+function panelTarget(
+  group: StockGroup,
+  name: string,
+  unit: string,
+  variants: StockVariant[],
+  named: boolean,
+  totalLow: boolean,
+  extra: { image?: string; icon?: string } = {}
+): Omit<StockPanelTarget, "variant"> {
+  const variantLows = Object.fromEntries(variants.map((v) => [v.label, isLow(v)]));
+  return {
+    group,
+    name,
+    unit,
+    variants: named ? variants.map((v) => v.label) : [],
+    // الكارت كله ناقص زي شارة "محتاج نزوّد" - the whole card is low like its badge
+    low: { total: totalLow || variants.some(isLow), variants: variantLows },
+    ...extra,
+  };
+}
+
+export default function StockSection({ data, className, onOpenItem }: StockSectionProps) {
   const sizes = dashboardConfig.sizes.stockPage;
   const totalSizes = dashboardConfig.sizes.page2;
   const colors = dashboardConfig.page2.colors;
@@ -517,6 +563,15 @@ export default function StockSection({ data, className }: StockSectionProps) {
               variants={product.variants}
               accent={colors.packaged}
               totalMinimum={product.minimumThreshold}
+              onOpen={
+                onOpenItem &&
+                ((variant) =>
+                  onOpenItem({
+                    ...panelTarget("packaged", product.name, product.unit, product.variants, true,
+                      isBelow(sumQuantities(product.variants), product.minimumThreshold), { image: product.image }),
+                    variant,
+                  }))
+              }
             />
           ))}
         </SectionCard>
@@ -531,6 +586,15 @@ export default function StockSection({ data, className }: StockSectionProps) {
               variants={sack.variants}
               accent={colors.sacks}
               totalMinimum={sack.minimumThreshold}
+              onOpen={
+                onOpenItem &&
+                ((variant) =>
+                  onOpenItem({
+                    ...panelTarget("sacks", sack.name, sack.unit, sack.variants, true,
+                      isBelow(sumQuantities(sack.variants), sack.minimumThreshold)),
+                    variant,
+                  }))
+              }
             />
           ))}
         </SectionCard>
@@ -576,6 +640,16 @@ export default function StockSection({ data, className }: StockSectionProps) {
               showTotalUnit
               totalMinimum={type.subTypes ? type.minimumThreshold : undefined}
               numberFontSize={type.subTypes ? sizes.subTypeNumberFontSize : undefined}
+              onOpen={
+                onOpenItem &&
+                ((variant) =>
+                  onOpenItem({
+                    ...panelTarget("wood", type.name, wood.unit, woodVariants(type), !!type.subTypes,
+                      !!type.subTypes && isBelow(sumQuantities(woodVariants(type)), type.minimumThreshold ?? 0)),
+                    // نوع الخشب العادي ملوش أنواع - a single wood type has no variants
+                    variant: type.subTypes ? variant : null,
+                  }))
+              }
             />
           ))}
         </SubGroup>
@@ -594,6 +668,14 @@ export default function StockSection({ data, className }: StockSectionProps) {
                 variants={packagingVariants(item)}
                 accent={colors.rawMaterials}
                 showTotal={false}
+                onOpen={
+                  onOpenItem &&
+                  (() =>
+                    onOpenItem({
+                      ...panelTarget("packaging", item.name, item.unit, packagingVariants(item), false, false, { icon: item.icon }),
+                      variant: null,
+                    }))
+                }
               />
             );
           })}

@@ -93,7 +93,7 @@ async function accountName(accountNumber: string): Promise<string> {
 export class UnknownAccountError extends Error {}
 
 // إيميل ← الاسم الكامل (User.full_name)، ولو مش متاح الإيميل نفسه - email -> full name, or the email itself
-async function fullNames(owners: string[]): Promise<Map<string, string>> {
+export async function fullNames(owners: string[]): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   if (owners.length === 0) return names;
   try {
