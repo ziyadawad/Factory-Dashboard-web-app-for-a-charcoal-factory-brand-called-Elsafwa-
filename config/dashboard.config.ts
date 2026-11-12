@@ -58,7 +58,15 @@ export const dashboardConfig = {
       "محمد عبدالمقصود محمد": "fixed", // محمد عبدالمقصود محمد - سواق (كود 1046)
       "فضل عمرو فضل": "default_present", // فضل عمرو فضل
       "HR-EMP-00191": "default_present", // صلاح محمد عبد الرحمن
+      "إسماعيل السيد إسماعيل": "fixed", // الحاج أشرف عوض — رئيس مجلس الإدارة
     } as Record<string, "fixed" | "default_present">,
+    // اسم العرض بدل اسم ERPNext (Employee ID ← الاسم) في الكروت واللوحات والمرتبات وكشف الإكسيل.
+    // لوحة التفاصيل بتكتب اسم ERPNext تحته في سطر صغير
+    // Display name instead of the ERPNext name (Employee ID -> name) on cards, panels, salaries and the Excel sheet;
+    // the details panel shows the ERPNext name under it in a small line
+    displayNames: {
+      "إسماعيل السيد إسماعيل": "الحاج أشرف عوض", // الحاج أشرف عوض — رئيس مجلس الإدارة
+    } as Record<string, string>,
     // مستبعدين من الحضور خالص (مش حاضر ولا غائب ولا في أي إجمالي) - اكتب Employee ID من ERPNext
     // Excluded from attendance entirely (not present, not absent, in no total) - ERPNext Employee IDs
     excludedEmployees: [

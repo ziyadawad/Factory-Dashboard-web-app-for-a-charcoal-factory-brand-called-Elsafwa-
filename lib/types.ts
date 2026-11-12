@@ -300,7 +300,8 @@ export interface EmployeeDay {
 export interface EmployeeAttendance {
   id: string; // Employee ID
   code: string | null; // كود البصمة - attendance_device_id
-  name: string; // الاسم الكامل - full name
+  name: string; // الاسم الكامل (أو اسم العرض من الكونفج) - full name (or the config display name)
+  erpName?: string; // اسم ERPNext لو اسم العرض مختلف - the ERPNext name when a display name overrides it
   section: string; // اسم القسم - section label
   today: PersonStatus; // نفس حالة الكارت - same status as the card
   todayFirstPunch: string | null;

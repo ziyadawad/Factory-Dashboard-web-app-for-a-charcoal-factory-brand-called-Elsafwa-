@@ -124,7 +124,10 @@ function SectionList({ data, onPick }: { data: AttendanceDetails; onPick: (id: s
             </td>
             <td className="px-3 border-b border-cardBorder/60 text-white font-semibold">
               <span className="inline-flex items-center gap-1.5">
-                {person.name}
+                <span>
+                  {person.name}
+                  {person.erpName && <span className="block text-[12px] font-normal text-gray-400">{person.erpName}</span>}
+                </span>
                 <ChevronLeft size={16} className="text-gray-600" />
               </span>
             </td>
@@ -622,7 +625,10 @@ function NameCells({ person }: { person: EmployeeAttendance }) {
       </td>
       <td className="px-3 border-b border-cardBorder/60 text-white font-semibold">
         <span className="inline-flex items-center gap-1.5">
-          {person.name}
+          <span>
+            {person.name}
+            {person.erpName && <span className="block text-[12px] font-normal text-gray-400">{person.erpName}</span>}
+          </span>
           <ChevronLeft size={16} className="text-gray-600" />
         </span>
       </td>
@@ -923,6 +929,8 @@ function EmployeeView({
         <div className="flex flex-col gap-4 text-[17px]">
           <div>
             <h3 className="text-[26px] font-extrabold text-white leading-[1.6]">{person.name}</h3>
+            {/* اسمه في ERPNext لو اسم العرض مختلف - his ERPNext name when the display name differs */}
+            {person.erpName && <p className="text-[14px] text-gray-400 -mt-1 mb-1">{person.erpName}</p>}
             {info("كود البصمة", person.code, true)}
             {info("Employee ID", person.id, true)}
             {info("القسم", person.section)}

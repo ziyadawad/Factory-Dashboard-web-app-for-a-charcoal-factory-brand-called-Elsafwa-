@@ -141,6 +141,16 @@ export function branchSection(branch: string | null | undefined): AttendanceSect
   return undefined;
 }
 
+// اسم العرض من الكونفج (null = اسم ERPNext) - the config display name (null = the ERPNext name)
+export function displayNameOf(id: string): string | null {
+  return dashboardConfig.attendance.displayNames[id] ?? null;
+}
+
+// اسم الكارت: اسم العرض كامل، وإلا أول اسمين من اسم ERPNext - card name: the full display name, else two words
+function cardName(id: string, erpName: string | null | undefined) {
+  return displayNameOf(id) ?? shortName(erpName || id);
+}
+
 // خارج البصمة: الطريقة لموظف (null = على البصمة) - the outside-the-biometric mode of an employee
 export function outsideMode(id: string): "fixed" | "default_present" | null {
   return dashboardConfig.attendance.outsideBiometric[id] ?? null;
@@ -177,7 +187,7 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     if (!mode || placed.has(employee.name)) continue;
     placed.add(employee.name);
     const status = outsideStatus(mode, marks.get(employee.name));
-    result.outside.push({ id: employee.name, name: shortName(employee.employee_name || employee.name), status });
+    result.outside.push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status });
   }
   for (const employee of rows.employees) {
     if (placed.has(employee.name)) continue;
@@ -191,13 +201,13 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     const target = key ?? (status === "present" ? "daily" : undefined);
     if (!target) continue;
     placed.add(employee.name);
-    result[target].push({ id: employee.name, name: shortName(employee.employee_name || employee.name), status });
+    result[target].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status });
   }
   // حاضر النهارده بس مش في قايمة الـ Active - present today but not in the Active list
   const attendanceNames = new Map(rows.attendance.map((record) => [record.employee, record.employee_name]));
   for (const [id, status] of Array.from(statuses)) {
     if (status !== "present" || placed.has(id)) continue;
-    result.daily.push({ id, name: shortName(attendanceNames.get(id) || id), status });
+    result.daily.push({ id, name: cardName(id, attendanceNames.get(id)), status });
   }
   return result;
 }

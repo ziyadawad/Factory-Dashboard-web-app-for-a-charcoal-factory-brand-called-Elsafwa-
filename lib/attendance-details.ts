@@ -3,7 +3,7 @@
 // قراية بس من ERPNext - read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpGet, erpToday } from "./erp";
-import { AttendanceSectionKey, TodayAttendanceRows, employeeStatuses, outsideMode, outsideStatus, splitBySection } from "./data-source";
+import { AttendanceSectionKey, TodayAttendanceRows, displayNameOf, employeeStatuses, outsideMode, outsideStatus, splitBySection } from "./data-source";
 import { toEnglishDigits } from "./format";
 import { AttendanceDetails, DayStatus, EmployeeAttendance, EmployeeDay } from "./types";
 
@@ -199,12 +199,16 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
     };
     const days = dates.map(dayFor);
     const count = (status: DayStatus) => days.filter((d) => d.status === status).length;
+    const erpName = toEnglishDigits(employee?.employee_name || attendanceNames.get(person.id) || person.id)
+      .replace(/\s+/g, " ")
+      .trim();
+    const displayName = displayNameOf(person.id);
     return {
       id: person.id,
       code: employee?.attendance_device_id ? toEnglishDigits(String(employee.attendance_device_id)).trim() : null,
-      name: toEnglishDigits(employee?.employee_name || attendanceNames.get(person.id) || person.id)
-        .replace(/\s+/g, " ")
-        .trim(),
+      // اسم العرض من الكونفج لو موجود (واسم ERPNext في erpName) - the config display name if any (ERPNext name in erpName)
+      name: displayName ?? erpName,
+      ...(displayName && displayName !== erpName ? { erpName } : {}),
       section: config.sections[key].label,
       today: outsideMode(person.id) ? person.status : todayStatuses.get(person.id) ?? person.status,
       todayFirstPunch: firstPunch.get(`${person.id}|${today}`) ?? null,
