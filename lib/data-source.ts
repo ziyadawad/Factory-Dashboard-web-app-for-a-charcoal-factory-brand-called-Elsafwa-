@@ -1,6 +1,6 @@
 import {
-  BatchCounts,
   Batches,
+  BatchTypeCount,
   Charity,
   CharityFund,
   CharityOperation,
@@ -245,17 +245,56 @@ function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
 
 type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
 
-// charcoal_type في Kiln Exit ← نوع الطرحة (بنقبل كذا طريقة كتابة) - charcoal_type -> type (a few spellings)
-const CHARCOAL_TYPES: Record<string, keyof BatchCounts> = {
-  برتقال: "orange",
-  مانجا: "mango",
-  مانجو: "mango",
-  جازورينا: "casuarina",
-  كازوارينا: "casuarina",
-  كازورينا: "casuarina",
-};
+type KilnExitRow = { name: string; kiln: string | null; exit_time: string | null } & Record<string, string | null>;
 
-type KilnExitRow = { name: string; charcoal_type: string | null; kiln: string | null; exit_time: string | null };
+// خيارات حقل النوع من الـ DocType (كاش optionsCacheMinutes، ولو فشل آخر خيارات نجحت أو [])
+// The type field's options from the DocType (cached optionsCacheMinutes; on failure the last good ones or [])
+let typeOptionsCache: { at: number; options: string[] } | null = null;
+async function batchTypeOptions(mapping: BatchesMapping): Promise<string[]> {
+  const maxAge = mapping.optionsCacheMinutes * 60_000;
+  if (typeOptionsCache && Date.now() - typeOptionsCache.at < maxAge) return typeOptionsCache.options;
+  try {
+    const body = await erpGet<{ docs?: { fields?: { fieldname: string; options?: string | null }[] }[] }>(
+      "/api/method/frappe.desk.form.load.getdoctype",
+      { doctype: mapping.exitsDoctype }
+    );
+    const field = body.docs?.[0]?.fields?.find((f) => f.fieldname === mapping.typeField);
+    const options = (field?.options ?? "").split("\n").map((o) => o.trim()).filter(Boolean);
+    typeOptionsCache = { at: Date.now(), options };
+    return options;
+  } catch (error) {
+    console.error("[erp] batches: could not read the type options:", error instanceof Error ? error.message : error);
+    return typeOptionsCache?.options ?? [];
+  }
+}
+
+// الأنواع بالترتيب: المعروفة (بترتيب الكونفج ولونها) اللي في خيارات ERPNext، وبعدها الجديدة بـ defaultTypeColor.
+// لو الخيارات مش متاحة: أنواع الكونفج كلها. resolve بيرجع النوع لأي كتابة (ولو جديد بيضيفه في الآخر)
+// Types in order: the known ones (config order and color) that are among the ERPNext options, then new ones in
+// defaultTypeColor. Without options: every config type. resolve() maps any spelling to its type (appending new ones)
+function batchTypeList(mapping: ConfigErpBatches, options: string[]) {
+  const known = mapping.types.map((t) => ({
+    label: t.label,
+    color: t.color,
+    names: [t.label, ...(t.aliases ?? [])].map(normalizeArabic),
+  }));
+  const findKnown = (raw: string) => known.find((t) => t.names.includes(normalizeArabic(raw)));
+  const optionKeys = new Set(options.map((o) => normalizeArabic(findKnown(o)?.label ?? o)));
+  const types: BatchTypeCount[] = (options.length ? known.filter((t) => optionKeys.has(normalizeArabic(t.label))) : known)
+    .map((t) => ({ label: t.label, color: t.color, count: 0 }));
+  const resolve = (raw: string): BatchTypeCount => {
+    const match = findKnown(raw);
+    const label = match?.label ?? raw;
+    let type = types.find((t) => normalizeArabic(t.label) === normalizeArabic(label));
+    if (!type) {
+      type = { label, color: match?.color ?? mapping.defaultTypeColor, count: 0 };
+      types.push(type);
+    }
+    return type;
+  };
+  options.forEach(resolve);
+  return { types, resolve };
+}
 
 // الطرحات: سجلات Kiln Exit اللي exit_time بتاعها النهارده (فبتتصفر لوحدها كل يوم)
 // exit_time بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
@@ -267,7 +306,7 @@ async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
   const { data: rows } = await erpGet<{ data: KilnExitRow[] }>(
     `/api/resource/${encodeURIComponent(mapping.exitsDoctype)}`,
     {
-      fields: JSON.stringify(["name", "charcoal_type", "kiln", "exit_time"]),
+      fields: JSON.stringify(["name", mapping.typeField, "kiln", "exit_time"]),
       filters: JSON.stringify([
         ["exit_time", ">=", `${today} 00:00:00`],
         ["exit_time", "<=", `${today} 23:59:59`],
@@ -278,21 +317,22 @@ async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
     }
   );
 
-  const out: BatchCounts = { orange: 0, mango: 0, casuarina: 0 };
+  const { types, resolve } = batchTypeList(mapping, await batchTypeOptions(mapping));
   const exits = rows.map((row) => {
-    const typeLabel = (row.charcoal_type ?? "").trim();
-    const type = CHARCOAL_TYPES[typeLabel] ?? null;
-    if (type) out[type] += 1;
-    else console.error(`[erp] batches: ${row.name} has an unknown charcoal_type ${JSON.stringify(row.charcoal_type)}`);
+    const raw = (row[mapping.typeField] ?? "").trim();
+    // النوع الفاضي مش بيتعد في أي نوع - an empty type counts in no type
+    const type = raw ? resolve(raw) : null;
+    if (type) type.count += 1;
+    else console.error(`[erp] batches: ${row.name} has no ${mapping.typeField}`);
     return {
       id: row.name,
       time: String(row.exit_time ?? "").slice(11, 16), // "2026-10-27 10:45:12" -> "10:45"
       kiln: (row.kiln ?? "").trim(),
-      type,
-      typeLabel,
+      typeLabel: type?.label ?? "",
+      color: type?.color ?? null,
     };
   });
-  return { out, exits, offline: false };
+  return { types, exits, offline: false };
 }
 
 // آخر نتيجة نجحت للطرحات ويومها - last good batches result and the day it was loaded
@@ -304,7 +344,7 @@ let lastGoodBatches: { day: string; value: Batches } | null = null;
 // Yesterday's result is never shown because the exits reset daily
 async function batchesSection(results: ErpStatus[]): Promise<Batches | null> {
   const mapping = dashboardConfig.erp.batches;
-  if (mapping.source !== "erp") return { ...dashboardConfig.data.batches, exits: [], offline: false };
+  if (mapping.source !== "erp") return { types: batchTypeList(mapping, []).types, exits: [], offline: false };
   try {
     const value = await loadBatches(mapping as BatchesMapping);
     lastGoodBatches = { day: erpToday(), value };

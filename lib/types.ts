@@ -185,11 +185,12 @@ export interface AccountDetails {
   moves: AccountMove[]; // الأحدث الأول - newest first
 }
 
-// عدد الطرحات لكل نوع خشب - batch count per wood type; totals are calculated in the UI
-export interface BatchCounts {
-  orange: number; // برتقال
-  mango: number; // مانجا
-  casuarina: number; // جازورينا
+// نوع خشب وعدد طرحاته النهارده (الأنواع من خيارات charcoal_type في Kiln Exit) - الإجمالي بيتحسب في الواجهة
+// A wood type and today's batch count (types come from the Kiln Exit charcoal_type options); totals in the UI
+export interface BatchTypeCount {
+  label: string; // "برتقال"
+  color: string; // "#FF7A00"
+  count: number;
 }
 
 // طرحة خرجت النهارده (سجل Kiln Exit) - one batch that left a kiln today (a Kiln Exit record)
@@ -197,16 +198,16 @@ export interface BatchExit {
   id: string;
   time: string; // "10:45" بتوقيت القاهرة - Cairo time
   kiln: string; // "فرن 3"
-  type: keyof BatchCounts | null; // null = نوع مش معروف - unknown charcoal type
-  typeLabel: string; // زي ما هو في ERPNext - as written in ERPNext
+  typeLabel: string; // النوع (اسمه في الكونفج لو معروف، وإلا زي ما هو في ERPNext) - config name if known, else as in ERPNext
+  color: string | null; // null = النوع فاضي - empty type
 }
 
-// out = خروج طرحات النهارده (من exits)، exits = طرحات النهارده الأحدث الأول
+// types = خروج طرحات النهارده لكل نوع بالترتيب، exits = طرحات النهارده الأحدث الأول
 // offline = ERPNext مش بيرد والأرقام دي آخر نتيجة نجحت
-// out = today's exits per type, exits = today's exits newest first,
+// types = today's exits per type in order, exits = today's exits newest first,
 // offline = ERPNext failed and these are the last good values
 export interface Batches {
-  out: BatchCounts;
+  types: BatchTypeCount[];
   exits: BatchExit[];
   offline: boolean;
 }
@@ -462,13 +463,18 @@ export type ConfigErpField = { source: "manual" } | { source: "erp"; account: st
 // قسم كامل من ERPNext ولا يدوي - a whole section from ERPNext or manual
 export type ConfigErpSource = { source: "erp" | "manual" };
 
+// نوع خشب معروف: الاسم، أسامي تانية بيتكتب بيها، ولونه - a known wood type: name, other spellings, color
+export type ConfigBatchType = { label: string; aliases?: string[]; color: string };
+
 // الطرحات: exitsDoctype = سجل لكل طرحة خرجت - Batches: exitsDoctype = one record per batch out
-export type ConfigErpBatches =
+export type ConfigErpBatches = (
   | { source: "manual" }
   | {
       source: "erp";
       exitsDoctype: string;
-    };
+      typeField: string; // حقل النوع (Select) - the type field (Select)
+    }
+) & { types: ConfigBatchType[]; defaultTypeColor: string; optionsCacheMinutes: number };
 
 // الصدقات: doctype = سجل لكل عملية، funds = الصناديق بالترتيب - Charity: one record per operation, funds in order
 export type ConfigErpCharity = { doctype: string; funds: string[] };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BatchCounts, BatchExit, Batches } from "@/lib/types";
+import { BatchExit, BatchTypeCount, Batches } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
@@ -10,39 +10,48 @@ interface BatchesSectionProps {
   data: Batches | null; // null = ERPNext مش بيرد ومفيش نتيجة قديمة - ERPNext down with no last good result
 }
 
-// الأنواع بالترتيب ولون كل نوع - wood types in order, with each one's color
-const TYPES: { key: keyof BatchCounts; label: string; text: string; border: string; tint: string; dot: string }[] = [
-  { key: "orange", label: "برتقال", text: "text-brandOrange", border: "border-brandOrange/40", tint: "bg-brandOrange/10", dot: "bg-brandOrange" },
-  { key: "mango", label: "مانجا", text: "text-brandYellow", border: "border-brandYellow/40", tint: "bg-brandYellow/10", dot: "bg-brandYellow" },
-  { key: "casuarina", label: "جازورينا", text: "text-statusGreen", border: "border-statusGreen/40", tint: "bg-statusGreen/10", dot: "bg-statusGreen" },
-];
+// لون النوع بشفافية (hex + alpha) - the type color with transparency (hex + alpha)
+const withAlpha = (hex: string, alpha: number) =>
+  `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
 
-// 3 مربعات ملونة + الإجمالي، والصفر رمادي - 3 colored tiles + total; zeros are gray
-function CountTiles({ counts }: { counts: BatchCounts }) {
+// مربع ملون لكل نوع (بترتيب الأنواع من ERPNext) + الإجمالي، والصفر رمادي
+// A colored tile per type (in the ERPNext type order) + the total; zeros are gray
+function CountTiles({ types }: { types: BatchTypeCount[] }) {
   const sizes = dashboardConfig.sizes.batches;
-  const total = counts.orange + counts.mango + counts.casuarina;
+  const total = types.reduce((sum, t) => sum + t.count, 0);
+  // كل ما الأنواع تزيد الرقم بيصغر شوية عشان الصف يفضل واخد مكانه - more types: a bit smaller numbers so the row fits
+  const scale = types.length > 3 ? 3 / types.length + 0.15 : 1;
 
-  const tile = (key: string, label: string, value: number, text: string, border: string, tint: string) => (
+  const tile = (key: string, label: string, value: number, color: string | null) => (
     <div
       key={key}
       className={`rounded-xl border flex flex-col items-center justify-center py-1.5 min-w-0 ${
-        value === 0 ? "border-cardBorder bg-background" : `${border} ${tint}`
+        value === 0 ? "border-cardBorder bg-background" : color ? "" : "border-white/25 bg-white/5"
       }`}
+      style={value !== 0 && color ? { borderColor: withAlpha(color, 0.4), backgroundColor: withAlpha(color, 0.1) } : undefined}
     >
       <p
-        className={`font-bold tabular-nums leading-tight ${value === 0 ? "text-gray-500" : text}`}
-        style={{ fontSize: `${key === "total" ? sizes.totalFontSize : sizes.tileFontSize}px` }}
+        className={`font-bold tabular-nums leading-tight ${value === 0 ? "text-gray-500" : color ? "" : "text-white"}`}
+        style={{
+          fontSize: `${Math.round((key === "total" ? sizes.totalFontSize : sizes.tileFontSize) * scale)}px`,
+          color: value !== 0 && color ? color : undefined,
+        }}
       >
         {formatNumber(value)}
       </p>
-      <p className={`text-xs font-semibold ${value === 0 ? "text-gray-500" : text}`}>{label}</p>
+      <p
+        className={`${types.length > 3 ? "text-[10px]" : "text-xs"} font-semibold max-w-full truncate ${value === 0 ? "text-gray-500" : color ? "" : "text-white"}`}
+        style={{ color: value !== 0 && color ? color : undefined }}
+      >
+        {label}
+      </p>
     </div>
   );
 
   return (
-    <div className="grid grid-cols-4 gap-2 shrink-0">
-      {TYPES.map((type) => tile(type.key, type.label, counts[type.key], type.text, type.border, type.tint))}
-      {tile("total", "الإجمالي", total, "text-white", "border-white/25", "bg-white/5")}
+    <div className="grid gap-1.5 shrink-0" style={{ gridTemplateColumns: `repeat(${types.length + 1}, minmax(0,1fr))` }}>
+      {types.map((type) => tile(`type-${type.label}`, type.label, type.count, type.color))}
+      {tile("total", "الإجمالي", total, null)}
     </div>
   );
 }
@@ -77,7 +86,6 @@ function ExitList({ exits }: { exits: BatchExit[] }) {
         </div>
       )}
       {exits.slice(0, shown).map((exit) => {
-        const type = TYPES.find((t) => t.key === exit.type);
         return (
           <div
             key={exit.id}
@@ -90,9 +98,15 @@ function ExitList({ exits }: { exits: BatchExit[] }) {
             <span className="px-2 rounded-md bg-white/10 text-white font-semibold whitespace-nowrap shrink-0 leading-6">
               {toEnglishDigits(exit.kiln || "—")}
             </span>
-            <span className={`flex items-center gap-1.5 min-w-0 font-semibold ${type?.text ?? "text-gray-400"}`}>
-              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${type?.dot ?? "bg-gray-500"}`} />
-              <span className="truncate">{type?.label ?? (exit.typeLabel || "غير محدد")}</span>
+            <span
+              className={`flex items-center gap-1.5 min-w-0 font-semibold ${exit.color ? "" : "text-gray-400"}`}
+              style={{ color: exit.color ?? undefined }}
+            >
+              <span
+                className={`w-2.5 h-2.5 rounded-full shrink-0 ${exit.color ? "" : "bg-gray-500"}`}
+                style={{ backgroundColor: exit.color ?? undefined }}
+              />
+              <span className="truncate">{exit.typeLabel || "غير محدد"}</span>
             </span>
           </div>
         );
@@ -120,7 +134,8 @@ export default function BatchesSection({ data }: BatchesSectionProps) {
       {data ? (
         <section className="flex-1 min-h-0 flex flex-col gap-2">
           <h3 className="text-gray-300 font-bold text-sm shrink-0">خروج طرحات</h3>
-          <CountTiles counts={data.out} />
+          {/* types ممكن تكون ناقصة في نسخة قديمة محفوظة في المتصفح - may be missing in an old browser copy */}
+          <CountTiles types={data.types ?? []} />
           <ExitList exits={data.exits} />
         </section>
       ) : (

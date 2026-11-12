@@ -2,7 +2,6 @@
 // Dashboard settings file - edit the numbers here to change the dashboard appearance
 
 import type {
-  Batches,
   ConfigKiln,
   ConfigPackagedProduct,
   ConfigPackagingItem,
@@ -224,6 +223,19 @@ export const dashboardConfig = {
     batches: {
       source: "erp",
       exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
+      typeField: "charcoal_type", // نوع الفحم (Select) - the charcoal type field
+      // الأنواع بتتقري من خيارات charcoal_type في الـ DocType نفسه، فأي نوع جديد بيظهر لوحده بـ defaultTypeColor
+      // واللي هنا بيحدد الترتيب واللون للأنواع المعروفة (الأسامي بتتطابق بعد توحيد الحروف: ة = ه، أ = ا ...)
+      // Types are read from the DocType's charcoal_type options, so a new option shows up on its own with
+      // defaultTypeColor; this list sets the order and color of the known ones (names matched after normalizing)
+      types: [
+        { label: "برتقال", color: "#FF7A00" },
+        { label: "مانجا", aliases: ["مانجو"], color: "#FFC107" },
+        { label: "جازورينا", aliases: ["كازوارينا", "كازورينا"], color: "#22C55E" },
+        { label: "جوافة", color: "#E8505B" },
+      ],
+      defaultTypeColor: "#38BDF8", // لون أي نوع جديد مش في القايمة - color of any new type not listed
+      optionsCacheMinutes: 10, // كل قد ايه نقرا خيارات النوع من ERPNext - how often to re-read the options
     } as ConfigErpBatches,
 
     // الصدقات (الصفحة 3) - كل حاجة بتتحدث كل refreshSeconds
@@ -485,13 +497,6 @@ export const dashboardConfig = {
       { name: "فرن 6", status: "stopped" as const },
     ] as ConfigKiln[],
 
-    // الطرحات اليوم (تحت الأفران في الصفحة الرئيسية) - بتُستخدم بس لو erp.batches يدوي (source: "manual")
-    // Today's batches (under the kilns card) - used only when erp.batches is manual
-    // الإجمالي بيتحسب لوحده - totals are calculated automatically
-    batches: {
-      out: { orange: 0, mango: 0, casuarina: 0 }, // خروج طرحات: برتقال / مانجا / جازورينا
-    } as Pick<Batches, "out">,
-
     // ============================================================
     // رصيد المخازن (الصفحة 2) - المنتجات المعبأة والشكاير والمواد الخام (الخشب ومواد التعبئة)
     // Stock (page 2) - packaged products, sacks and raw materials (wood + packaging)
@@ -736,7 +741,7 @@ export const dashboardConfig = {
     // الطرحات اليوم - بطاقة الطرحات تحت الأفران
     // Today's batches - batches card under the kilns
     batches: {
-      tileFontSize: 30, // حجم رقم كل نوع (برتقال / مانجا / جازورينا) - per-type number font size
+      tileFontSize: 30, // حجم رقم كل نوع (برتقال / مانجا / جازورينا / جوافة) - per-type number font size
       totalFontSize: 30, // حجم رقم الإجمالي - total number font size
       exitRowHeight: 30, // ارتفاع كل سطر في قايمة الطرحات اللي خرجت (أصغر = سطور أكتر) - exit list row height (px)
       exitFontSize: 14, // حجم الكلام في قايمة الطرحات اللي خرجت - exit list font size
