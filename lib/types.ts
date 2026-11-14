@@ -154,6 +154,25 @@ export interface AccountMove {
   voucherType: string;
   voucherNo: string;
   owner: string; // اسم اللي سجّلها - full name of who entered it
+  out: MoveOut | null; // المنصرف: لمين وليه - an outgoing move: for whom and why
+}
+
+// منصرف: لمين وليه (من الطرف التاني في نفس المستند) - an outgoing move: who it was for and why (the voucher's other side)
+export interface MoveOut {
+  category: "employee" | "supplier" | "expense" | "other"; // تشيبس الفلتر - the filter chips
+  kind: string; // "سلفة" / "مرتب" / "يومية" / "إضافي" / "عهدة" / "مصروف" / "صرف لموظف" / "مورد" / "عميل"
+  employee: string | null; // ID الموظف - the employee ID
+  name: string; // اسم الموظف أو الطرف - the employee or party name
+  account: string; // الحساب (أو الحسابات) - the account(s)
+  // سلفة: مربوطة بإيه (Loan بيتخصم من المرتب، تسوية مرتب، Employee Advance) - what an advance is tied to
+  link: "loan" | "adjustment" | "employee_advance" | null;
+  warn: boolean; // ⚠ سلفة مش متسجلة على المرتب - an advance not recorded against the salary
+}
+
+// سلف الشهر لكل موظف (من منصرف الحساب) - this month's advances per employee (from the account's outgoing moves)
+export interface AdvanceSummary {
+  total: number;
+  people: { employee: string; name: string; amount: number; count: number }[];
 }
 
 // شهر فيه حركات - a month that has movements
@@ -183,6 +202,7 @@ export interface AccountDetails {
   lastEntry: { creation: string; createdAt: number; owner: string } | null; // آخر تسجيل (بالـ creation)
   erpUrl: string; // عشان لينك "افتح في ERPNext" - for the "open in ERPNext" link
   moves: AccountMove[]; // الأحدث الأول - newest first
+  advances: AdvanceSummary; // سلف الشهر (monthStart → to) - this month's advances
 }
 
 // نوع خشب وعدد طرحاته النهارده (الأنواع من خيارات charcoal_type في Kiln Exit) - الإجمالي بيتحسب في الواجهة
@@ -607,7 +627,7 @@ export interface DailyWeekDay {
   worked: number;
 }
 
-// أسبوع عامل يومية (السبت → الجمعة): total = أيام × اليومية + إضافي − خصومات + مكافآت
+// أسبوع عامل يومية (السبت → الجمعة): total = أيام × اليومية + إضافي + مكافآت − خصومات − سلف
 // A daily worker's week (Saturday → Friday): total = days × rate + overtime − deductions + bonuses
 export interface DailyWeek {
   start: string;
@@ -616,9 +636,14 @@ export interface DailyWeek {
   presentDays: number;
   pay: number; // أيام × اليومية - days × rate
   overtime: number;
-  deductions: number;
+  overtimeHours: number;
+  deductions: number; // الخصومات بس (من غير السلف) - deductions only (advances apart)
+  advances: number; // السلف اللي تاريخها في الأسبوع - advances dated in the week
   bonuses: number;
+  // = pay + overtime + bonuses − deductions − advances
   total: number;
+  // بنود الأسبوع بتواريخها (مكافآت، خصومات، سلف) - the week's dated items (bonuses, deductions, advances)
+  items: SalaryAdjustment[];
   shown: boolean; // الأسبوع اللي في عمود "مستحق هذا الأسبوع" - the week in the "this week" column
   current: boolean; // الأسبوع اللي فيه النهارده - the week holding today
 }
@@ -655,8 +680,9 @@ export interface OvertimeSummary {
 
 // سطر في لوحة المرتب (من Additional Salary أو Salary Adjustment) - one line (Additional Salary or Salary Adjustment)
 export interface SalaryAdjustment {
-  source: "additional_salary" | "salary_adjustment";
-  kind: "addition" | "deduction" | "installment" | "advance"; // advance = سلفة (Salary Adjustment)
+  // loan = سلفة Loan Disbursement، employee_advance = Employee Advance - an advance from a loan / an Employee Advance
+  source: "additional_salary" | "salary_adjustment" | "loan" | "employee_advance";
+  kind: "addition" | "deduction" | "installment" | "advance"; // advance = سلفة
   label: string; // "إضافي" / "خصم نص يوم" / "قسط" / اسم المكون
   component: string; // Salary Component أو adjustment_type
   sign: 1 | -1; // إضافة = +1، خصم/قسط = −1

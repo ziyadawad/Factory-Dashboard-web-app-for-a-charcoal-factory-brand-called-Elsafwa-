@@ -13,6 +13,7 @@ import {
   OvertimeSummary,
   OvertimeWeek,
   PersonStatus,
+  SalaryAdjustment,
   SalaryValue,
   SectionSalaries,
 } from "@/lib/types";
@@ -158,7 +159,8 @@ const CELL_STYLE: Record<DayStatus, string> = {
 const CELL_NOTE: Partial<Record<DayStatus, string>> = { absent: "غائب", leave: "إجازة", off: "جمعة", holiday: "إجازة رسمية" };
 
 // تقويم الشهر - the month calendar
-function MonthCalendar({ person }: { person: EmployeeAttendance }) {
+// openToday (عمال اليومية): النهارده من غير بصمة مش غياب لحد ما اليوم يخلص - today with no punch is not absent yet
+function MonthCalendar({ person, openToday }: { person: EmployeeAttendance; openToday: string | null }) {
   const first = person.days[0]?.date;
   const offset = first ? (new Date(`${first}T00:00:00Z`).getUTCDay() + 1) % 7 : 0; // السبت = 0
   return (
@@ -172,11 +174,13 @@ function MonthCalendar({ person }: { person: EmployeeAttendance }) {
         {Array.from({ length: offset }, (_, i) => (
           <div key={`pad-${i}`} />
         ))}
-        {person.days.map((day) => (
+        {person.days.map((day) => {
+          const open = day.date === openToday && day.status === "absent";
+          return (
           <div
             key={day.date}
             className={`h-[62px] rounded-lg border flex flex-col items-center justify-center leading-tight ${
-              day.half ? "bg-amber-400/15 border-amber-400/70 text-white" : CELL_STYLE[day.status]
+              day.half ? "bg-amber-400/15 border-amber-400/70 text-white" : open ? "border-2 border-gray-300/70 text-white" : CELL_STYLE[day.status]
             }`}
           >
             <span dir="ltr" className="font-numbers tabular-nums font-bold text-[18px]">
@@ -187,11 +191,14 @@ function MonthCalendar({ person }: { person: EmployeeAttendance }) {
               <span dir="ltr" className="font-numbers tabular-nums text-[13px] text-gray-300">
                 {day.firstPunch}
               </span>
+            ) : open ? (
+              <span className="text-[12px] text-gray-300">النهارده</span>
             ) : (
               CELL_NOTE[day.status] && <span className="text-[12px] opacity-80">{CELL_NOTE[day.status]}</span>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
       <div className="flex flex-wrap items-center gap-4 text-[14px] text-gray-400">
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-statusGreen/60" /> حاضر (وقت أول بصمة)</span>
@@ -315,7 +322,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
   if (salary?.kind === "daily" && salary.dailyRate > 0) {
     return (
       <div className="flex flex-col gap-3">
-        <DailySalaryCard salary={salary} paidToday={state.data.dailyPay.paidToday} />
+        <DailySalaryCard salary={salary} paidToday={state.data.dailyPay.paidToday} today={state.data.today} />
         <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
       </div>
     );
@@ -423,25 +430,70 @@ function FinalLines({ salary, formula }: { salary: EmployeeSalary; formula: Reac
   );
 }
 
+// النهارده ولسه مبصمش: مش غياب لحد ما اليوم يخلص - today with no punch yet: not absent until the day ends
+const isOpenToday = (d: DailyWeek["days"][number], today: string) => d.date === today && d.worked === 0;
+
 // لون يوم في أسبوع اليومية - a day's colour in a daily worker's week
-const weekDayStyle = (d: DailyWeek["days"][number]) =>
+const weekDayStyle = (d: DailyWeek["days"][number], today: string) =>
   d.worked === 1
     ? "bg-statusGreen/20 border-statusGreen/60 text-statusGreen"
     : d.worked === 0.5
       ? "bg-amber-400/15 border-amber-400/60 text-amber-300"
-      : d.status === "absent" || d.status === "leave"
-        ? "bg-statusRed/15 border-statusRed/50 text-statusRed"
-        : d.status === "off" || d.status === "holiday"
-          ? "bg-white/[0.04] border-cardBorder text-gray-500"
-          : "border-cardBorder/50 text-gray-600";
+      : isOpenToday(d, today)
+        ? "border-2 border-gray-300/70 text-gray-200"
+        : d.status === "absent" || d.status === "leave"
+          ? "bg-statusRed/15 border-statusRed/50 text-statusRed"
+          : d.status === "off" || d.status === "holiday"
+            ? "bg-white/[0.04] border-cardBorder text-gray-500"
+            : "border-cardBorder/50 text-gray-600";
 
-// أسبوع واحد: التواريخ، الأيام (أخضر/أحمر)، اليومية، الإضافي، الخصومات، والإجمالي
-// One week: its dates, the days (green / red), the pay, overtime, deductions and the week total
-function DailyWeekRow({ week, rate, paidToday }: { week: DailyWeek; rate: number; paidToday: boolean }) {
+// سطر في حساب الأسبوع - one line of a week's calculation
+function WeekLine({ label, value, sign, tone, sub }: { label: React.ReactNode; value: number; sign: "+" | "−" | ""; tone: string; sub?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col">
+      <p className="flex items-center justify-between gap-3">
+        <span className="text-gray-300">
+          {sign && <b className={tone}>{sign} </b>}
+          {label}
+        </span>
+        <span className={`font-bold ${tone}`}>
+          {sign && sign !== "+" ? "−" : sign === "+" ? "+" : ""}
+          {money(value)}
+        </span>
+      </p>
+      {sub}
+    </div>
+  );
+}
+
+// بنود بتواريخها تحت سطر (خصم نص يوم 10/11، سلفة 9/11...) - dated items under a line
+function ItemList({ items, tone }: { items: SalaryAdjustment[]; tone: string }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="ps-5 text-[13px] text-gray-400 leading-[1.7]">
+      {items.map((a, i) => (
+        <li key={i} className="flex items-center justify-between gap-3">
+          <span>
+            {a.label} {shortDate(a.date)}
+            {a.reason && <span className="text-gray-500"> — {a.reason}</span>}
+          </span>
+          <span className={tone}>{money(a.amount)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// أسبوع واحد (السبت ← الجمعة) بحسابه كامل: الأيام، اليومية، الإضافي، المكافآت، الخصومات، السلف، والصافي
+// One week (Saturday → Friday) with its full calculation: days, pay, overtime, bonuses, deductions, advances, net
+function DailyWeekRow({ week, rate, paidToday, today }: { week: DailyWeek; rate: number; paidToday: boolean; today: string }) {
+  const bonuses = week.items.filter((a) => a.kind === "addition");
+  const deductions = week.items.filter((a) => a.kind === "deduction");
+  const advances = week.items.filter((a) => a.kind === "advance");
   return (
     <div
       className={`rounded-lg border px-3 py-2 flex flex-col gap-1.5 ${
-        week.shown ? "border-emerald-400/70 bg-emerald-400/[0.08]" : "border-cardBorder/70 opacity-80"
+        week.shown ? "border-emerald-400/70 bg-emerald-400/[0.08]" : "border-cardBorder/70"
       }`}
     >
       <p className="flex items-center justify-between gap-3 text-[15px]">
@@ -453,33 +505,64 @@ function DailyWeekRow({ week, rate, paidToday }: { week: DailyWeek; rate: number
             {paidToday ? "💵 بيتقبض النهارده" : "هذا الأسبوع (لحد النهارده)"}
           </span>
         )}
+        {!week.shown && week.current && (
+          <span className="rounded-full bg-white/10 text-gray-300 px-2.5 text-[13px] font-bold">الأسبوع الجديد (لحد النهارده)</span>
+        )}
       </p>
       <div className="grid grid-cols-7 gap-1">
         {week.days.map((d) => (
-          <div key={d.date} className={`rounded border text-center text-[12px] leading-[1.7] font-semibold ${weekDayStyle(d)}`}>
+          <div key={d.date} className={`rounded border text-center text-[12px] leading-[1.7] font-semibold ${weekDayStyle(d, today)}`}>
             {shortDate(d.date)}
             {d.worked === 0.5 && <span className="block text-[10px] leading-none pb-0.5">نص</span>}
+            {isOpenToday(d, today) && <span className="block text-[10px] leading-none pb-0.5">النهارده</span>}
           </div>
         ))}
       </div>
-      <p className="flex items-center justify-between gap-3 text-[14px]">
-        <span className="text-gray-400">
-          {money(week.presentDays)} يوم × {money(rate)} = <b className="text-gray-200">{money(week.pay)}</b>
-          {week.overtime > 0 && <span className="text-sky-300"> + إضافي {money(week.overtime)}</span>}
-          {week.deductions > 0 && <span className="text-statusRed"> − خصومات {money(week.deductions)}</span>}
-          {week.bonuses > 0 && <span className="text-statusGreen"> + مكافآت {money(week.bonuses)}</span>}
+      <div className="flex flex-col gap-0.5 text-[15px]">
+        <WeekLine
+          label={
+            <>
+              {money(week.presentDays)} يوم × {money(rate)}
+            </>
+          }
+          value={week.pay}
+          sign=""
+          tone="text-gray-100"
+        />
+        {week.overtime > 0 && (
+          <WeekLine
+            label={<>إضافي{week.overtimeHours > 0 && <> ({money(week.overtimeHours)} س)</>}</>}
+            value={week.overtime}
+            sign="+"
+            tone="text-sky-300"
+          />
+        )}
+        {week.bonuses > 0 && (
+          <WeekLine label="مكافآت" value={week.bonuses} sign="+" tone="text-statusGreen" sub={<ItemList items={bonuses} tone="text-statusGreen" />} />
+        )}
+        {week.deductions > 0 && (
+          <WeekLine label="خصومات" value={week.deductions} sign="−" tone="text-statusRed" sub={<ItemList items={deductions} tone="text-statusRed" />} />
+        )}
+        {week.advances > 0 && (
+          <WeekLine label="سلف" value={week.advances} sign="−" tone="text-amber-400" sub={<ItemList items={advances} tone="text-amber-400" />} />
+        )}
+      </div>
+      <p className="flex items-center justify-between gap-3 border-t border-cardBorder/70 pt-1">
+        <span className="text-white font-bold">= صافي الأسبوع</span>
+        <span className={`font-extrabold text-[24px] leading-tight ${week.shown ? "text-emerald-300" : "text-gray-100"}`}>
+          {money(week.total)} <span className="text-[14px] text-gray-400">ج.م</span>
         </span>
-        <span className={`font-extrabold text-[20px] ${week.shown ? "text-emerald-300" : "text-gray-300"}`}>{money(week.total)} ج.م</span>
       </p>
     </div>
   );
 }
 
-// عامل اليومية: مستحق هذا الأسبوع فوق، وتحته أسابيع الشهر للمرجع
-// Daily worker: this week on top, then the month's weeks for reference
-function DailySalaryCard({ salary, paidToday }: { salary: EmployeeSalary; paidToday: boolean }) {
+// عامل اليومية: أسبوع بأسبوع بس (مستحق هذا الأسبوع فوق، وتحته باقي الأسابيع) - مفيش إجمالي شهر
+// Daily worker: week by week only (this week on top, then the other weeks) - no month total
+function DailySalaryCard({ salary, paidToday, today }: { salary: EmployeeSalary; paidToday: boolean; today: string }) {
   const shown = salary.weeks.find((w) => w.shown);
-  const others = salary.weeks.filter((w) => !w.shown);
+  // الأحدث الأول - newest first
+  const others = salary.weeks.filter((w) => !w.shown).reverse();
   return (
     <div className="rounded-xl bg-background border border-amber-400/30 p-4 flex flex-col gap-2 text-[17px]">
       <p className="flex items-center justify-between gap-3">
@@ -494,26 +577,13 @@ function DailySalaryCard({ salary, paidToday }: { salary: EmployeeSalary; paidTo
               {money(shown.total)} <span className="text-[18px] text-gray-300">ج.م</span>
             </span>
           </p>
-          <DailyWeekRow week={shown} rate={salary.dailyRate} paidToday={paidToday} />
+          <DailyWeekRow week={shown} rate={salary.dailyRate} paidToday={paidToday} today={today} />
         </>
       )}
-      {others.length > 0 && <p className="text-gray-400 font-semibold text-[15px] mt-1">أسابيع الشهر (للمرجع)</p>}
+      {others.length > 0 && <p className="text-gray-400 font-semibold text-[15px] mt-1">الأسابيع التانية</p>}
       {others.map((w) => (
-        <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} paidToday={paidToday} />
+        <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} paidToday={paidToday} today={today} />
       ))}
-      <div className="flex flex-col">
-        <AdjustmentLines salary={salary} empty="مكافآت / خصومات الشهر ده" />
-        <FinalLines
-          salary={salary}
-          formula={
-            <>
-              {money(salary.presentDays)} يوم × {money(salary.dailyRate)} ج.م
-              {salary.deductions > 0 && <> − خصومات {money(salary.deductions)} ج.م</>}
-              {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>}
-            </>
-          }
-        />
-      </div>
     </div>
   );
 }
@@ -645,13 +715,15 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
   const td = salaryTd;
   const pay = "text-center font-extrabold text-emerald-300 bg-emerald-400/[0.07]";
   const extras = (w: DailyWeek | undefined) =>
-    w && (w.overtime > 0 || w.deductions > 0 || w.bonuses > 0) ? (
+    w && (w.overtime > 0 || w.deductions > 0 || w.bonuses > 0 || w.advances > 0) ? (
       <span className="block text-[12px] font-normal leading-tight">
         {w.overtime > 0 && <span className="text-sky-300">+إضافي {money(w.overtime)} </span>}
+        {w.bonuses > 0 && <span className="text-statusGreen">+مكافأة {money(w.bonuses)} </span>}
         {w.deductions > 0 && <span className="text-statusRed">−خصم {money(w.deductions)} </span>}
-        {w.bonuses > 0 && <span className="text-statusGreen">+مكافأة {money(w.bonuses)}</span>}
+        {w.advances > 0 && <span className="text-amber-400">−سلف {money(w.advances)}</span>}
       </span>
     ) : null;
+  const advancesWeek = people.reduce((sum, p) => sum + (byId.get(p.id)?.weeks.find((w) => w.shown)?.advances ?? 0), 0);
   const range = (a: string, b: string) => (
     <span className="block text-[13px] font-normal text-gray-500">
       ({shortDate(a)} – {shortDate(b)})
@@ -661,7 +733,7 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
     <table className="w-full border-separate border-spacing-0 text-[15px] min-[1600px]:text-[17px] leading-[2.2]">
       <thead className="sticky top-0 z-10 bg-card">
         <tr>
-          <th colSpan={6} className="px-3 pt-2 pb-1 text-start text-amber-300 font-extrabold text-[18px]">
+          <th colSpan={7} className="px-3 pt-2 pb-1 text-start text-amber-300 font-extrabold text-[18px]">
             💵 عمال اليومية — بيتقبضوا كاش كل سبت عن الأسبوع اللي فات (السبت ← الجمعة)
           </th>
         </tr>
@@ -671,6 +743,10 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
           <th className={th}>اليومية</th>
           <th className={th}>
             أيام هذا الأسبوع
+            {range(dailyPay.week.start, dailyPay.week.end)}
+          </th>
+          <th className={th} title="السلف اللي تاريخها في الأسبوع ده (بتتخصم من مستحق الأسبوع)">
+            سلف
             {range(dailyPay.week.start, dailyPay.week.end)}
           </th>
           <th className={`${th} !text-emerald-300 bg-emerald-400/[0.07]`}>
@@ -695,7 +771,7 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
               <NameCells person={person} />
               {!s || s.dailyRate <= 0 ? (
                 <>
-                  <td colSpan={4} className={`${td} text-gray-500`}>
+                  <td colSpan={5} className={`${td} text-gray-500`}>
                     {NO_DAILY_RATE}
                   </td>
                 </>
@@ -703,6 +779,9 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
                 <>
                   <td className={`${td} text-white font-bold`}>{money(s.dailyRate)} ج.م</td>
                   <td className={`${td} font-bold ${week?.presentDays ? "text-statusGreen" : "text-gray-600"}`}>{money(week?.presentDays ?? 0)}</td>
+                  <td className={`${td} font-bold ${week?.advances ? "text-amber-400" : "text-gray-600"}`}>
+                    {week?.advances ? <>− {money(week.advances)}</> : "—"}
+                  </td>
                   <td className={`${td} ${pay} leading-tight py-1`}>
                     <span className="text-[18px] min-[1600px]:text-[20px]">{money(week?.total ?? 0)}</span>
                     {extras(week)}
@@ -721,6 +800,7 @@ function DailySalaryTable({ people, salaries, onPick }: { people: EmployeeAttend
             إجمالي مستحق هذا الأسبوع{" "}
             <span className="text-gray-400 font-semibold text-[15px]">({money(totals.daily)} عامل)</span>
           </td>
+          <td className={`${salaryFoot} ${advancesWeek ? "text-amber-400" : "text-gray-600"}`}>{advancesWeek ? <>− {money(advancesWeek)}</> : "—"}</td>
           <td className={`${salaryFoot} ${pay} text-[26px] min-[1600px]:text-[30px] leading-[1.6]`}>{money(totals.dailyWeek)} ج.م</td>
           <td className={`${salaryFoot} text-gray-300 text-[18px]`}>{money(totals.dailyMonth)}</td>
         </tr>
@@ -899,8 +979,10 @@ function EmployeeView({
   onToggleSalary,
   salary,
   salaryState,
+  openToday,
 }: {
   person: EmployeeAttendance;
+  openToday: string | null;
   onBack: () => void;
   showSalary: boolean;
   onToggleSalary: () => void;
@@ -960,7 +1042,7 @@ function EmployeeView({
           </div>
         </div>
         <div className="flex flex-col gap-4">
-          <MonthCalendar person={person} />
+          <MonthCalendar person={person} openToday={openToday} />
           <button
             type="button"
             onClick={onToggleSalary}
@@ -1122,6 +1204,7 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
               onToggleSalary={toggleSalary}
               salary={salaryState.data?.people.find((p) => p.id === person.id)}
               salaryState={salaryState}
+              openToday={section === "daily" ? data.today : null}
             />
           ) : showSalary ? (
             <SectionSalaryList data={data} state={salaryState} onPick={setEmployeeId} />

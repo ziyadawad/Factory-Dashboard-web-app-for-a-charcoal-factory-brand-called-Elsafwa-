@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, ExternalLink, Landmark, Wallet, X } from "lucide-react";
-import { AccountDetails, AccountMove } from "@/lib/types";
+import { AccountDetails, AccountMove, MoveOut } from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -66,6 +66,54 @@ const erpLink = (base: string, move: AccountMove) =>
 
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
 
+// فلتر المنصرف - the outgoing filter chips
+type Filter = "all" | MoveOut["category"];
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "الكل" },
+  { id: "employee", label: "سلف وموظفين" },
+  { id: "supplier", label: "موردين" },
+  { id: "expense", label: "مصروفات" },
+];
+
+// لون بادج نوع الصرف - the colour of a payment-type badge
+const KIND_STYLE: Record<string, string> = {
+  سلفة: "bg-amber-400/20 text-amber-300",
+  مرتب: "bg-sky-400/20 text-sky-300",
+  يومية: "bg-sky-400/20 text-sky-300",
+  إضافي: "bg-sky-400/20 text-sky-300",
+  عهدة: "bg-purple-400/20 text-purple-300",
+  مورد: "bg-blue-400/20 text-blue-300",
+};
+const LINK_LABEL: Record<NonNullable<MoveOut["link"]>, string> = {
+  loan: "بتتخصم من المرتب (سلفة Loan) ✓",
+  adjustment: "مربوطة بتسوية المرتب ✓",
+  employee_advance: "مربوطة بـ Employee Advance ✓",
+};
+
+// لمين وليه (للمنصرف)، أو الطرف (للوارد) - who and why (outgoing), or the party (incoming)
+function PartyCell({ move }: { move: AccountMove }) {
+  const out = move.out;
+  if (!out) return <span className="block truncate max-w-[16vw]" title={move.party}>{move.party || "—"}</span>;
+  // المصروفات من غير اسم: الحسابات مكان الاسم - an expense with no name shows its accounts instead
+  const named = out.name || (out.category === "expense" ? "" : move.party);
+  const name = named || out.account;
+  return (
+    <span className="flex flex-col leading-[1.5] py-0.5 max-w-[20vw]">
+      <span className="flex items-center gap-1.5 min-w-0">
+        <span className={`shrink-0 rounded-full px-2 text-[0.8em] font-bold ${KIND_STYLE[out.kind] ?? "bg-gray-500/20 text-gray-300"}`}>{out.kind}</span>
+        <span className="truncate text-gray-100 font-semibold" title={name}>{name || <span className="text-gray-500">—</span>}</span>
+      </span>
+      {out.account && named && (
+        <span className="truncate text-[0.8em] text-gray-500" title={out.account}>
+          {out.account}
+        </span>
+      )}
+      {out.link && <span className="text-[0.8em] text-statusGreen font-semibold">{LINK_LABEL[out.link]}</span>}
+      {out.warn && <span className="text-[0.8em] text-brandOrange font-bold">⚠ سلفة مش متسجلة على المرتب</span>}
+    </span>
+  );
+}
+
 // صف حركة (والضغط عليه يفتح البيان كامل) - one movement row (click expands the full remarks)
 function MoveRow({
   move,
@@ -114,7 +162,7 @@ function MoveRow({
         <td className={`${td} text-center font-bold whitespace-nowrap ${incoming ? "text-statusGreen" : "text-statusRed"}`}>{n(amount)}</td>
         <td className={`${td} text-center text-white font-semibold whitespace-nowrap`}>{n(move.balanceAfter)}</td>
         <td className={`${td} text-gray-200`}>
-          <span className="block truncate max-w-[14vw]" title={move.party}>{move.party || "—"}</span>
+          <PartyCell move={move} />
         </td>
         {/* البيان بياخد اللي فاضل من العرض بس (max-w-0) - remarks only take the leftover width */}
         <td className={`${td} text-gray-300 w-full max-w-0`}>
@@ -131,11 +179,20 @@ function MoveRow({
           <td colSpan={columns} className="px-4 py-3 border-b border-cardBorder/60">
             <div className="flex items-start gap-6">
               <div className="flex-1 min-w-0 flex flex-col gap-1">
-                {move.party && (
+                {move.out ? (
                   <p className="text-gray-300">
-                    <span className="text-gray-500">الطرف: </span>
-                    {move.party}
+                    <span className="text-gray-500">اتصرف لـ: </span>
+                    {move.out.name || (move.out.category === "expense" ? move.out.account : move.party) || "—"}
+                    <span className="text-gray-500"> — {move.out.kind}</span>
+                    {move.out.account && <span className="text-gray-500"> ({move.out.account})</span>}
                   </p>
+                ) : (
+                  move.party && (
+                    <p className="text-gray-300">
+                      <span className="text-gray-500">الطرف: </span>
+                      {move.party}
+                    </p>
+                  )
                 )}
                 <p className="text-gray-100 whitespace-pre-wrap break-words leading-[1.8]">
                   {move.remarks || <span className="text-gray-500">مفيش بيان</span>}
@@ -192,6 +249,8 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
     keepPreviousData: true, // الشهر القديم يفضل باين لحد ما الجديد يوصل - the old month stays until the new one arrives
   });
   const [range, setRange] = useState<Range>("half");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [showAdvances, setShowAdvances] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useIdleClose(onClose);
@@ -215,19 +274,22 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
             : data.monthStart;
     const byDay = new Map<string, AccountMove[]>();
     for (const move of data.moves) byDay.set(move.postingDate, [...(byDay.get(move.postingDate) ?? []), move]);
-    const result: { date: string; moves: AccountMove[]; incoming: number; outgoing: number }[] = [];
+    const result: { date: string; moves: AccountMove[]; incoming: number; outgoing: number; balance: number }[] = [];
     for (let date = data.to; date >= start; date = addDays(date, -1)) {
-      const moves = byDay.get(date) ?? [];
-      if (months && moves.length === 0) continue;
+      const all = byDay.get(date) ?? [];
+      // الفلتر بيخفي الحركات بس، ومجاميع اليوم والرصيد من كل الحركات - the filter hides rows; day totals use every move
+      const moves = filter === "all" ? all : all.filter((m) => m.out?.category === filter);
+      if ((months || filter !== "all") && moves.length === 0) continue;
       result.push({
         date,
         moves,
-        incoming: moves.reduce((sum, m) => sum + m.debit, 0),
-        outgoing: moves.reduce((sum, m) => sum + m.credit, 0),
+        incoming: all.reduce((sum, m) => sum + m.debit, 0),
+        outgoing: all.reduce((sum, m) => sum + m.credit, 0),
+        balance: all[0]?.balanceAfter ?? 0,
       });
     }
     return result;
-  }, [data, range, months]);
+  }, [data, range, months, filter]);
 
   // تابات الشهور: الشهور اللي فيها حركات + الشهر ده دايما - month tabs: months with movements + always this month
   const monthTabs = useMemo(() => {
@@ -351,6 +413,42 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
           </div>
         )}
 
+        {/* فلتر المنصرف وسلف الشهر - the outgoing filter and this month's advances */}
+        {data && (
+          <div className="shrink-0 flex flex-col gap-2 px-5 py-2 border-b border-cardBorder">
+            <div className="flex items-center gap-2 flex-wrap">
+              {FILTERS.map((x) => (
+                <button key={x.id} type="button" onClick={() => setFilter(x.id)} className={tab(filter === x.id)}>
+                  {x.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowAdvances(!showAdvances)}
+                disabled={data.advances.people.length === 0}
+                className="ms-auto flex items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-1.5 font-bold text-amber-300 whitespace-nowrap hover:bg-amber-400/20 disabled:opacity-60 disabled:cursor-default"
+              >
+                إجمالي سلف الشهر: {n(data.advances.total)} ج.م
+                <span className="text-gray-300 font-semibold">(لـ {n(data.advances.people.length)} موظف)</span>
+                {data.advances.people.length > 0 && <span className="text-[0.8em]">{showAdvances ? "▲" : "▼"}</span>}
+              </button>
+            </div>
+            {showAdvances && data.advances.people.length > 0 && (
+              <div className="max-h-[22vh] overflow-auto rounded-xl border border-amber-400/30 bg-background/60 px-3 py-1.5 grid grid-cols-2 min-[1400px]:grid-cols-3 gap-x-6">
+                {data.advances.people.map((p) => (
+                  <p key={p.employee} className="flex items-center justify-between gap-3 border-b border-cardBorder/50 leading-[2]">
+                    <span className="text-gray-100 truncate">{p.name}</span>
+                    <span className="whitespace-nowrap">
+                      <b className="text-amber-300">{n(p.amount)}</b>
+                      <span className="text-gray-500 text-[0.85em]"> ج.م{p.count > 1 && <> ({n(p.count)} مرات)</>}</span>
+                    </span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ملخص الشهر - the month summary */}
         {months && data && (
           <div className={`shrink-0 flex items-stretch gap-3 px-5 py-2.5 border-b border-cardBorder ${loadingMonth ? "opacity-50" : ""}`}>
@@ -374,8 +472,10 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
             </div>
           ) : months && error && !isLoading && data.month !== month ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">غير متصل — جرب تاني بعد شوية</div>
-          ) : months && days.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xl text-gray-400">لا توجد حركات في الشهر ده</div>
+          ) : days.length === 0 && (months || filter !== "all") ? (
+            <div className="h-full flex items-center justify-center text-xl text-gray-400">
+              {filter !== "all" ? "مفيش حركات من النوع ده في المدة دي" : "لا توجد حركات في الشهر ده"}
+            </div>
           ) : (
             <table className="w-full border-separate border-spacing-0 leading-[2]">
               <thead className="sticky top-0 z-10 bg-card">
@@ -385,7 +485,7 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
                   <th className={`${th} text-center`}>النوع</th>
                   <th className={`${th} text-center`}>المبلغ</th>
                   <th className={`${th} text-center`}>الرصيد بعدها</th>
-                  <th className={`${th} text-start`}>الطرف</th>
+                  <th className={`${th} text-start`}>لمين / ليه</th>
                   <th className={`${th} text-start`}>البيان</th>
                   <th className={`${th} text-start`}>رقم المستند</th>
                   <th className={`${th} text-start`}>سجّلها</th>
@@ -409,7 +509,7 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
                           <span className="text-gray-500"> · </span>
                           <span className="text-statusRed">منصرف {n(day.outgoing)}</span>
                           <span className="text-gray-500"> · </span>
-                          <span className="text-gray-200">الرصيد آخر اليوم {n(day.moves[0].balanceAfter)}</span>
+                          <span className="text-gray-200">الرصيد آخر اليوم {n(day.balance)}</span>
                         </td>
                       </tr>
                       {day.moves.map((move) => (

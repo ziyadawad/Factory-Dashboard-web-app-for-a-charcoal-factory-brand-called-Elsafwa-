@@ -315,7 +315,7 @@ export function styledSheet(workbook: ExcelJS.Workbook, logos: Logos, spec: Shee
         cell.font = font({ bold: true, size: dataSize + 2, color: { argb: C.red } });
         cell.fill = solid(C.badFill);
       }
-      if (col.kind === "mark" && v === "إجازة") cell.font = font({ size: Math.max(9, dataSize - 3), color: { argb: C.gray } });
+      if (col.kind === "mark" && (v === "إجازة" || v === "النهارده")) cell.font = font({ size: Math.max(9, dataSize - 3), color: { argb: C.gray } });
     });
   });
 

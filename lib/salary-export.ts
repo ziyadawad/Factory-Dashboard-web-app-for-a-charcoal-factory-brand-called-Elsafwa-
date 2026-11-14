@@ -161,10 +161,11 @@ export async function monthlySalaryWorkbook(): Promise<{ buffer: ArrayBuffer; fi
 
 // ===== كشف اليومية - the daily workers' sheet =====
 
-// علامة اليوم - a day's mark
-function dayMark(status: string, worked: number): string {
+// علامة اليوم (النهارده من غير بصمة لسه مش غياب) - a day's mark (today with no punch yet is not an absence)
+function dayMark(status: string, worked: number, isToday: boolean): string {
   if (worked === 1) return "✓";
   if (worked === 0.5) return "½";
+  if (isToday) return "النهارده";
   if (status === "absent" || status === "leave") return "✗";
   if (status === "off" || status === "holiday") return "إجازة";
   return "";
@@ -186,12 +187,14 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
     ...dates.map((d): Col => ({ header: `${DAY_NAMES[new Date(`${d}T00:00:00Z`).getUTCDay()]} ${dm(d)}`, kind: "mark" })),
     { header: "أيام الحضور", kind: "count" },
     { header: "إضافي", kind: "plus" },
-    { header: "خصومات", kind: "deduct" },
     { header: "مكافآت", kind: "plus" },
+    { header: "خصومات", kind: "deduct" },
+    { header: "سلف", kind: "deduct" },
+    // المستحق = أيام × اليومية + إضافي + مكافآت − خصومات − سلف (نفس حساب الأسبوع في اللوحة) - same week math as the panel
     { header: "المستحق", kind: "final" },
     { header: "توقيع", kind: "sign" },
   ];
-  const sums = { days: 0, overtime: 0, deductions: 0, bonuses: 0, total: 0 };
+  const sums = { days: 0, overtime: 0, deductions: 0, advances: 0, bonuses: 0, total: 0 };
   const rows: Cell[][] = people.map((person, i) => {
     const salary = salaryOf.get(person.id)!;
     const w = salary.weeks.find((x) => x.shown);
@@ -200,6 +203,7 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
       sums.days += w!.presentDays;
       sums.overtime += w!.overtime;
       sums.deductions += w!.deductions;
+      sums.advances += w!.advances;
       sums.bonuses += w!.bonuses;
       sums.total += w!.total;
     }
@@ -209,17 +213,18 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
       hasRate ? salary.dailyRate : "مش متسجلة",
       ...dates.map((d) => {
         const day = w?.days.find((x) => x.date === d);
-        return day ? dayMark(day.status, day.worked) : "";
+        return day ? dayMark(day.status, day.worked, d === salaries.today) : "";
       }),
       hasRate ? w!.presentDays : null,
       hasRate ? w!.overtime : null,
-      hasRate ? w!.deductions : null,
       hasRate ? w!.bonuses : null,
+      hasRate ? w!.deductions : null,
+      hasRate ? w!.advances : null,
       hasRate ? w!.total : null,
       null,
     ];
   });
-  const totals: Cell[] = [null, `الإجمالي (${people.length})`, null, ...dates.map(() => null), round(sums.days), round(sums.overtime), round(sums.deductions), round(sums.bonuses), round(sums.total), null];
+  const totals: Cell[] = [null, `الإجمالي (${people.length})`, null, ...dates.map(() => null), round(sums.days), round(sums.overtime), round(sums.bonuses), round(sums.deductions), round(sums.advances), round(sums.total), null];
 
   const { workbook, logos } = newWorkbook();
   styledSheet(

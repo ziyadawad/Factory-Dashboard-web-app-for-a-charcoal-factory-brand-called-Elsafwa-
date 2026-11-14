@@ -25,13 +25,14 @@ type Additional = { employee: string; salary_component: string; type: string | n
 type Component = { name: string; type: string };
 type LoanGl = {
   party: string;
+  voucher_no: string;
   voucher_type: string;
   against_voucher: string | null;
   debit: number | null;
   credit: number | null;
   posting_date: string;
 };
-type EmployeeAdvance = { employee: string; paid_amount: number | null };
+type EmployeeAdvance = { name: string; employee: string; paid_amount: number | null; posting_date: string };
 // DocType مخصوص "Salary Adjustment" - the custom Salary Adjustment DocType (reason is read only if the field exists)
 type Adjustment = {
   employee: string;
@@ -127,29 +128,30 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     }),
     // نوع كل مكون (Earning / Deduction) لو السطر نفسه مفيهوش type - each component's type, when a row lacks it
     listIfAllowed<Component>("Salary Component", { fields: ["name", "type"] }),
-    // السلف (Loan Disbursement) وأقساطها (Loan Repayment) على حساب السلف الشهر ده - advances and repayments this month
+    // السلف (Loan Disbursement) وأقساطها (Loan Repayment) على حساب السلف من أول أسابيع اليومية (الشهريين: الشهر ده بس)
+    // Advances and repayments on the advances account since the first daily-pay week (monthly staff: this month only)
     list<LoanGl>("GL Entry", {
       filters: [
         ["account", "=", config.advancesAccount],
         ["party_type", "=", "Employee"],
         ["party", "in", ids],
         ["voucher_type", "in", ["Loan Disbursement", "Loan Repayment"]],
-        ["posting_date", ">=", monthStart],
+        ["posting_date", ">=", rangeStart],
         ["posting_date", "<=", monthEnd],
         ["is_cancelled", "=", 0],
       ],
-      fields: ["party", "voucher_type", "against_voucher", "debit", "credit", "posting_date"],
+      fields: ["party", "voucher_no", "voucher_type", "against_voucher", "debit", "credit", "posting_date"],
     }),
-    // Employee Advance المدفوعة الشهر ده (لو اليوزر يقدر يقراها) - paid Employee Advances this month (when readable)
+    // Employee Advance المدفوعة (لو اليوزر يقدر يقراها) من أول أسابيع اليومية - paid Employee Advances (when readable)
     listIfAllowed<EmployeeAdvance>("Employee Advance", {
       filters: [
         ["employee", "in", ids],
         ["docstatus", "=", 1],
-        ["posting_date", ">=", monthStart],
+        ["posting_date", ">=", rangeStart],
         ["posting_date", "<=", today],
         ["paid_amount", ">", 0],
       ],
-      fields: ["employee", "paid_amount"],
+      fields: ["name", "employee", "paid_amount", "posting_date"],
     }),
     // Cost to Company من ملف الموظف (البديل لو مفيش هيكل مرتب) واليومية - Employee ctc (fallback) and the daily rate
     list<EmployeePay>("Employee", {
@@ -165,16 +167,19 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   // السلف: اللي اتصرف لحد النهارده + Employee Advance - advances: disbursed so far + Employee Advances
   const advancesOf = new Map<string, number>();
   const disbursedThisMonth = new Set<string>();
-  for (const g of loanGl) {
+  const dateOf = (v: string) => String(v).slice(0, 10);
+  // الشهريين: الشهر ده بس - monthly staff: this month only
+  const monthLoanGl = loanGl.filter((g) => dateOf(g.posting_date) >= monthStart);
+  for (const g of monthLoanGl) {
     if (g.voucher_type !== "Loan Disbursement") continue;
     if (g.against_voucher) disbursedThisMonth.add(g.against_voucher);
-    if (String(g.posting_date).slice(0, 10) <= today) add(advancesOf, g.party, g.debit ?? 0);
+    if (dateOf(g.posting_date) <= today) add(advancesOf, g.party, g.debit ?? 0);
   }
-  for (const a of employeeAdvances) add(advancesOf, a.employee, a.paid_amount ?? 0);
+  for (const a of employeeAdvances) if (dateOf(a.posting_date) >= monthStart) add(advancesOf, a.employee, a.paid_amount ?? 0);
   // القسط: سداد سلف اتصرفت قبل الشهر ده بس (سلفة الشهر نفسه اتخصمت فوق، فمتتخصمش مرتين)
   // Installments: repayments of loans disbursed before this month only (this month's advances are already deducted)
   const loanOf = new Map<string, number>();
-  for (const g of loanGl) {
+  for (const g of monthLoanGl) {
     if (g.voucher_type === "Loan Repayment" && !(g.against_voucher && disbursedThisMonth.has(g.against_voucher))) {
       add(loanOf, g.party, (g.credit ?? 0) - (g.debit ?? 0));
     }
@@ -270,13 +275,13 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       // كل البنود من أول أسابيع اليومية (الإضافي في الأسابيع بس، وفي الشهر من overtime)
       // Every item since the first daily-pay week (overtime goes to the weeks; the month uses overtime above)
       const adjustments: SalaryAdjustment[] = [];
-      const weekOvertime: { date: string; amount: number }[] = [];
+      const weekOvertime: { date: string; amount: number; hours: number }[] = [];
       for (const a of salaryAdjustments) {
         if (a.employee !== person.id || String(a.date).slice(0, 10) < rangeStart) continue;
         const date = String(a.date).slice(0, 10);
         if (a.adjustment_type === "إضافي") {
           const e = overtimeEntry(a);
-          if (e.amount > 0) weekOvertime.push({ date, amount: e.amount });
+          if (e.amount > 0) weekOvertime.push({ date, amount: e.amount, hours: e.hours });
           continue;
         }
         const reason = a.reason ? String(a.reason).trim() || null : null;
@@ -291,11 +296,28 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
           const label = type && type !== "مبلغ ثابت" ? `خصم ${type}` : "خصم";
           if (amount > 0) adjustments.push({ ...line, kind: "deduction", label, sign: -1, amount });
         } else if (a.adjustment_type === "سلفة") {
-          // السلفة بتتخصم زي الخصم - an advance is deducted like a deduction
+          // سلفة (Salary Adjustment) - an advance recorded as a Salary Adjustment
           const amount = money(a.amount ?? 0);
           if (amount > 0) adjustments.push({ ...line, kind: "advance", label: "سلفة", sign: -1, amount });
         }
       }
+      // السلف المصروفة (Loan Disbursement على حساب السلف + Employee Advance): كل واحدة بتتخصم من الأسبوع اللي فيه تاريخها
+      // Paid advances (Loan Disbursement on the advances account + Employee Advance): each one comes off the week of its date
+      const advanceLine = (source: SalaryAdjustment["source"], date: string, amount: number, detail: string) =>
+        adjustments.push({
+          source, kind: "advance", label: "سلفة", component: "سلفة", sign: -1, amount: money(amount), date,
+          units: null, reason: null, remaining: null, detail,
+        });
+      for (const g of loanGl) {
+        const date = dateOf(g.posting_date);
+        if (g.party !== person.id || g.voucher_type !== "Loan Disbursement" || date < rangeStart || date > today) continue;
+        if ((g.debit ?? 0) > 0) advanceLine("loan", date, g.debit ?? 0, g.voucher_no);
+      }
+      for (const a of employeeAdvances) {
+        const date = dateOf(a.posting_date);
+        if (a.employee === person.id && (a.paid_amount ?? 0) > 0) advanceLine("employee_advance", date, a.paid_amount ?? 0, a.name);
+      }
+      adjustments.sort((x, y) => x.date.localeCompare(y.date));
       const sumIn = (list: { date: string; amount: number }[], from: string, to: string) =>
         money(list.filter((x) => x.date >= from && x.date <= to).reduce((s, x) => s + x.amount, 0));
       const monthAdjustments = adjustments.filter((a) => a.date >= monthStart);
@@ -309,7 +331,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       // The weeks (Saturday → Friday) from the first one touching this month (or the last full week) to this week
       const dayOf = new Map([...person.leadDays, ...person.days].map((d) => [d.date, d]));
       const additions = adjustments.filter((a) => a.kind === "addition");
-      const cuts = adjustments.filter((a) => a.kind === "deduction" || a.kind === "advance");
+      const cuts = adjustments.filter((a) => a.kind === "deduction");
+      const advanceCuts = adjustments.filter((a) => a.kind === "advance");
       const weeks: DailyWeek[] = [];
       for (const start of weekStarts) {
         const end = addDays(start, 6);
@@ -321,11 +344,15 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
         const presentInWeek = days.reduce((s, d) => s + d.worked, 0);
         const pay = money(presentInWeek * dailyRate);
         const weekOt = sumIn(weekOvertime, start, end);
+        const weekOtHours = money(weekOvertime.filter((x) => x.date >= start && x.date <= end).reduce((s, x) => s + x.hours, 0));
         const weekCuts = sumIn(cuts, start, end);
+        const weekAdvances = sumIn(advanceCuts, start, end);
         const weekAdds = sumIn(additions, start, end);
         weeks.push({
-          start, end, days, presentDays: presentInWeek, pay, overtime: weekOt, deductions: weekCuts, bonuses: weekAdds,
-          total: money(pay + weekOt - weekCuts + weekAdds), shown: start === shownStart, current: start === thisWeekStart,
+          start, end, days, presentDays: presentInWeek, pay, overtime: weekOt, overtimeHours: weekOtHours, deductions: weekCuts,
+          advances: weekAdvances, bonuses: weekAdds, total: money(pay + weekOt + weekAdds - weekCuts - weekAdvances),
+          items: adjustments.filter((a) => a.date >= start && a.date <= end),
+          shown: start === shownStart, current: start === thisWeekStart,
         });
       }
       return {
