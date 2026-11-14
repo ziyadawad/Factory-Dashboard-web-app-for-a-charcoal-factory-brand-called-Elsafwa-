@@ -108,6 +108,8 @@ async function moneyEvents(since: string): Promise<ActivityEvent[]> {
         amount: debit,
         extra: null,
         badge: row.voucher_type === "Payment Entry" && /مستلم من/.test(row.remarks ?? "") ? "تحصيل" : null,
+        doctype: row.voucher_type,
+        docname: row.voucher_no,
       }];
     }
     const out = outCache.get(row.name);
@@ -120,6 +122,8 @@ async function moneyEvents(since: string): Promise<ActivityEvent[]> {
       amount: credit,
       extra: null,
       badge: out?.kind ?? null,
+      doctype: row.voucher_type,
+      docname: row.voucher_no,
     }];
   });
 }
@@ -148,6 +152,8 @@ async function kilnEvents(since: string): Promise<ActivityEvent[]> {
       amount: null,
       extra: Number.isFinite(kg) && kg > 0 ? `${qtyText(kg)} كجم` : "بدون وزن",
       badge: null,
+      doctype: mapping.exitsDoctype,
+      docname: String(row.name),
     };
   });
 }
@@ -194,6 +200,8 @@ async function saleEvents(since: string): Promise<ActivityEvent[]> {
       amount: Math.abs(money(row.grand_total)),
       extra: packets > 0 ? `${qtyText(Math.round(packets))} باكت` : null,
       badge: rep ? "مندوب" : null,
+      doctype: "Sales Invoice",
+      docname: row.name,
     };
   });
 }
@@ -248,6 +256,8 @@ async function stockEvents(since: string): Promise<ActivityEvent[]> {
       // "20 باكت ربع" - الوحدة لو هي نفس اسم الصنف مش بتتكرر - the unit is not repeated when it equals the item name
       extra: `${qtyText(Number(main.qty) || 0)}${unit && normalizeArabic(unit) !== normalizeArabic(item) ? ` ${unit}` : ""}`,
       badge: null,
+      doctype: "Stock Entry",
+      docname: first.name,
     };
   });
 }
@@ -270,6 +280,8 @@ async function charityEvents(since: string): Promise<ActivityEvent[]> {
     amount: money(row.amount),
     extra: null,
     badge: null,
+    doctype: dashboardConfig.erp.charity.doctype,
+    docname: String(row.name),
   }));
 }
 
@@ -295,6 +307,8 @@ async function salaryEvents(since: string): Promise<ActivityEvent[]> {
     amount: null,
     extra: null,
     badge: (row.adjustment_type || "").trim() || null,
+    doctype: "Salary Adjustment",
+    docname: row.name,
   }));
 }
 

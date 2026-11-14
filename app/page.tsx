@@ -113,6 +113,8 @@ export default function Dashboard() {
   useEffect(() => setPageIndex(pageFromUrl()), []);
   // لوحة تفاصيل مفتوحة = التقليب واقف (والأسهم كمان) - a details panel is open: rotation (and arrow keys) paused
   const [salesDetailsOpen, setSalesDetailsOpen] = useState(false);
+  // تفاصيل حدث من "اللي بيحصل دلوقتي" مفتوحة - an activity event's details are open
+  const [activityDetailsOpen, setActivityDetailsOpen] = useState(false);
   // قسم الحضور المفتوح (من كروت الحضور في الرئيسية) - the open attendance section (from the main page cards)
   const [attendanceSection, setAttendanceSection] = useState<string | null>(null);
   const closeAttendance = useCallback(() => setAttendanceSection(null), []);
@@ -143,7 +145,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -293,7 +295,7 @@ export default function Dashboard() {
             </div>
             {/* اللي بيحصل دلوقتي (بيفضل شغال حتى والصفحة متقلبة) - the live feed (keeps running while pages rotate) */}
             <div className="min-h-0">
-              <ActivityFeed />
+              <ActivityFeed onDetailsChange={setActivityDetailsOpen} />
             </div>
           </div>
         );

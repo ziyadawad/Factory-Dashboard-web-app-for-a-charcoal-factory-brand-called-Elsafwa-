@@ -1,12 +1,13 @@
 "use client";
 
-import { CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { ActivityData, ActivityEvent, ActivityKind } from "@/lib/types";
 import { formatNumber } from "@/lib/format";
 import { agoText, cairoTime, useCompact } from "@/lib/production-stats";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
+import ActivityDetailsPanel from "./ActivityDetailsPanel";
 
 // ⚡ اللي بيحصل دلوقتي (كارت الرئيسية): أي حاجة بتتعمل في ERPNext بعد ما الصفحة فتحت بتظهر في الصندوق الكبير
 // وتنبض pulseCount مرة وبعدين تنزل للقايمة. الأحداث اللي بتيجي مع بعض بتستنى في طابور (FIFO) وبتتعرض واحدة واحدة
@@ -63,7 +64,7 @@ function Badge({ text }: { text: string | null }) {
 type Sizes = typeof dashboardConfig.sizes.activityCard.compact;
 
 // الصندوق الكبير: حدث بينبض، أو آخر حدث باهت لما مفيش جديد - the big box: a pulsing event, or the last one dimmed when idle
-function Spotlight({ event, live, waiting, now, sizes }: { event: ActivityEvent | null; live: boolean; waiting: number; now: number; sizes: Sizes }) {
+function Spotlight({ event, live, waiting, now, sizes, onOpen }: { event: ActivityEvent | null; live: boolean; waiting: number; now: number; sizes: Sizes; onOpen: (e: ActivityEvent) => void }) {
   const kind = event ? KINDS[event.kind] : null;
   const style = {
     height: sizes.spotlightHeight,
@@ -79,7 +80,12 @@ function Spotlight({ event, live, waiting, now, sizes }: { event: ActivityEvent 
       data-testid="activity-spotlight"
       data-event={event?.id ?? ""}
       data-live={live ? "1" : "0"}
-      className={`relative shrink-0 rounded-2xl border-2 px-3 py-2 flex flex-col justify-center gap-0.5 overflow-hidden min-w-0 ${
+      onClick={event ? () => onOpen(event) : undefined}
+      role={event ? "button" : undefined}
+      title={event ? `${event.title}
+${event.details}${event.extra ? `
+${event.extra}` : ""}` : undefined}
+      className={`relative shrink-0 rounded-2xl ${event ? "cursor-pointer" : ""} border-2 px-3 py-2 flex flex-col justify-center gap-0.5 overflow-hidden min-w-0 ${
         live ? "activity-pulse" : "border-cardBorder bg-background/60 opacity-60"
       }`}
       style={style}
@@ -96,7 +102,7 @@ function Spotlight({ event, live, waiting, now, sizes }: { event: ActivityEvent 
           <p className="text-gray-400 text-[12px] font-semibold">{live ? "✨ حدث جديد" : "آخر حاجة حصلت"}</p>
           <p className="flex items-center gap-1.5 min-w-0 font-extrabold text-white" style={{ fontSize: sizes.spotlightTitleFontSize }}>
             <span className="shrink-0">{kind!.icon}</span>
-            <span className="truncate">{event.title}</span>
+            <span className="truncate" title={event.title}>{event.title}</span>
           </p>
           {(event.amount !== null || event.extra) && (
             <p className="font-extrabold leading-tight whitespace-nowrap truncate" style={{ fontSize: sizes.spotlightAmountFontSize, color: kind!.color }}>
@@ -107,10 +113,10 @@ function Spotlight({ event, live, waiting, now, sizes }: { event: ActivityEvent 
           )}
           <p className="flex items-center gap-1.5 min-w-0 text-gray-200 font-semibold text-[13px] min-[1600px]:text-[15px]">
             <Badge text={event.badge} />
-            <span className="truncate">{event.details}</span>
+            <span className="truncate" title={event.details}>{event.details}</span>
           </p>
           <p className="flex items-center gap-2 text-gray-400 text-[12px] min-[1600px]:text-[13px] whitespace-nowrap">
-            {event.amount !== null && event.extra && <span className="truncate">{event.extra}</span>}
+            {event.amount !== null && event.extra && <span className="truncate" title={event.extra}>{event.extra}</span>}
             <span className="ms-auto">{ago(event, now)}</span>
           </p>
         </>
@@ -120,18 +126,23 @@ function Spotlight({ event, live, waiting, now, sizes }: { event: ActivityEvent 
 }
 
 // سطر في القايمة - one list row
-function Row({ event, index, fresh, now, sizes }: { event: ActivityEvent; index: number; fresh: boolean; now: number; sizes: Sizes }) {
+function Row({ event, index, fresh, now, sizes, onOpen }: { event: ActivityEvent; index: number; fresh: boolean; now: number; sizes: Sizes; onOpen: (e: ActivityEvent) => void }) {
   const kind = KINDS[event.kind];
   return (
     <div
       data-testid="activity-row"
-      className={`shrink-0 rounded-xl border border-cardBorder bg-background/60 px-2 flex items-center gap-2 min-w-0 transition-opacity duration-700 ${fresh ? "activity-slide-in" : ""}`}
+      role="button"
+      onClick={() => onOpen(event)}
+      title={`${event.title}
+${event.details}${event.extra ? `
+${event.extra}` : ""}`}
+      className={`cursor-pointer hover:bg-white/5 shrink-0 rounded-xl border border-cardBorder bg-background/60 px-2 flex items-center gap-2 min-w-0 transition-opacity duration-700 ${fresh ? "activity-slide-in" : ""}`}
       style={{ height: sizes.rowHeight, fontSize: sizes.rowFontSize, opacity: Math.max(0.35, 1 - index * 0.09), borderInlineStartColor: kind.color, borderInlineStartWidth: 3 }}
     >
       <span className="shrink-0 text-[1.25em]">{kind.icon}</span>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 min-w-0">
-          <span className="truncate font-bold text-white">{event.title}</span>
+          <span className="truncate font-bold text-white" title={event.title}>{event.title}</span>
           {event.amount !== null && (
             <span dir="ltr" className="ms-auto shrink-0 font-numbers font-bold" style={{ color: kind.color }}>
               {formatNumber(event.amount)}
@@ -140,7 +151,7 @@ function Row({ event, index, fresh, now, sizes }: { event: ActivityEvent; index:
         </p>
         <p className="flex items-center gap-1.5 min-w-0 text-gray-400 text-[0.92em]">
           <Badge text={event.badge} />
-          <span className="truncate">{event.details}</span>
+          <span className="truncate" title={event.details}>{event.details}</span>
           <span className="ms-auto shrink-0 text-gray-500">{ago(event, now)}</span>
         </p>
       </div>
@@ -148,7 +159,8 @@ function Row({ event, index, fresh, now, sizes }: { event: ActivityEvent; index:
   );
 }
 
-export default function ActivityFeed() {
+// onDetailsChange: لوحة التفاصيل مفتوحة (عشان التقليب يقف) - the details panel is open (so page rotation pauses)
+export default function ActivityFeed({ onDetailsChange }: { onDetailsChange?: (open: boolean) => void }) {
   const compact = useCompact();
   const sizes: Sizes = compact ? dashboardConfig.sizes.activityCard.compact : dashboardConfig.sizes.activityCard;
 
@@ -170,6 +182,12 @@ export default function ActivityFeed() {
   const [queue, setQueue] = useState<ActivityEvent[]>([]);
   const [current, setCurrent] = useState<ActivityEvent | null>(null);
   const [freshId, setFreshId] = useState<string | null>(null);
+  // الحدث المفتوح في لوحة التفاصيل: الطابور بيقف لحد ما تتقفل - the event open in the details panel: the queue waits until it closes
+  const [opened, setOpened] = useState<ActivityEvent | null>(null);
+  const closeDetails = useCallback(() => setOpened(null), []);
+  useEffect(() => {
+    onDetailsChange?.(opened !== null);
+  }, [opened, onDetailsChange]);
 
   // الأحداث اللي وصلت: أول مرة بتملا القايمة من غير حركة، وبعد كده الجديد بس بيدخل الطابور (الأقدم الأول)
   // Arrived events: the first time they fill the list without animation; afterwards only new ones join the queue (oldest first)
@@ -190,13 +208,13 @@ export default function ActivityFeed() {
 
   // الطابور: حدث واحد في المرة - the queue: one event at a time
   useEffect(() => {
-    if (current || queue.length === 0) return;
+    if (current || opened || queue.length === 0) return;
     const timer = setTimeout(() => {
       setCurrent(queue[0]);
       setQueue((q) => q.slice(1));
     }, freshId ? GAP_MS : 0);
     return () => clearTimeout(timer);
-  }, [current, queue, freshId]);
+  }, [current, queue, freshId, opened]);
 
   // بعد النبض: الحدث بينزل أول القايمة - after the pulses the event moves to the top of the list
   useEffect(() => {
@@ -243,14 +261,15 @@ export default function ActivityFeed() {
         <div className="flex-1 flex items-center justify-center">{error ? <OfflineBadge /> : <p className="text-gray-500">جاري التحميل...</p>}</div>
       ) : (
         <>
-          <Spotlight event={current ?? list[0] ?? null} live={!!current} waiting={queue.length} now={now} sizes={sizes} />
+          <Spotlight event={current ?? list[0] ?? null} live={!!current} waiting={queue.length} now={now} sizes={sizes} onOpen={setOpened} />
           <div ref={listRef} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ gap }}>
             {shown.map((event, index) => (
-              <Row key={event.id} event={event} index={index} fresh={event.id === freshId} now={now} sizes={sizes} />
+              <Row key={event.id} event={event} index={index} fresh={event.id === freshId} now={now} sizes={sizes} onOpen={setOpened} />
             ))}
           </div>
         </>
       )}
+      {opened && <ActivityDetailsPanel event={opened} icon={KINDS[opened.kind].icon} color={KINDS[opened.kind].color} onClose={closeDetails} />}
     </div>
   );
 }

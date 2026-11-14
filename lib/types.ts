@@ -809,6 +809,28 @@ export interface ActivityEvent {
   amount: number | null; // ج.م (null = مفيش مبلغ، زي تسوية المرتب) - EGP (null = no amount, e.g. salary adjustments)
   extra: string | null; // "2,819 كجم" / "107 باكت" / "20 باكت ربع"
   badge: string | null; // سلفة / مرتب / مورد / مصروف ...
+  doctype: string; // المستند اللي بيتفتح لما تدوس على الحدث - the document opened on click
+  docname: string;
+}
+
+// تفاصيل حدث (لوحة بتتفتح لما تدوس عليه): كله متجهز على السيرفر كنصوص - event details, all formatted on the server
+export interface ActivityDetailsTable {
+  title: string;
+  columns: { label: string; num?: boolean }[];
+  rows: string[][];
+  footer?: string[] | null;
+}
+export interface ActivityDetails {
+  doctype: string;
+  name: string;
+  postingDate: string | null; // "2026-11-14"
+  postingTime: string | null; // "13:55"
+  owner: string; // اسم اللي سجّلها - who recorded it (full name)
+  creation: string; // "2026-11-14 13:55:00"
+  lateDays: number; // اتسجلت بعد تاريخها بكام يوم - days between the posting date and the creation
+  erpUrl: string;
+  fields: { label: string; value: string; tone?: "in" | "out" | "accent" }[];
+  tables: ActivityDetailsTable[];
 }
 
 // events = الأحدث الأول، now = وقت السيرفر بتوقيت القاهرة (الواجهة بتبعته since في الطلب الجاي)
