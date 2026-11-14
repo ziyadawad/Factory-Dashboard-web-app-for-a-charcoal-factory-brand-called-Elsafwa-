@@ -1,10 +1,7 @@
 import {
-  Batches,
-  BatchTypeCount,
   Charity,
   CharityFund,
   CharityOperation,
-  ConfigErpBatches,
   ConfigKiln,
   ConfigPackagedProduct,
   ConfigPackagingItem,
@@ -258,124 +255,6 @@ function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
   };
 }
 
-type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
-
-type KilnExitRow = { name: string; kiln: string | null; exit_time: string | null } & Record<string, string | null>;
-
-// خيارات حقل النوع من الـ DocType (كاش optionsCacheMinutes، ولو فشل آخر خيارات نجحت أو [])
-// The type field's options from the DocType (cached optionsCacheMinutes; on failure the last good ones or [])
-let typeOptionsCache: { at: number; options: string[] } | null = null;
-async function batchTypeOptions(mapping: BatchesMapping): Promise<string[]> {
-  const maxAge = mapping.optionsCacheMinutes * 60_000;
-  if (typeOptionsCache && Date.now() - typeOptionsCache.at < maxAge) return typeOptionsCache.options;
-  try {
-    const body = await erpGet<{ docs?: { fields?: { fieldname: string; options?: string | null }[] }[] }>(
-      "/api/method/frappe.desk.form.load.getdoctype",
-      { doctype: mapping.exitsDoctype }
-    );
-    const field = body.docs?.[0]?.fields?.find((f) => f.fieldname === mapping.typeField);
-    const options = (field?.options ?? "").split("\n").map((o) => o.trim()).filter(Boolean);
-    typeOptionsCache = { at: Date.now(), options };
-    return options;
-  } catch (error) {
-    console.error("[erp] batches: could not read the type options:", error instanceof Error ? error.message : error);
-    return typeOptionsCache?.options ?? [];
-  }
-}
-
-// الأنواع بالترتيب: المعروفة (بترتيب الكونفج ولونها) اللي في خيارات ERPNext، وبعدها الجديدة بـ defaultTypeColor.
-// لو الخيارات مش متاحة: أنواع الكونفج كلها. resolve بيرجع النوع لأي كتابة (ولو جديد بيضيفه في الآخر)
-// Types in order: the known ones (config order and color) that are among the ERPNext options, then new ones in
-// defaultTypeColor. Without options: every config type. resolve() maps any spelling to its type (appending new ones)
-function batchTypeList(mapping: ConfigErpBatches, options: string[]) {
-  const known = mapping.types.map((t) => ({
-    label: t.label,
-    color: t.color,
-    names: [t.label, ...(t.aliases ?? [])].map(normalizeArabic),
-  }));
-  const findKnown = (raw: string) => known.find((t) => t.names.includes(normalizeArabic(raw)));
-  const optionKeys = new Set(options.map((o) => normalizeArabic(findKnown(o)?.label ?? o)));
-  const types: BatchTypeCount[] = (options.length ? known.filter((t) => optionKeys.has(normalizeArabic(t.label))) : known)
-    .map((t) => ({ label: t.label, color: t.color, count: 0 }));
-  const resolve = (raw: string): BatchTypeCount => {
-    const match = findKnown(raw);
-    const label = match?.label ?? raw;
-    let type = types.find((t) => normalizeArabic(t.label) === normalizeArabic(label));
-    if (!type) {
-      type = { label, color: match?.color ?? mapping.defaultTypeColor, count: 0 };
-      types.push(type);
-    }
-    return type;
-  };
-  options.forEach(resolve);
-  return { types, resolve };
-}
-
-// الطرحات: سجلات Kiln Exit اللي exit_time بتاعها النهارده (فبتتصفر لوحدها كل يوم)
-// exit_time بتوقيت سيرفر ERPNext (القاهرة) زي باقي التواريخ
-// Batches: Kiln Exit records whose exit_time is today (so they reset daily).
-// exit_time is in the ERPNext server time zone (Cairo) like every other date
-async function loadBatches(mapping: BatchesMapping): Promise<Batches> {
-  const today = erpToday();
-  // "Kiln Exit" -> "Kiln%20Exit"، والـ params بتتعمل encode في erpGet - the params are encoded by erpGet
-  const { data: rows } = await erpGet<{ data: KilnExitRow[] }>(
-    `/api/resource/${encodeURIComponent(mapping.exitsDoctype)}`,
-    {
-      fields: JSON.stringify(["name", mapping.typeField, "kiln", "exit_time"]),
-      filters: JSON.stringify([
-        ["exit_time", ">=", `${today} 00:00:00`],
-        ["exit_time", "<=", `${today} 23:59:59`],
-        ["docstatus", "!=", 2], // الملغي مش بيتعد - cancelled records don't count
-      ]),
-      limit_page_length: 0,
-      order_by: "exit_time desc",
-    }
-  );
-
-  const { types, resolve } = batchTypeList(mapping, await batchTypeOptions(mapping));
-  const exits = rows.map((row) => {
-    const raw = (row[mapping.typeField] ?? "").trim();
-    // النوع الفاضي مش بيتعد في أي نوع - an empty type counts in no type
-    const type = raw ? resolve(raw) : null;
-    if (type) type.count += 1;
-    else console.error(`[erp] batches: ${row.name} has no ${mapping.typeField}`);
-    return {
-      id: row.name,
-      time: String(row.exit_time ?? "").slice(11, 16), // "2026-10-27 10:45:12" -> "10:45"
-      kiln: (row.kiln ?? "").trim(),
-      typeLabel: type?.label ?? "",
-      color: type?.color ?? null,
-    };
-  });
-  return { types, exits, offline: false };
-}
-
-// آخر نتيجة نجحت للطرحات ويومها - last good batches result and the day it was loaded
-let lastGoodBatches: { day: string; value: Batches } | null = null;
-
-// الطرحات من ERPNext، ولو فشل آخر نتيجة نجحت النهارده مع offline، ولو مفيش null (الكارت يكتب "غير متصل")
-// نتيجة امبارح مش بتتعرض عشان خروج طرحات بيتصفر كل يوم
-// Batches from ERPNext; on failure today's last good result marked offline, else null ("غير متصل" on the card).
-// Yesterday's result is never shown because the exits reset daily
-async function batchesSection(results: ErpStatus[]): Promise<Batches | null> {
-  const mapping = dashboardConfig.erp.batches;
-  if (mapping.source !== "erp") return { types: batchTypeList(mapping, []).types, exits: [], offline: false };
-  try {
-    const value = await loadBatches(mapping as BatchesMapping);
-    lastGoodBatches = { day: erpToday(), value };
-    results.push({ fromErp: true, failed: false });
-    return value;
-  } catch (error) {
-    const fallback = lastGoodBatches?.day === erpToday() ? lastGoodBatches.value : null;
-    console.error(
-      `[erp] batches failed, showing ${fallback ? "last good value" : '"غير متصل"'}:`,
-      error instanceof Error ? error.message : error
-    );
-    results.push({ fromErp: true, failed: true, error: errorText(error) });
-    return fallback && { ...fallback, offline: true };
-  }
-}
-
 type CharityRow = {
   name: string | number; // ممكن يبقى رقم (naming = autoincrement) - may be a number (autoincrement naming)
   fund: string | null;
@@ -499,7 +378,7 @@ function kilnNumber(name: string): number {
 }
 
 // الأفران: كل Workstation اسمه بيبدأ بـ "فرن"، مترتبين بالرقم - every Workstation named "فرن…", sorted by number
-async function loadKilns(): Promise<ConfigKiln[]> {
+export async function loadKilns(): Promise<ConfigKiln[]> {
   const { data } = await erpGet<{ data: { name: string; status: string | null }[] }>("/api/resource/Workstation", {
     filters: JSON.stringify([["name", "like", "فرن%"]]),
     fields: JSON.stringify(["name", "status"]),
@@ -733,7 +612,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
   let treasuryStatus: SectionStatus = "ok";
-  const [treasury, packaged, sacks, wood, packaging, today, todayBatches, erpKilns, charity, sales, distributors, wallets] = await Promise.all([
+  const [treasury, packaged, sacks, wood, packaging, today, erpKilns, charity, sales, distributors, wallets] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
         ({ account }) => balanceOn(account)),
@@ -818,7 +697,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     ),
     // طلب حضور واحد لكل الكروت - one attendance request for every card
     erpSection("attendance", true, loadTodayAttendance, results),
-    batchesSection(results),
     erpSection("kilns", erp.kilns.source === "erp", loadKilns, results),
     charitySection(results),
     // المبيعات: كاش 60 ثانية (sales.cacheSeconds) - sales: cached for sales.cacheSeconds
@@ -859,7 +737,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       incomingToday,
       outgoingToday,
     },
-    batches: todayBatches,
     charity,
     sales,
     distributors,

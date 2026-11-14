@@ -205,30 +205,36 @@ export interface AccountDetails {
   advances: AdvanceSummary; // سلف الشهر (monthStart → to) - this month's advances
 }
 
-// نوع خشب وعدد طرحاته النهارده (الأنواع من خيارات charcoal_type في Kiln Exit) - الإجمالي بيتحسب في الواجهة
-// A wood type and today's batch count (types come from the Kiln Exit charcoal_type options); totals in the UI
-export interface BatchTypeCount {
+// الإنتاج والأفران (الصفحة 2) - production and kilns (page 2)
+// نوع فحم (من خيارات charcoal_type في Kiln Exit) ولونه - a charcoal type (Kiln Exit charcoal_type options) and its color
+export interface ProductionType {
   label: string; // "برتقال"
   color: string; // "#FF7A00"
-  count: number;
 }
 
-// طرحة خرجت النهارده (سجل Kiln Exit) - one batch that left a kiln today (a Kiln Exit record)
-export interface BatchExit {
+// طرحة خرجت (سجل Kiln Exit) - one batch out of a kiln (a Kiln Exit record)
+export interface ProductionExit {
   id: string;
-  time: string; // "10:45" بتوقيت القاهرة - Cairo time
+  date: string; // "2026-11-14" بتوقيت القاهرة - Cairo time
+  time: string; // "10:45"
   kiln: string; // "فرن 3"
-  typeLabel: string; // النوع (اسمه في الكونفج لو معروف، وإلا زي ما هو في ERPNext) - config name if known, else as in ERPNext
-  color: string | null; // null = النوع فاضي - empty type
+  type: string; // اسم النوع (زي ProductionType.label)، "" = فاضي - the type label, "" = empty
+  kg: number | null; // الوزن بالكيلو، null = بدون وزن (سجل قديم) - weight in kg, null = no weight (old record)
 }
 
-// types = خروج طرحات النهارده لكل نوع بالترتيب، exits = طرحات النهارده الأحدث الأول
-// offline = ERPNext مش بيرد والأرقام دي آخر نتيجة نجحت
-// types = today's exits per type in order, exits = today's exits newest first,
-// offline = ERPNext failed and these are the last good values
-export interface Batches {
-  types: BatchTypeCount[];
-  exits: BatchExit[];
+// exits = من monthStart (أو امبارح لو النهارده أول الشهر) لحد النهارده، الأحدث الأول
+// weightField = حقل الوزن موجود في الـ DocType، offline = ERPNext فشل ودي آخر نتيجة نجحت
+// exits = from monthStart (or yesterday on the 1st) to today, newest first; weightField = the DocType has the
+// weight field; offline = ERPNext failed and this is the last good result
+export interface ProductionData {
+  today: string;
+  yesterday: string;
+  monthStart: string;
+  weightField: boolean;
+  types: ProductionType[];
+  kilns: { name: string; status: KilnStatus }[];
+  exits: ProductionExit[];
+  updatedAt: string;
   offline: boolean;
 }
 
@@ -467,7 +473,6 @@ export interface DashboardData {
   stock: Stock;
   kilns: Kilns;
   treasury: Treasury;
-  batches: Batches | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   charity: Charity | null; // null = ERPNext فشل ومفيش نتيجة قديمة - ERPNext failed with no last good result
   updatedAt: string;
   erpOffline: boolean; // true when every ERPNext request failed on this refresh
@@ -497,6 +502,7 @@ export type ConfigErpBatches = (
       source: "erp";
       exitsDoctype: string;
       typeField: string; // حقل النوع (Select) - the type field (Select)
+      weightField: string; // حقل الوزن بالكيلو (Float) - the weight field in kg (Float)
     }
 ) & { types: ConfigBatchType[]; defaultTypeColor: string; optionsCacheMinutes: number };
 

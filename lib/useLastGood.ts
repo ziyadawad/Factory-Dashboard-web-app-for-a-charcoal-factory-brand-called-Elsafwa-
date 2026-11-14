@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { Batches, DashboardData, Distributors, SalesReps, SectionKey, WalletNumbers } from "./types";
+import { DashboardData, Distributors, SalesReps, SectionKey, WalletNumbers } from "./types";
 
 // آخر نتيجة نجحت لكل كارت في المتصفح (localStorage)، عشان تفضل بعد أي reload
 // وحتى لو السيرفر (Vercel serverless) اتعمله restart ونسي آخر قيمة. بتتمسح لما اليوم يتغير
@@ -11,7 +11,6 @@ import { Batches, DashboardData, Distributors, SalesReps, SectionKey, WalletNumb
 const STORAGE_KEY = "dashboard-last-good";
 
 type Saved = Partial<Pick<DashboardData, SectionKey>> & {
-  batches?: Batches;
   sales?: SalesReps;
   distributors?: Distributors;
   wallets?: Record<string, WalletNumbers>; // باسم المحفظة - by wallet name
@@ -73,15 +72,7 @@ export function useLastGood(data: DashboardData | undefined) {
       }
     }
 
-    // الطرحات: null = فشل ومفيش نتيجة على السيرفر، نجرب اللي في المتصفح - batches null: try the browser copy
-    if (data.batches && !data.batches.offline) {
-      saved.batches = data.batches;
-      changed = true;
-    } else if (!data.batches && saved.batches) {
-      view.batches = { ...saved.batches, offline: true };
-    }
-
-    // المبيعات والموزعين بنفس الطريقة - sales and distributors the same way
+    // المبيعات والموزعين: null = فشل ومفيش نتيجة على السيرفر، نجرب اللي في المتصفح - null: try the browser copy
     if (data.sales && !data.sales.offline) {
       saved.sales = data.sales;
       changed = true;

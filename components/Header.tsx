@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
-import { HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
+import { Factory, HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -22,6 +22,7 @@ interface HeaderProps {
 // أيقونة كل صفحة حسب الـ id بتاعها - icon for each page id
 const PAGE_ICONS: Record<string, LucideIcon> = {
   main: House,
+  production: Factory,
   stock: Warehouse,
   sales: Truck,
   distributors: Store,

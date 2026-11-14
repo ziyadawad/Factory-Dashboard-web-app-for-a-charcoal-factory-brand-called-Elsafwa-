@@ -244,18 +244,24 @@ export const dashboardConfig = {
     // ERPNext down: last good result, else the data.kilns list below
     kilns: { source: "erp" } as ConfigErpSource,
 
-    // الطرحات اليوم (تحت الأفران) - كل حاجة بتتحدث كل refreshSeconds
-    // خروج طرحات = سجلات "Kiln Exit": سجل لكل طرحة، فيه نوع الفحم (charcoal_type: برتقال / مانجا / جازورينا)
-    // والفرن (kiln) ووقت الخروج (exit_time). بنعد بس اللي exit_time بتاعها النهارده بتوقيت القاهرة،
-    // فالعداد بيتصفر لوحده أول كل يوم من غير ما حد يعمل حاجة. السجلات الملغية (Cancelled) مش بتتعد
-    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على Kiln Exit، وإلا الكارت يكتب "غير متصل"
-    // لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش رقم قديم الكارت كله يكتب "غير متصل" (مش أصفار)
-    // Batches: today's (Africa/Cairo) "Kiln Exit" records, so they reset daily on their own. On failure the
-    // last good result stays with a "غير متصل" badge, else the card shows "غير متصل" (never fake zeros)
+    // الإنتاج والأفران (الصفحة 2 + كارت "إنتاج النهارده" في الرئيسية) - بيتحدث كل production.refreshSeconds
+    // خروج طرحات = سجلات "Kiln Exit": سجل لكل طرحة، فيه نوع الفحم (charcoal_type: برتقال / مانجا / جازورينا / جوافة)
+    // والفرن (kiln = Workstation) ووقت الخروج (exit_time) والوزن بالكيلو (weight_kg). النهارده / الشهر بتوقيت القاهرة
+    // فالأرقام بتتصفر لوحدها. السجلات الملغية (Cancelled) مش بتتعد. سجل من غير وزن (القديم) بيتعد طرحة
+    // ويتكتب "بدون وزن" ومش بيدخل في الأطنان ولا متوسط الوزن
+    // يوزر الداشبورد لازم يبقى ليه صلاحية Read على Kiln Exit، وإلا الصفحة تكتب "غير متصل"
+    // لو ERPNext وقع بيفضل آخر رقم نجح مع "غير متصل"، ولو مفيش الكارت يكتب "غير متصل" (مش أصفار)
+    // Production: "Kiln Exit" records (one per batch) with charcoal_type, kiln, exit_time and weight_kg.
+    // Today / this month are in Cairo time. A record with no weight (old ones) counts as a batch, shows
+    // "بدون وزن" and is left out of the tons and the average weight. On failure the last good result stays
+    // with a "غير متصل" badge, else "غير متصل" (never fake zeros)
     batches: {
       source: "erp",
       exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
       typeField: "charcoal_type", // نوع الفحم (Select) - the charcoal type field
+      // الوزن بالكيلو (Float). لو الحقل لسه مش موجود في الـ DocType كل الطرحات بتبقى "بدون وزن" لحد ما يتضاف
+      // Weight in kg (Float). While the DocType has no such field every batch shows "بدون وزن" until it is added
+      weightField: "weight_kg",
       // الأنواع بتتقري من خيارات charcoal_type في الـ DocType نفسه، فأي نوع جديد بيظهر لوحده بـ defaultTypeColor
       // واللي هنا بيحدد الترتيب واللون للأنواع المعروفة (الأسامي بتتطابق بعد توحيد الحروف: ة = ه، أ = ا ...)
       // Types are read from the DocType's charcoal_type options, so a new option shows up on its own with
@@ -375,6 +381,21 @@ export const dashboardConfig = {
   },
 
   // ============================================================
+  // الإنتاج والأفران - صفحة الإنتاج وكارت "إنتاج النهارده" في الرئيسية (البيانات من erp.batches و erp.kilns)
+  // Production - the production page and the main page "إنتاج النهارده" card (data from erp.batches and erp.kilns)
+  // ============================================================
+
+  production: {
+    refreshSeconds: 10, // الشاشة بتسأل كل 10 ثواني - the screen asks every 10 s
+    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    // رسم الإنتاج بالساعة النهارده: من الساعة دي لحد الساعة دي (طرحة قبل/بعد كده بتدخل في أول/آخر عمود)
+    // Today's hourly chart: from this hour to this hour (exits outside go into the first / last bar)
+    hourFrom: 6,
+    hourTo: 22,
+    glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
+  },
+
+  // ============================================================
   // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
   // Pages - the dashboard has several pages (arrows at the top-left of the header or keyboard arrows)
   // ============================================================
@@ -387,11 +408,12 @@ export const dashboardConfig = {
     // ترتيب الصفحات - عشان تفتح صفحة معينة على التلفزيون اكتب في اللينك ?page=2
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
-      { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور والأفران - page 1
-      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 2: المخازن - page 2
-      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 3: الخزن والمحافظ - page 3
-      { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 4: صناديق الصدقات - page 4
-      { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 5: مبيعات المناديب - page 5
+      { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور وإنتاج النهارده - page 1
+      { id: "production", title: "الإنتاج والأفران", durationSeconds: 60 }, // الصفحة 2: الإنتاج والأفران - page 2
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 3: المخازن - page 3
+      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 4: الخزن والمحافظ - page 4
+      { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 5: صناديق الصدقات - page 5
+      { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 6: مبيعات المناديب - page 6
       // متوقفة — غيّرها لـ true لو عايز ترجّعها
       { id: "distributors", title: "الموزعين", durationSeconds: 60, enabled: false }, // الموزعين - distributors (disabled)
     ] as ConfigPage[],
@@ -702,12 +724,11 @@ export const dashboardConfig = {
     },
 
     // عرض كروت الصف العلوي (نسب من عرض الصف) - top row card widths (fr ratios)
-    // مجموعهم لازم يفضل 4 عشان الأفران تفضل بنفس العرض - keep the sum at 4 so the kilns card keeps its width
     topRowColumns: {
       treasury: 0.62, // رصيد الخزنة (أضيق) - treasury (narrower)
       management: 0.68, // حضور الإدارة (أضيق) - management attendance (narrower)
-      workers: 1.85, // حضور عمال (الأعرض، خد شوية من الخزنة والأفران عشان الأسامي الكبيرة) - workers attendance (widest)
-      kilns: 0.85, // الأفران والطرحات - kilns and batches
+      workers: 2.1, // حضور عمال (الأعرض، خد مكان الأفران والطرحات عشان كل الأسامي تبان) - workers attendance (widest)
+      production: 0.6, // كارت "إنتاج النهارده" الصغير - the compact "إنتاج النهارده" card
     },
 
     // الخزنة - بطاقة رصيد الخزنة
@@ -766,20 +787,34 @@ export const dashboardConfig = {
       // باقي مقاسات "حضور عمال" في sizes.page1 تحت - the other "حضور عمال" sizes are in sizes.page1 below
     },
 
-    // الأفران - بطاقة الأفران
-    // Kilns - kilns card
-    kilns: {
-      countFontSize: 30, // حجم أرقام الأعداد (شغالة/صيانة/متوقفة) - font size for count numbers
-      kilnChipHeight: 32, // ارتفاع شريحة الفرن - kiln chip height
+    // كارت "إنتاج النهارده" في الرئيسية - the main page "إنتاج النهارده" card
+    productionCard: {
+      tonsFontSize: 56, // رقم أطنان النهارده الكبير - today's tons (big number)
+      numberFontSize: 30, // عدد الطرحات والأفران الشغالة - exits count and working kilns
+      // شاشة أضيق من 1600 (لابتوب 1366): نفس الأرقام أصغر - screens under 1600 wide (1366 laptop): smaller
+      compactTonsFontSize: 40,
+      compactNumberFontSize: 24,
     },
 
-    // الطرحات اليوم - بطاقة الطرحات تحت الأفران
-    // Today's batches - batches card under the kilns
-    batches: {
-      tileFontSize: 30, // حجم رقم كل نوع (برتقال / مانجا / جازورينا / جوافة) - per-type number font size
-      totalFontSize: 30, // حجم رقم الإجمالي - total number font size
-      exitRowHeight: 30, // ارتفاع كل سطر في قايمة الطرحات اللي خرجت (أصغر = سطور أكتر) - exit list row height (px)
-      exitFontSize: 14, // حجم الكلام في قايمة الطرحات اللي خرجت - exit list font size
+    // صفحة الإنتاج والأفران - the production page
+    productionPage: {
+      kpiHeight: 132, // ارتفاع صف الأرقام اللي فوق - top KPI row height (px)
+      kpiTonsFontSize: 72, // رقم "إنتاج النهارده" (الأكبر) - the "إنتاج النهارده" number (biggest)
+      kpiFontSize: 46, // باقي أرقام الصف اللي فوق - the other KPI numbers
+      lastWeightFontSize: 52, // الوزن في كارت "آخر وزنة" - the weight in the "آخر وزنة" card
+      kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
+      exitRowHeight: 36, // ارتفاع كل سطر في قايمة طرحات النهارده - today's exits row height (px)
+      exitFontSize: 17, // حجم الكلام في قايمة الطرحات - exits list font size
+      // شاشة أضيق من 1600 (لابتوب 1366×768): نفس المقاسات أصغر - screens under 1600 wide (1366x768 laptop): smaller
+      compact: {
+        kpiHeight: 96,
+        kpiTonsFontSize: 50,
+        kpiFontSize: 32,
+        lastWeightFontSize: 36,
+        kilnTonsFontSize: 20,
+        exitRowHeight: 27,
+        exitFontSize: 13,
+      },
     },
 
     // رصيد المخازن (الصفحة 2) - stock page (page 2)

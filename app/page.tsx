@@ -5,11 +5,12 @@ import useSWR from "swr";
 import Header from "@/components/Header";
 import AttendanceSection from "@/components/AttendanceSection";
 import StockSection from "@/components/StockSection";
-import KilnsSection from "@/components/KilnsSection";
 import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
-import BatchesSection from "@/components/BatchesSection";
+import ProductionPage, { ProductionTarget } from "@/components/ProductionPage";
+import ProductionCard from "@/components/ProductionCard";
+import ProductionDetailsPanel from "@/components/ProductionDetailsPanel";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
 import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
@@ -18,7 +19,7 @@ import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
-import { DashboardData } from "@/lib/types";
+import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
 import { useLastGood } from "@/lib/useLastGood";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -31,6 +32,8 @@ const fetcher = async (url: string) => {
 };
 
 const REFRESH_MS = dashboardConfig.erp.refreshSeconds * 1000;
+// الإنتاج والأفران بيتحدث أسرع (كل production.refreshSeconds) - production refreshes faster
+const PRODUCTION_REFRESH_MS = dashboardConfig.production.refreshSeconds * 1000;
 
 // الصفحات الشغالة بس (enabled: false = متوقفة) - enabled pages only
 const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false);
@@ -79,6 +82,20 @@ export default function Dashboard() {
   // كل كارت بيحتفظ بآخر قيمة نجحت لوحده - every card keeps its own last good value
   const { view: data, cards } = useLastGood(serverData);
 
+  // الإنتاج والأفران (صفحة الإنتاج + كارت الرئيسية): طلب لوحده كل 10 ثواني، ولو فشل بتفضل آخر داتا مع "غير متصل"
+  // Production (its page + the main card): its own request every 10 s; on failure the last data stays, marked offline
+  const { data: productionRaw, error: productionError } = useSWR<ProductionData>("/api/production", fetcher, {
+    refreshInterval: PRODUCTION_REFRESH_MS,
+    revalidateOnReconnect: true,
+    revalidateOnFocus: true,
+    refreshWhenOffline: true,
+    dedupingInterval: 2000,
+    errorRetryInterval: 15_000,
+  });
+  const production = productionRaw ? (productionError ? { ...productionRaw, offline: true } : productionRaw) : null;
+  const [productionTarget, setProductionTarget] = useState<ProductionTarget | null>(null);
+  const closeProduction = useCallback(() => setProductionTarget(null), []);
+
   const [flashSection, setFlashSection] = useState<string | null>(null);
   const prevDataRef = useRef<DashboardData | null>(null);
   const cols = dashboardConfig.sizes.topRowColumns;
@@ -125,7 +142,8 @@ export default function Dashboard() {
       return next;
     });
   }, []);
-  const paused = salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null;
+  const paused =
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -210,21 +228,9 @@ export default function Dashboard() {
         setTimeout(() => setFlashSection(null), 500);
       }
 
-      // Check for changes in today's batches
-      if (JSON.stringify(data.batches) !== JSON.stringify(prev.batches)) {
-        setFlashSection("batches");
-        setTimeout(() => setFlashSection(null), 500);
-      }
-
       // Check for changes in charity funds
       if (JSON.stringify(data.charity) !== JSON.stringify(prev.charity)) {
         setFlashSection("charity");
-        setTimeout(() => setFlashSection(null), 500);
-      }
-
-      // Check for changes in kilns
-      if (JSON.stringify(data.kilns.kilns) !== JSON.stringify(prev.kilns.kilns)) {
-        setFlashSection("kilns");
         setTimeout(() => setFlashSection(null), 500);
       }
     }
@@ -233,6 +239,18 @@ export default function Dashboard() {
       prevDataRef.current = data;
     }
   }, [data]);
+
+  // كارت إنتاج النهارده بيلمع لما طرحة جديدة تخرج - the production card flashes when a new exit arrives
+  const lastExitRef = useRef<string | null | undefined>(undefined);
+  const lastExitId = production?.exits[0]?.id ?? null;
+  useEffect(() => {
+    if (lastExitRef.current !== undefined && lastExitId && lastExitId !== lastExitRef.current) {
+      setFlashSection("production");
+      setTimeout(() => setFlashSection(null), 500);
+    }
+    if (productionRaw) lastExitRef.current = lastExitId;
+  }, [lastExitId, productionRaw]);
+  const productionPageIndex = PAGES.findIndex((page) => page.id === "production");
 
   // "غير متصل" بيظهر بس لو الجلب أو ERPNext فشل (مش وقت التحميل) - offline only when the fetch or ERPNext failed
   const isConnected = !error && !data?.erpOffline;
@@ -247,7 +265,7 @@ export default function Dashboard() {
           <div
             className="grid gap-4 h-full"
             style={{
-              gridTemplateColumns: `minmax(0,${cols.treasury}fr) minmax(0,${cols.management}fr) minmax(0,${cols.workers}fr) minmax(0,${cols.kilns}fr)`,
+              gridTemplateColumns: `minmax(0,${cols.treasury}fr) minmax(0,${cols.management}fr) minmax(0,${cols.workers}fr) minmax(0,${cols.production}fr)`,
               gridTemplateRows: "minmax(0,1fr)",
             }}
           >
@@ -285,21 +303,17 @@ export default function Dashboard() {
                 />
               )}
             </div>
-            {/* الأفران وتحتها الطرحات اليوم - kilns with today's batches below */}
-            <div className="min-h-0 flex flex-col gap-4">
-              <div className={`shrink-0 ${flashClass("kilns")}`}>
-                {cards.kilns.missing ? (
-                  <OfflineCard title="الأفران" />
-                ) : (
-                  <KilnsSection data={data.kilns} offline={cards.kilns.offline} />
-                )}
-              </div>
-              <div className={`flex-1 ${flashClass("batches")}`}>
-                <BatchesSection data={data.batches} />
-              </div>
+            {/* إنتاج النهارده (بيفتح صفحة الإنتاج) - today's production (opens the production page) */}
+            <div className={flashClass("production")}>
+              <ProductionCard
+                data={production}
+                onOpen={() => productionPageIndex >= 0 && changePage(productionPageIndex, productionPageIndex > pageIndex ? 1 : -1)}
+              />
             </div>
           </div>
         );
+      case "production":
+        return <ProductionPage data={production} onOpen={setProductionTarget} />;
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" onOpenItem={setStockItem} />;
       case "sales":
@@ -404,6 +418,9 @@ export default function Dashboard() {
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
       )}
       {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
+      {productionTarget && production && (
+        <ProductionDetailsPanel data={production} target={productionTarget} onClose={closeProduction} />
+      )}
       {stockItem && <StockDetailsPanel key={`${stockItem.group}|${stockItem.name}|${stockItem.variant ?? ""}`} target={stockItem} onClose={closeStockItem} />}
     </div>
   );

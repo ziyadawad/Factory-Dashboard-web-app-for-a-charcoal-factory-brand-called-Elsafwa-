@@ -49,6 +49,21 @@ body {
     text-wrap: balance;
   }
   
+  /* كارت "آخر وزنة" لما طرحة جديدة توصل - the "آخر وزنة" card when a new exit arrives */
+  .animate-new-exit {
+    animation: new-exit 1.2s ease-in-out 3;
+  }
+
+  @keyframes new-exit {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.02);
+    }
+  }
+
   .animate-flash {
     animation: flash 0.5s ease-in-out;
   }
