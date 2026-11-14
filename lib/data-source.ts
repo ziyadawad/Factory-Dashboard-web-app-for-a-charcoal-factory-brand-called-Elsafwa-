@@ -54,6 +54,7 @@ export type TodayAttendanceRows = {
     department: string | null;
     designation: string | null;
     branch: string | null;
+    ctc?: number | null; // Cost to Company - لقاعدة عمال اليومية التلقائية - for the automatic daily rule
   }[];
   attendance: { employee: string; employee_name: string | null; status: string }[];
   checkins: { employee: string; time: string; log_type: string | null }[];
@@ -68,7 +69,7 @@ export async function loadTodayAttendance(): Promise<TodayAttendanceRows> {
   const [employees, attendance, checkins] = await Promise.all([
     erpGet<{ data: TodayAttendanceRows["employees"] }>("/api/resource/Employee", {
       filters: JSON.stringify([["status", "=", "Active"]]),
-      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation", "branch"]),
+      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "ctc"]),
       limit_page_length: 0,
     }),
     erpGet<{ data: TodayAttendanceRows["attendance"] }>("/api/resource/Attendance", {
@@ -196,9 +197,13 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     // 1) كود البصمة  2) الفرع (اللي مالوش كود: بس لو حاضر)  3) الحاضر اللي مالوش قسم → اليومية
     // 1) device code 2) branch (no code: only when present) 3) present without a section -> daily
     const byCode = code === null ? undefined : keys.find((k) => sectionHasCode(sections[k], code));
-    const byBranch = code !== null || status === "present" ? branchSection(employee.branch) : undefined;
+    const branchKey = branchSection(employee.branch);
+    const byBranch = code !== null || status === "present" ? branchKey : undefined;
     const key = byCode ?? byBranch;
-    const target = key ?? (status === "present" ? "daily" : undefined);
+    // 4) مالوش قسم (لا بالكود ولا بالفرع) والـ ctc <= dailyRateMaxCtc → اليومية حتى قبل أول بصمة
+    // 4) no section (by code or branch) and ctc <= dailyRateMaxCtc -> daily, even before his first punch
+    const autoDaily = !byCode && !branchKey && (Number(employee.ctc) || 0) <= dashboardConfig.salaries.dailyRateMaxCtc;
+    const target = key ?? (status === "present" || autoDaily ? "daily" : undefined);
     if (!target) continue;
     placed.add(employee.name);
     result[target].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status });

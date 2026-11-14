@@ -89,7 +89,7 @@ async function loadMonth(today: string): Promise<MonthRows> {
   const [employees, attendance, checkins, companies] = await Promise.all([
     list<EmployeeRow>("Employee", {
       filters: [["status", "=", "Active"]],
-      fields: ["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "date_of_joining", "holiday_list"],
+      fields: ["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "ctc", "date_of_joining", "holiday_list"],
     }),
     list<AttendanceRow>("Attendance", {
       filters: [["attendance_date", ">=", rangeStart], ["attendance_date", "<=", today], ["docstatus", "=", 1]],

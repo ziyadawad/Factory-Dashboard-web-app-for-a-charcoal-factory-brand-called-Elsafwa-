@@ -26,7 +26,11 @@ export const dashboardConfig = {
   // - اسم وحضور كل موظف من ERPNext: حاضر = بصمة النهارده أو Present / Half Day / Work From Home،
   //   إجازة = On Leave (مش بتتحسب في النسبة)، غائب = Absent أو مفيش لا بصمة ولا حضور
   // - أي حد حاضر النهارده وكوده مش هنا (أو مالوش كود) بيتحط لوحده في "عمال يومية"
-  // - Active employees only; anyone present today whose code isn't listed (or has none) goes to "عمال يومية"
+  // - وأي موظف Active مالوش قسم (لا بالكود ولا بالفرع) والـ ctc بتاعه <= salaries.dailyRateMaxCtc بيتحط في
+  //   "عمال يومية" على طول، حتى قبل أول بصمة (فالعامل الجديد مش محتاج يتكتب كوده هنا)
+  // - Active employees only; anyone present today whose code isn't listed (or has none) goes to "عمال يومية";
+  //   so does any Active employee with no section (by code or branch) whose ctc <= salaries.dailyRateMaxCtc,
+  //   even before his first punch (a new daily worker needs no config change)
   // ============================================================
   attendance: {
     sections: {
@@ -36,7 +40,13 @@ export const dashboardConfig = {
       workshop: { label: "ورشة", codes: [[1027, 1029]] } as ConfigAttendanceSection, // مصنع إنتاج — ورشة
       operators: { label: "أوبريتر", codes: [[1040, 1045]] } as ConfigAttendanceSection, // مصنع إنتاج — أوبريتر
       packing: { label: "عمال تعبئة", codes: [[1030, 1039]] } as ConfigAttendanceSection, // عمال تعبئة
-      daily: { label: "عمال يومية", codes: [[1055, 1060]] } as ConfigAttendanceSection, // عمال يومية (+ أي حاضر مالوش قسم)
+      daily: {
+        label: "عمال يومية",
+        codes: [
+          [1055, 1060],
+          1066, // احمد ابراهيم (ميجا) — HR-EMP-00209
+        ],
+      } as ConfigAttendanceSection, // عمال يومية (+ أي حاضر مالوش قسم، + salaries.dailyRateMaxCtc)
       // كروت لوحدها برّه "حضور عمال" ومش داخلة في إجمالي العمال - separate cards, not in the workers total
       drivers: { label: "سواقين", codes: [[1046, 1048]] } as ConfigAttendanceSection, // سواقين
       reps: { label: "مناديب", codes: [[1049, 1054]] } as ConfigAttendanceSection, // مناديب
@@ -146,6 +156,11 @@ export const dashboardConfig = {
     dailyStructures: ["عمال يومية"] as string[],
     // حقل اليومية في ملف الموظف (Employee) - the daily rate field on Employee
     dailyRateField: "custom_اليومية",
+    // أقصى ctc (Cost to Company في ملف الموظف) لعامل يومية: الموظف اللي مالوش قسم (لا كود ولا فرع) والـ ctc بتاعه
+    // أقل من أو يساوي ده بيتحط في "عمال يومية" تلقائي حتى قبل أول بصمة. 0 = اللي مالوش مرتب شهري بس
+    // The highest ctc of a daily worker: an employee with no section (no code, no branch) and ctc <= this goes to
+    // "عمال يومية" automatically, even before his first punch. 0 = only those with no monthly salary
+    dailyRateMaxCtc: 0,
     // عمال اليومية بيتقبضوا كاش يوم dailyPayDay عن الأسبوع اللي فات كله (من dailyWeekStart لليوم اللي قبله)
     // يعني السبت بيقبضوا من السبت اللي قبله للجمعة. الجمعة بتتحسب بس لو بصم فعلا، ونص اليوم = 0.5
     // عمود "مستحق هذا الأسبوع": يوم القبض كله (لحد 23:59) بيفضل يعرض الأسبوع اللي خلص (اللي بيتقبض النهارده)،
