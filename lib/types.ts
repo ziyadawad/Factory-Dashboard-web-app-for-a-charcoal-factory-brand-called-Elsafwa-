@@ -315,6 +315,9 @@ export interface EmployeeDay {
   status: DayStatus;
   firstPunch: string | null; // "08:12" أول بصمة في اليوم (حتى لو يوم إجازة) - first punch that day
   half?: true; // نص يوم (حاضر بس بيتخصم نص يوم في المرتب) - half day (present, half a day off the salary)
+  // جمعة اشتغلها (بصمة أو Attendance حاضر يوم الإجازة الأسبوعية): 1 أو نص يوم 0.5 - "fixed" مالهمش
+  // A worked Friday (a punch or a Present Attendance on the weekly day off): 1, or 0.5 for half - never "fixed"
+  fridayWork?: 1 | 0.5;
 }
 
 export interface EmployeeAttendance {
@@ -588,6 +591,8 @@ export interface EmployeeSalary {
   presentDates: { date: string; half: boolean }[];
   // عمال اليومية: كل أسبوع (السبت → الجمعة) فيه أيام من الشهر ده + الأسبوع اللي هيتقبض - daily workers: every week
   weeks: DailyWeek[];
+  // بدل الجمعة (الشهريين بس): الجمع اللي اشتغلها × (الشامل ÷ 30) - Friday pay (monthly staff only)
+  friday: { days: number; rate: number; amount: number; dates: { date: string; half: boolean }[] };
   total: number; // الأجر الشامل - salary (base + allowance)
   // المصدر: هيكل المرتب (Salary Structure Assignment) أو ملف الموظف (Employee.ctc) - where total came from
   source: "structure" | "employee" | null;
@@ -720,6 +725,8 @@ export interface SectionSalaries {
     dailyMonth: number; // إجمالي الشهر لعمال اليومية
     totalWithOvertime: number;
     installments: number;
+    fridayDays: number; // جمع اشتغلها (الشهريين) - worked Fridays (monthly staff)
+    fridayPay: number; // بدل الجمعة - Friday pay
     earned: number;
     expectedNet: number;
     monthly: number;

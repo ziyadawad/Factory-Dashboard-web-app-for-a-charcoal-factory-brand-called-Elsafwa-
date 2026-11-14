@@ -156,6 +156,9 @@ const CELL_STYLE: Record<DayStatus, string> = {
   future: "border-cardBorder/60 text-gray-600",
 };
 
+// جمعة اشتغلها (أزرق) - a worked Friday (blue)
+const FRIDAY_STYLE = "bg-sky-500/25 border-sky-400/70 text-white";
+
 const CELL_NOTE: Partial<Record<DayStatus, string>> = { absent: "غائب", leave: "إجازة", off: "جمعة", holiday: "إجازة رسمية" };
 
 // تقويم الشهر - the month calendar
@@ -176,18 +179,28 @@ function MonthCalendar({ person, openToday }: { person: EmployeeAttendance; open
         ))}
         {person.days.map((day) => {
           const open = day.date === openToday && day.status === "absent";
+          const friday = !!day.fridayWork;
           return (
           <div
             key={day.date}
             className={`h-[62px] rounded-lg border flex flex-col items-center justify-center leading-tight ${
-              day.half ? "bg-amber-400/15 border-amber-400/70 text-white" : open ? "border-2 border-gray-300/70 text-white" : CELL_STYLE[day.status]
+              friday
+                ? FRIDAY_STYLE
+                : day.half
+                  ? "bg-amber-400/15 border-amber-400/70 text-white"
+                  : open
+                    ? "border-2 border-gray-300/70 text-white"
+                    : CELL_STYLE[day.status]
             }`}
           >
             <span dir="ltr" className="font-numbers tabular-nums font-bold text-[18px]">
               {Number(day.date.slice(8))}
               {day.half && <span className="text-amber-300 text-[14px]"> ½</span>}
+              {day.fridayWork === 0.5 && <span className="text-sky-200 text-[14px]"> ½</span>}
             </span>
-            {day.firstPunch && day.status !== "future" ? (
+            {friday ? (
+              <span className="text-[12px] text-sky-200 font-semibold">جمعة شغل</span>
+            ) : day.firstPunch && day.status !== "future" ? (
               <span dir="ltr" className="font-numbers tabular-nums text-[13px] text-gray-300">
                 {day.firstPunch}
               </span>
@@ -204,6 +217,7 @@ function MonthCalendar({ person, openToday }: { person: EmployeeAttendance; open
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-statusGreen/60" /> حاضر (وقت أول بصمة)</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-statusRed/60" /> غائب</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-amber-400/60" /> نص يوم (بصمة واحدة الصبح)</span>
+        <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-sky-500/70" /> جمعة شغل</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-gray-500/60" /> إجازة / جمعة / إجازة رسمية</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded border border-cardBorder" /> لسه / قبل البصمة أو التعيين</span>
       </div>
@@ -434,8 +448,11 @@ function FinalLines({ salary, formula }: { salary: EmployeeSalary; formula: Reac
 const isOpenToday = (d: DailyWeek["days"][number], today: string) => d.date === today && d.worked === 0;
 
 // لون يوم في أسبوع اليومية - a day's colour in a daily worker's week
+const isFridayWork = (d: DailyWeek["days"][number]) => (d.status === "off" || d.status === "holiday") && d.worked > 0;
 const weekDayStyle = (d: DailyWeek["days"][number], today: string) =>
-  d.worked === 1
+  isFridayWork(d)
+    ? FRIDAY_STYLE
+    : d.worked === 1
     ? "bg-statusGreen/20 border-statusGreen/60 text-statusGreen"
     : d.worked === 0.5
       ? "bg-amber-400/15 border-amber-400/60 text-amber-300"
@@ -515,6 +532,7 @@ function DailyWeekRow({ week, rate, paidToday, today }: { week: DailyWeek; rate:
             {shortDate(d.date)}
             {d.worked === 0.5 && <span className="block text-[10px] leading-none pb-0.5">نص</span>}
             {isOpenToday(d, today) && <span className="block text-[10px] leading-none pb-0.5">النهارده</span>}
+            {isFridayWork(d) && <span className="block text-[10px] leading-none pb-0.5 text-sky-200">جمعة شغل</span>}
           </div>
         ))}
       </div>
@@ -640,6 +658,23 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
       {/* بنود الشهر (Additional Salary + Salary Adjustment، من غير الإضافي)
           This month's items (Additional Salary + Salary Adjustment, overtime excluded) */}
       <AdjustmentLines salary={salary} empty="مكافآت / خصومات / أقساط" />
+      {salary.friday.days > 0 && (
+        <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
+          <span className="text-gray-400">
+            بدل الجمعة: {money(salary.friday.days)} جمعة × {money(salary.friday.rate)}
+            <span className="ms-1.5 text-[14px] text-gray-500">
+              ({salary.friday.dates.map((d, i) => (
+                <span key={d.date}>
+                  {i > 0 && "، "}
+                  {shortDate(d.date)}
+                  {d.half && " ½"}
+                </span>
+              ))})
+            </span>
+          </span>
+          <span className="font-semibold text-sky-300">+ {money(salary.friday.amount)} ج.م</span>
+        </p>
+      )}
       <FinalLines
         salary={salary}
         formula={
@@ -649,6 +684,7 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
             {salary.advanceTotal > 0 && <> − سلف {money(salary.advanceTotal)} ج.م</>}
             {salary.installments > 0 && <> − أقساط {money(salary.installments)} ج.م</>}
             {salary.bonuses > 0 && <> + مكافآت {money(salary.bonuses)} ج.م</>}
+            {salary.friday.amount > 0 && <> + بدل الجمعة {money(salary.friday.amount)} ج.م</>}
           </>
         }
       />
@@ -868,6 +904,11 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <th className={`${th} text-center`} title="مكافأة + حوافز (داخلة في المرتب)">
             مكافآت
           </th>
+          <th className={`${th} text-center !whitespace-normal leading-tight`} title="الجمع اللي اشتغلها × (الشامل ÷ 30) - بتتزود على المرتب النهائي">
+            جمع
+            <br />
+            اشتغلها
+          </th>
           <th className={`${th} text-center`} title="خصم، جزاء، تأخير">
             خصومات
           </th>
@@ -892,7 +933,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           </th>
           <th
             className={`${th} text-center !whitespace-normal leading-tight !text-emerald-300 bg-emerald-400/[0.07]`}
-            title="الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات − قسط الشهر + المكافآت (من غير الإضافي)"
+            title="الشامل ÷ 30 × الأيام اللي عدّت − الغياب − الخصومات − قسط الشهر + المكافآت + بدل الجمعة (من غير الإضافي)"
           >
             المرتب
             <br />
@@ -912,7 +953,7 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                     المرتب مش متسجل في السيستم
                   </td>
                   {overtimeCell(s)}
-                  <td colSpan={4} className={td} />
+                  <td colSpan={5} className={td} />
                   {monthOvertimeCell(s)}
                   <td className={`${td} ${grand} !text-gray-600`}>—</td>
                   <td className={`${td} ${final} !text-gray-600`}>—</td>
@@ -929,6 +970,16 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
                   {overtimeCell(s)}
                   <td className={`${td} font-bold ${s.bonuses ? "text-statusGreen" : "text-gray-600"}`}>
                     {s.bonuses ? <>+ {money(s.bonuses)}</> : "—"}
+                  </td>
+                  <td className={`${td} font-bold leading-tight ${s.friday.days ? "text-sky-300" : "text-gray-600"}`}>
+                    {s.friday.days ? (
+                      <>
+                        {money(s.friday.days)}
+                        <span className="block text-[12px] font-semibold">+ {money(s.friday.amount)}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className={`${td} font-bold ${s.deductions ? "text-statusRed" : "text-gray-600"}`}>
                     {s.deductions ? <>− {money(s.deductions)}</> : "—"}
@@ -959,6 +1010,10 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
           <td className={`${foot} text-statusRed`}>{money(totals.absence)}</td>
           <td className={`${foot} ${weekCell} text-sky-300`}>{money(totals.overtimeWeek)}</td>
           <td className={`${foot} text-statusGreen`}>{money(totals.bonuses)}</td>
+          <td className={`${foot} text-sky-300 leading-tight`}>
+            {money(totals.fridayDays)}
+            <span className="block text-[13px]">+ {money(totals.fridayPay)}</span>
+          </td>
           <td className={`${foot} text-statusRed`}>{money(totals.deductions)}</td>
           <td className={`${foot} text-statusRed`}>{money(totals.advances)}</td>
           <td className={`${foot} text-amber-400`}>{money(totals.installments)}</td>

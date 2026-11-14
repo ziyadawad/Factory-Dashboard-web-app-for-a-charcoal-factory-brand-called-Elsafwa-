@@ -195,7 +195,21 @@ function build(rows: MonthRows, key: AttendanceSectionKey): AttendanceDetails {
         halfDay.enabled &&
         date < today &&
         (halfMarked.has(k) || (punchCount.get(k) === 1 && !!punch && punch < halfDay.singlePunchBefore));
-      return { date, status, firstPunch: punch, ...(half ? { half: true } : {}) };
+      // جمعة اشتغلها: بصمة أو Attendance حاضر يوم الإجازة الأسبوعية (مش لـ "fixed")، ونص اليوم بنفس القاعدة
+      // A worked Friday: a punch or a Present Attendance on the weekly day off (never "fixed"); half by the same rule
+      const offWorked = status === "off" && mode !== "fixed" && (!!punch || mark === "present");
+      const offHalf =
+        offWorked &&
+        halfDay.enabled &&
+        date < today &&
+        (halfMarked.has(k) || (punchCount.get(k) === 1 && !!punch && punch < halfDay.singlePunchBefore));
+      return {
+        date,
+        status,
+        firstPunch: punch,
+        ...(half ? { half: true } : {}),
+        ...(offWorked ? { fridayWork: offHalf ? (0.5 as const) : (1 as const) } : {}),
+      };
     };
     const days = dates.map(dayFor);
     const count = (status: DayStatus) => days.filter((d) => d.status === status).length;

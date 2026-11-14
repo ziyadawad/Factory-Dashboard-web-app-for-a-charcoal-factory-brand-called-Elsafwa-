@@ -97,7 +97,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   if (ids.length === 0) {
     return {
       month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay,
-      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, advances: 0, totalWithOvertime: 0, installments: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
+      totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, advances: 0, totalWithOvertime: 0, installments: 0, fridayDays: 0, fridayPay: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
     };
   }
 
@@ -260,7 +260,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const zero = { value: 0, manual: true };
     const common = {
       id: person.id, kind, source, daysPassed, absentDays, dailyRate: isDaily ? dailyRate : 0, presentDays, presentDates, overtime,
-      weeks: [] as DailyWeek[], outsideMode: mode,
+      weeks: [] as DailyWeek[], outsideMode: mode, friday: { days: 0, rate: 0, amount: 0, dates: [] as { date: string; half: boolean }[] },
     };
     if (kind === "none" || (kind === "daily" && dailyRate <= 0)) {
       return {
@@ -366,6 +366,15 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const dayRate = total / perDay;
     const absence = money(dayRate * absentDays);
 
+    // بدل الجمعة: كل جمعة اشتغلها (بصمة / Attendance حاضر) يوم زيادة = الشامل ÷ fridayDayRateDivisor (نص اليوم 0.5)
+    // Friday pay: every worked Friday is an extra day = salary ÷ fridayDayRateDivisor (half day 0.5)
+    const fridayDates = config.fridayWorkPay && mode !== "fixed"
+      ? person.days.filter((d) => d.fridayWork).map((d) => ({ date: d.date, half: d.fridayWork === 0.5 }))
+      : [];
+    const fridayDays = fridayDates.reduce((s, d) => s + (d.half ? 0.5 : 1), 0);
+    const fridayRate = money(total / config.fridayDayRateDivisor);
+    const friday = { days: fridayDays, rate: fridayRate, amount: money((total / config.fridayDayRateDivisor) * fridayDays), dates: fridayDates };
+
     // Additional Salary: الأيام والساعات بتتحول لفلوس بنفس معادلات ERPNext (الشامل ÷ 30 × الأيام، الأساسي ÷ 30 ÷ 8 × الساعات)
     // Additional Salary: days / hours become money with the ERPNext formulas; the sign comes from the component type
     const adjustments: SalaryAdjustment[] = [];
@@ -455,10 +464,11 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     // الصافي المتوقع = الشامل − خصم الغياب − الخصومات − قسط الشهر + المكافآت (الإضافي لأ)
     // Earned so far = Ts / 30 × days passed − absence − deductions − installments + bonuses (never overtime)
     // Expected net = Ts − absence − deductions − installments + bonuses (never overtime)
-    const earned = money(dayRate * daysPassed - absence - deductions - advanceTotal - installments + bonuses);
-    const expectedNet = money(total - absence - deductions - advanceTotal - installments + bonuses - insurance.value);
+    // + بدل الجمعة - plus the Friday pay
+    const earned = money(dayRate * daysPassed - absence - deductions - advanceTotal - installments + bonuses + friday.amount);
+    const expectedNet = money(total - absence - deductions - advanceTotal - installments + bonuses + friday.amount - insurance.value);
     return {
-      ...common, total: money(total), mismatch, perDay: money(dayRate), earned, absence,
+      ...common, friday, total: money(total), mismatch, perDay: money(dayRate), earned, absence,
       advances: advancesValue, loan, insurance, adjustments, bonuses, extraDeductions, deductions, installments, advanceTotal, expectedNet,
       // المرتب النهائي (لحد النهارده) + الإضافي الشهر ده - salary earned so far + this month's overtime
       totalWithOvertime: money(earned + overtime.total),
@@ -492,6 +502,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       dailyMonth: sumIn(dailyPaid, (p) => p.totalWithOvertime),
       totalWithOvertime: sum((p) => p.totalWithOvertime),
       installments: sum((p) => p.installments),
+      fridayDays: sum((p) => p.friday.days),
+      fridayPay: sum((p) => p.friday.amount),
       earned: sum((p) => p.earned),
       expectedNet: sum((p) => p.expectedNet),
       monthly: monthly.length,

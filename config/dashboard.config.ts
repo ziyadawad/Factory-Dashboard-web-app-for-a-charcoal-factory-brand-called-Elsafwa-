@@ -156,6 +156,15 @@ export const dashboardConfig = {
     dailyStructures: ["عمال يومية"] as string[],
     // حقل اليومية في ملف الموظف (Employee) - the daily rate field on Employee
     dailyRateField: "custom_اليومية",
+    // بدل الجمعة: الجمعة إجازة أسبوعية، واللي يشتغلها (بصمة واحدة على الأقل أو Attendance حاضر) بياخد يوم زيادة
+    // فوق مرتبه: بدل الجمعة = عدد الجمع × (الأجر الشامل ÷ fridayDayRateDivisor)، ونص اليوم (نفس قاعدة halfDay) = 0.5.
+    // بيتزود على المرتب النهائي (والإجمالي مع الإضافي) ومالوش دعوة بالغياب (الجمعة عمرها ما بتتحسب غياب).
+    // للشهريين بس: خارج البصمة "fixed" مش داخلين، وعمال اليومية الجمعة عندهم يوم عادي × اليومية (من غير دبل)
+    // Friday pay: Friday is the weekly holiday; working it (a punch or a Present Attendance) earns an extra day on top
+    // of the salary: count × (salary ÷ fridayDayRateDivisor), half day = 0.5. Added to the final salary, never to
+    // absence. Monthly staff only: "fixed" outside-the-biometric excluded; daily workers get it as a normal day
+    fridayWorkPay: true,
+    fridayDayRateDivisor: 30,
     // أقصى ctc (Cost to Company في ملف الموظف) لعامل يومية: الموظف اللي مالوش قسم (لا كود ولا فرع) والـ ctc بتاعه
     // أقل من أو يساوي ده بيتحط في "عمال يومية" تلقائي حتى قبل أول بصمة. 0 = اللي مالوش مرتب شهري بس
     // The highest ctc of a daily worker: an employee with no section (no code, no branch) and ctc <= this goes to

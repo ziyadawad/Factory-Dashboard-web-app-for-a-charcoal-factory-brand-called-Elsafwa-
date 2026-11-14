@@ -46,6 +46,8 @@ const MONTHLY_COLUMNS: (Col & { pick?: (r: Row) => number | string; total?: bool
   { header: "سلف", kind: "deduct", pick: (r) => r.salary.advanceTotal, total: true },
   { header: "أقساط", kind: "deduct", pick: (r) => r.salary.installments, total: true },
   { header: "مكافآت", kind: "plus", pick: (r) => r.salary.bonuses, total: true },
+  // بدل الجمعة: الجمع اللي اشتغلها × (الشامل ÷ 30) - Friday pay
+  { header: "بدل الجمعة", kind: "plus", pick: (r) => r.salary.friday.amount, total: true },
   { header: "إضافي الشهر", kind: "plus", pick: (r) => r.salary.overtime.total, total: true },
   { header: "المرتب النهائي", kind: "final", pick: (r) => r.salary.earned, total: true },
   { header: "الإجمالي مع الإضافي", kind: "grand", pick: (r) => r.salary.totalWithOvertime, total: true },
@@ -195,6 +197,8 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
     { header: "توقيع", kind: "sign" },
   ];
   const sums = { days: 0, overtime: 0, deductions: 0, advances: 0, bonuses: 0, total: 0 };
+  // ✓ أزرق على الجمعة اللي اشتغلها - a blue ✓ on a worked Friday
+  const blue: [number, number][] = [];
   const rows: Cell[][] = people.map((person, i) => {
     const salary = salaryOf.get(person.id)!;
     const w = salary.weeks.find((x) => x.shown);
@@ -213,6 +217,7 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
       hasRate ? salary.dailyRate : "مش متسجلة",
       ...dates.map((d) => {
         const day = w?.days.find((x) => x.date === d);
+        if (day && (day.status === "off" || day.status === "holiday") && day.worked > 0) blue.push([i, 3 + dates.indexOf(d)]);
         return day ? dayMark(day.status, day.worked, d === salaries.today) : "";
       }),
       hasRate ? w!.presentDays : null,
@@ -244,6 +249,7 @@ export async function dailyWeekWorkbook(): Promise<{ buffer: ArrayBuffer; fileNa
       cols,
       rows,
       totals,
+      blue,
     },
     issued.dateTime
   );

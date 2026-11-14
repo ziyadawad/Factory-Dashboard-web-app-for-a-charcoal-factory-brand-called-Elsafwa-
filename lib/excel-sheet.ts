@@ -62,6 +62,7 @@ export type SheetSpec = {
   rows: Cell[][];
   totals: Cell[];
   dataBarCol?: number; // عمود عليه data bars (1-based) - a column with data bars
+  blue?: [number, number][]; // خانات أزرق (صف، عمود من 0) - cells in blue (row, column, 0-based)
 };
 
 const thin = (argb: string): Partial<ExcelJS.Border> => ({ style: "thin", color: { argb } });
@@ -314,6 +315,11 @@ export function styledSheet(workbook: ExcelJS.Workbook, logos: Logos, spec: Shee
       if (col.kind === "mark" && v === "✗") {
         cell.font = font({ bold: true, size: dataSize + 2, color: { argb: C.red } });
         cell.fill = solid(C.badFill);
+      }
+      // جمعة شغل: ✓ أزرق - a worked Friday: a blue ✓
+      if (spec.blue?.some(([br, bc]) => br === r && bc === i)) {
+        cell.font = font({ bold: true, size: dataSize + 2, color: { argb: C.blue } });
+        cell.fill = solid("FFE3EDFC");
       }
       if (col.kind === "mark" && (v === "إجازة" || v === "النهارده")) cell.font = font({ size: Math.max(9, dataSize - 3), color: { argb: C.gray } });
     });
