@@ -396,6 +396,29 @@ export const dashboardConfig = {
   },
 
   // ============================================================
+  // اللي بيحصل دلوقتي - كارت الأحداث في الرئيسية (العمود اللي على الشمال)
+  // The live activity feed - the main page card (left column)
+  // كل 10 ثواني الشاشة بتسأل عن الجديد، وأي حاجة اتعملت بعد ما الصفحة فتحت بتظهر في الصندوق الكبير اللي فوق
+  // وبتنبض pulseCount مرة، وبعدين بتنزل للقايمة. لو جم كذا حدث مع بعض بيستنوا دورهم واحد ورا التاني
+  // Every 10 s the screen asks for anything new; each event created after the page opened shows in the big box
+  // on top, pulses pulseCount times, then slides into the list. Several at once wait their turn, one after another
+  // ============================================================
+
+  activity: {
+    refreshSeconds: 10, // الشاشة بتسأل كل 10 ثواني - the screen asks every 10 s
+    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    // أنواع الأحداث اللي بتظهر (امسح أي نوع مش عايزه):
+    // money = وارد ومنصرف الخزنة وكل المحافظ، kiln = طرحة خرجت، sales = فواتير البيع والمرتجعات،
+    // stock = أذون المخزن (صرف / إضافة / تحويل / تصنيع)، charity = الصدقات، salary = تسويات المرتبات (النوع والاسم بس، من غير مبلغ)
+    // Event types shown (remove any you don't want): money = treasury and wallet moves, kiln = kiln exits,
+    // sales = sales invoices and returns, stock = stock entries, charity = charity, salary = salary adjustments (no amounts)
+    enabledTypes: ["money", "kiln", "sales", "stock", "charity", "salary"] as ("money" | "kiln" | "sales" | "stock" | "charity" | "salary")[],
+    pulseCount: 5, // الحدث الجديد بينبض كام مرة قبل ما ينزل للقايمة - how many times a new event pulses before it moves down
+    pulseSeconds: 1, // مدة النبضة الواحدة بالثواني - one pulse, in seconds
+    listSize: 8, // عدد الأحداث في القايمة تحت الصندوق (الأحدث فوق) - events kept in the list under the box (newest on top)
+  },
+
+  // ============================================================
   // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
   // Pages - the dashboard has several pages (arrows at the top-left of the header or keyboard arrows)
   // ============================================================
@@ -728,7 +751,7 @@ export const dashboardConfig = {
       treasury: 0.62, // رصيد الخزنة (أضيق) - treasury (narrower)
       management: 0.68, // حضور الإدارة (أضيق) - management attendance (narrower)
       workers: 2.1, // حضور عمال (الأعرض، خد مكان الأفران والطرحات عشان كل الأسامي تبان) - workers attendance (widest)
-      production: 0.6, // كارت "إنتاج النهارده" الصغير - the compact "إنتاج النهارده" card
+      activity: 0.6, // كارت "اللي بيحصل دلوقتي" - the live activity card
     },
 
     // الخزنة - بطاقة رصيد الخزنة
@@ -787,13 +810,21 @@ export const dashboardConfig = {
       // باقي مقاسات "حضور عمال" في sizes.page1 تحت - the other "حضور عمال" sizes are in sizes.page1 below
     },
 
-    // كارت "إنتاج النهارده" في الرئيسية - the main page "إنتاج النهارده" card
-    productionCard: {
-      tonsFontSize: 56, // رقم أطنان النهارده الكبير - today's tons (big number)
-      numberFontSize: 30, // عدد الطرحات والأفران الشغالة - exits count and working kilns
-      // شاشة أضيق من 1600 (لابتوب 1366): نفس الأرقام أصغر - screens under 1600 wide (1366 laptop): smaller
-      compactTonsFontSize: 40,
-      compactNumberFontSize: 24,
+    // كارت "اللي بيحصل دلوقتي" في الرئيسية - the main page live activity card
+    activityCard: {
+      spotlightHeight: 190, // ارتفاع الصندوق الكبير اللي فوق - the big box on top (px)
+      spotlightAmountFontSize: 34, // المبلغ في الصندوق الكبير - the amount in the big box
+      spotlightTitleFontSize: 18, // عنوان الحدث في الصندوق الكبير - the event title in the big box
+      rowHeight: 58, // ارتفاع كل سطر في القايمة - each list row (px)
+      rowFontSize: 14, // حجم الكلام في القايمة - list text size
+      // شاشة أضيق من 1600 (لابتوب 1366): نفس المقاسات أصغر - screens under 1600 wide (1366 laptop): smaller
+      compact: {
+        spotlightHeight: 150,
+        spotlightAmountFontSize: 24,
+        spotlightTitleFontSize: 14,
+        rowHeight: 46,
+        rowFontSize: 12,
+      },
     },
 
     // صفحة الإنتاج والأفران - the production page

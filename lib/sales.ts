@@ -43,7 +43,7 @@ const daysBetween = (from: string, to: string) =>
 // ===== الأصناف ← المنتج - item code -> product =====
 
 // كل صنف معبأ ← رقم المنتج في sales.products (الأكواد من erp.stock.packaged) - item code -> product index
-function productOfItem(): Map<string, number> {
+export function productOfItem(): Map<string, number> {
   const map = new Map<string, number>();
   sales.products.forEach((product, index) => {
     const variants = dashboardConfig.erp.stock.packaged[product.stockName] ?? {};
@@ -64,7 +64,7 @@ function cartonOfItem(): Map<string, number> {
   return map;
 }
 
-const packetsOf = (itemCode: string, stockQty: number) => stockQty * (sales.packetsPerUnit[itemCode] ?? 1);
+export const packetsOf = (itemCode: string, stockQty: number) => stockQty * (sales.packetsPerUnit[itemCode] ?? 1);
 
 const emptyProducts = (): ProductPackets[] => sales.products.map((p) => ({ label: p.label, packets: 0 }));
 

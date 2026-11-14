@@ -9,7 +9,7 @@ import FloorWorkersSection from "@/components/FloorWorkersSection";
 import TreasurySection from "@/components/TreasurySection";
 import PageNav from "@/components/PageNav";
 import ProductionPage, { ProductionTarget } from "@/components/ProductionPage";
-import ProductionCard from "@/components/ProductionCard";
+import ActivityFeed from "@/components/ActivityFeed";
 import ProductionDetailsPanel from "@/components/ProductionDetailsPanel";
 import CharitySection from "@/components/CharitySection";
 import SalesRepsSection from "@/components/SalesRepsSection";
@@ -240,18 +240,6 @@ export default function Dashboard() {
     }
   }, [data]);
 
-  // كارت إنتاج النهارده بيلمع لما طرحة جديدة تخرج - the production card flashes when a new exit arrives
-  const lastExitRef = useRef<string | null | undefined>(undefined);
-  const lastExitId = production?.exits[0]?.id ?? null;
-  useEffect(() => {
-    if (lastExitRef.current !== undefined && lastExitId && lastExitId !== lastExitRef.current) {
-      setFlashSection("production");
-      setTimeout(() => setFlashSection(null), 500);
-    }
-    if (productionRaw) lastExitRef.current = lastExitId;
-  }, [lastExitId, productionRaw]);
-  const productionPageIndex = PAGES.findIndex((page) => page.id === "production");
-
   // "غير متصل" بيظهر بس لو الجلب أو ERPNext فشل (مش وقت التحميل) - offline only when the fetch or ERPNext failed
   const isConnected = !error && !data?.erpOffline;
 
@@ -265,7 +253,7 @@ export default function Dashboard() {
           <div
             className="grid gap-4 h-full"
             style={{
-              gridTemplateColumns: `minmax(0,${cols.treasury}fr) minmax(0,${cols.management}fr) minmax(0,${cols.workers}fr) minmax(0,${cols.production}fr)`,
+              gridTemplateColumns: `minmax(0,${cols.treasury}fr) minmax(0,${cols.management}fr) minmax(0,${cols.workers}fr) minmax(0,${cols.activity}fr)`,
               gridTemplateRows: "minmax(0,1fr)",
             }}
           >
@@ -303,12 +291,9 @@ export default function Dashboard() {
                 />
               )}
             </div>
-            {/* إنتاج النهارده (بيفتح صفحة الإنتاج) - today's production (opens the production page) */}
-            <div className={flashClass("production")}>
-              <ProductionCard
-                data={production}
-                onOpen={() => productionPageIndex >= 0 && changePage(productionPageIndex, productionPageIndex > pageIndex ? 1 : -1)}
-              />
+            {/* اللي بيحصل دلوقتي (بيفضل شغال حتى والصفحة متقلبة) - the live feed (keeps running while pages rotate) */}
+            <div className="min-h-0">
+              <ActivityFeed />
             </div>
           </div>
         );

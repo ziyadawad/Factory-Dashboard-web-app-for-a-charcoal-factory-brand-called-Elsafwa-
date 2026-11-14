@@ -64,6 +64,44 @@ body {
     }
   }
 
+  /* اللي بيحصل دلوقتي: الحدث الجديد بينبض (المدة والعدد من الكونفج inline) - the live feed: a new event pulses */
+  .activity-pulse {
+    animation-name: activity-pulse;
+    animation-timing-function: ease-in-out;
+    box-shadow: 0 0 18px 2px color-mix(in srgb, var(--glow) 45%, transparent);
+  }
+
+  @keyframes activity-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 10px 0 color-mix(in srgb, var(--glow) 30%, transparent);
+    }
+    50% {
+      transform: scale(1.035);
+      box-shadow: 0 0 34px 8px color-mix(in srgb, var(--glow) 70%, transparent);
+    }
+  }
+
+  /* الحدث وهو بينزل أول القايمة - the event sliding into the top of the list */
+  .activity-slide-in {
+    animation: activity-slide-in 0.45s ease-out;
+  }
+
+  @keyframes activity-slide-in {
+    from {
+      transform: translateY(-36px);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .activity-pulse,
+    .activity-slide-in {
+      animation: none;
+    }
+  }
+
   .animate-flash {
     animation: flash 0.5s ease-in-out;
   }

@@ -794,3 +794,27 @@ export interface StockDetails {
   moves: StockMove[]; // الأحدث الأول - newest first
   erpUrl: string;
 }
+
+// اللي بيحصل دلوقتي (كارت الرئيسية) - the live activity feed (main page card)
+// in / out = وارد / منصرف خزنة أو محفظة، kiln = طرحة، sale / return = فاتورة بيع / مرتجع،
+// stock = إذن مخزن، charity = صدقات، salary = تسوية مرتب (من غير مبلغ)
+export type ActivityKind = "in" | "out" | "kiln" | "sale" | "return" | "stock" | "charity" | "salary";
+
+export interface ActivityEvent {
+  id: string; // "gl:ACC-GLE-…" - فريد لكل حدث - unique per event
+  kind: ActivityKind;
+  at: string; // "2026-11-14 13:43:09" بتوقيت القاهرة - Cairo time
+  title: string; // "وارد — الخزنة"
+  details: string; // "الهدى" / "فرن 3 · برتقال"
+  amount: number | null; // ج.م (null = مفيش مبلغ، زي تسوية المرتب) - EGP (null = no amount, e.g. salary adjustments)
+  extra: string | null; // "2,819 كجم" / "107 باكت" / "20 باكت ربع"
+  badge: string | null; // سلفة / مرتب / مورد / مصروف ...
+}
+
+// events = الأحدث الأول، now = وقت السيرفر بتوقيت القاهرة (الواجهة بتبعته since في الطلب الجاي)
+// events = newest first; now = server time in Cairo (sent back as since on the next request)
+export interface ActivityData {
+  now: string;
+  events: ActivityEvent[];
+  offline: boolean;
+}

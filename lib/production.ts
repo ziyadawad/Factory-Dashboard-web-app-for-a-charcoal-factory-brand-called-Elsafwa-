@@ -10,14 +10,14 @@ import { loadKilns, normalizeArabic } from "./data-source";
 import { ConfigErpBatches, ProductionData, ProductionExit, ProductionType } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
-type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
+export type BatchesMapping = Extract<ConfigErpBatches, { source: "erp" }>;
 type KilnExitRow = { name: string; kiln: string | null; exit_time: string | null } & Record<string, string | number | null>;
 
 // تعريف الـ DocType: خيارات حقل النوع، وهل حقل الوزن موجود (كاش optionsCacheMinutes، ولو فشل آخر نتيجة نجحت)
 // The DocType: the type field's options and whether the weight field exists (cached; on failure the last good one)
 type DoctypeInfo = { options: string[]; hasWeight: boolean };
 let doctypeCache: { at: number; info: DoctypeInfo } | null = null;
-async function doctypeInfo(mapping: BatchesMapping): Promise<DoctypeInfo> {
+export async function doctypeInfo(mapping: BatchesMapping): Promise<DoctypeInfo> {
   const maxAge = mapping.optionsCacheMinutes * 60_000;
   if (doctypeCache && Date.now() - doctypeCache.at < maxAge) return doctypeCache.info;
   try {

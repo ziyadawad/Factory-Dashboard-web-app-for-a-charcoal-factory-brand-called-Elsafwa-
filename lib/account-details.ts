@@ -9,7 +9,7 @@ import { AccountDetails, AccountMonth, AccountMove, AdvanceSummary, MoveOut } fr
 const CACHE_MS = 30_000;
 const LOOKBACK_DAYS = 15; // وضع الخزنة: آخر 15 يوم (النهارده منهم) - treasury mode: last 15 days including today
 
-type GlRow = {
+export type GlRow = {
   name: string;
   posting_date: string;
   creation: string;
@@ -131,7 +131,7 @@ async function listOrEmpty<T>(doctype: string, body: Record<string, unknown>): P
 }
 
 // "5234 - صيانة - AC" -> "صيانة" - an account's short name
-const shortAccount = (account: string) => account.replace(/^\d+\s*-\s*/, "").replace(/\s*-\s*[A-Z]{1,6}$/, "").trim();
+export const shortAccount = (account: string) => account.replace(/^\d+\s*-\s*/, "").replace(/\s*-\s*[A-Z]{1,6}$/, "").trim();
 
 // نوع الصرف لموظف من الحساب / البيان - the type of a payment to an employee, from the account / remarks
 function employeeKind(text: string): string | null {
@@ -144,7 +144,7 @@ function employeeKind(text: string): string | null {
   return null;
 }
 
-async function describeOutgoing(account: string, rows: GlRow[]): Promise<Map<string, MoveOut>> {
+export async function describeOutgoing(account: string, rows: GlRow[]): Promise<Map<string, MoveOut>> {
   const out = rows.filter((r) => money(r.credit) > 0);
   const result = new Map<string, MoveOut>();
   if (out.length === 0) return result;

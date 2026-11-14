@@ -147,7 +147,7 @@ export function useMinutesSince(exit: ProductionExit | null): number | null {
 }
 
 // تاريخ ووقت بتوقيت القاهرة ← ملي ثانية - a Cairo date and time to epoch ms
-function cairoTime(date: string, time: string): number {
+export function cairoTime(date: string, time: string): number {
   const guess = Date.parse(`${date}T${time || "00:00"}:00Z`);
   // فرق توقيت القاهرة في اللحظة دي (صيفي / شتوي) - Cairo's offset at that moment (summer / winter time)
   const parts = new Intl.DateTimeFormat("en-US", {
