@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, ChevronLeft, Download, ExternalLink, Loader2, Users, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, Download, ExternalLink, Loader2, Users, X } from "lucide-react";
 import {
   AttendanceDetails,
   DailyWeek,
@@ -304,25 +304,65 @@ function OvertimeWeekRow({ week, paidToday }: { week: OvertimeWeek; paidToday: b
   );
 }
 
-// الإضافي أسبوع بأسبوع (بيتقبض كاش السبت) - مش داخل في المرتب النهائي
-// Overtime week by week (paid in cash on Saturday) - never part of the final salary
+// إضافي الأسبوع ده بس (بيتقبض كاش السبت؛ يوم السبت لسه الأسبوع اللي بيتقبض) - مش داخل في المرتب النهائي
+// This week's overtime only (paid in cash on Saturday; on Saturday it is still the week being paid) - never in the final salary
 function OvertimeBox({ overtime, paidToday }: { overtime: OvertimeSummary; paidToday: boolean }) {
+  const week = overtime.weeks.find((w) => w.shown);
   return (
     <div className="rounded-xl bg-background border border-sky-400/30 p-4 flex flex-col gap-2 text-[17px]">
       <p className="flex items-center justify-between gap-3">
         <span className="text-sky-300 font-extrabold text-[19px]">💵 إضافي — بيتقبض كاش كل سبت</span>
         <span className="text-[13px] text-gray-500">مش داخل في المرتب النهائي</span>
       </p>
-      {overtime.weeks.map((w) => (
-        <OvertimeWeekRow key={w.start} week={w} paidToday={paidToday} />
-      ))}
-      <p className="flex items-center justify-between gap-4 pt-1">
-        <span className="text-white font-bold">إضافي الشهر كله</span>
-        <span className="text-[26px] font-extrabold text-sky-300 leading-tight">
-          {money(overtime.total)} <span className="text-[16px] text-gray-300">ج.م</span>
-          {overtime.hours > 0 && <span className="ms-2 text-[15px] text-gray-400">({money(overtime.hours)} س)</span>}
+      {!week || week.entries.length === 0 ? (
+        <p className="text-gray-400 text-[16px]">مفيش إضافي الأسبوع ده</p>
+      ) : (
+        <OvertimeWeekRow week={week} paidToday={paidToday} />
+      )}
+    </div>
+  );
+}
+
+// أسابيع الإضافي في الشهر ده بس (السبت → الجمعة): الإضافي اللي قبل أول الشهر مش بيتحسب هنا - عرض بس
+// This month's overtime weeks only (Saturday → Friday); entries before the 1st are left out - display only
+function monthOvertimeWeeks(overtime: OvertimeSummary, month: string): OvertimeWeek[] {
+  const monthStart = `${month}-01`;
+  return overtime.weeks
+    .filter((w) => w.end >= monthStart)
+    .map((w) => {
+      const entries = w.entries.filter((e) => e.date >= monthStart);
+      const sum = (pick: (e: OvertimeEntry) => number) => Math.round(entries.reduce((s, e) => s + pick(e), 0) * 100) / 100;
+      return { ...w, entries, total: sum((e) => e.amount), hours: sum((e) => e.hours) };
+    });
+}
+
+// سطر "الإضافي الشهر ده" بيتفتح (▾) على الإضافي أسبوع بأسبوع - the "this month's overtime" line, expands week by week
+function OvertimeMonthLine({ overtime, month, paidToday }: { overtime: OvertimeSummary; month: string; paidToday: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center justify-between gap-4 text-start rounded-lg -mx-1 px-1 hover:bg-white/5"
+      >
+        <span className="flex items-center gap-1.5 text-gray-300">
+          الإضافي الشهر ده
+          <ChevronDown size={18} className={`text-sky-300 transition-transform ${open ? "rotate-180" : ""}`} />
         </span>
-      </p>
+        <span className="font-bold text-sky-300">
+          {money(overtime.total)} ج.م
+          {overtime.hours > 0 && <span className="ms-2 text-[14px] font-normal text-gray-400">({money(overtime.hours)} س)</span>}
+        </span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1.5 pb-1">
+          {monthOvertimeWeeks(overtime, month).map((w) => (
+            <OvertimeWeekRow key={w.start} week={w} paidToday={paidToday} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -333,10 +373,11 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
   if (!state.data) return <SalaryMessage text="جاري تحميل المرتب..." />;
   const hasOvertime = !!salary && salary.overtime.weeks.some((w) => w.entries.length > 0);
   const paidToday = state.data.dailyPay.paidToday;
+  const month = state.data.month;
   if (salary?.kind === "daily" && salary.dailyRate > 0) {
     return (
       <div className="flex flex-col gap-3">
-        <DailySalaryCard salary={salary} paidToday={state.data.dailyPay.paidToday} today={state.data.today} />
+        <DailySalaryCard salary={salary} paidToday={paidToday} today={state.data.today} month={month} />
         <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
       </div>
     );
@@ -345,13 +386,20 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
     return (
       <div className="flex flex-col gap-3">
         <SalaryMessage text={salary?.kind === "daily" ? NO_DAILY_RATE : "المرتب مش متسجل في السيستم"} />
-        {salary && hasOvertime && <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />}
+        {salary && hasOvertime && (
+          <>
+            <div className="rounded-xl bg-background border border-cardBorder p-4 text-[17px]">
+              <OvertimeMonthLine overtime={salary.overtime} month={month} paidToday={paidToday} />
+            </div>
+            <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
+          </>
+        )}
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-3">
-      <MonthlySalaryCard salary={salary} perDay={state.data.daysPerMonth} />
+      <MonthlySalaryCard salary={salary} perDay={state.data.daysPerMonth} month={month} paidToday={paidToday} />
       <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
     </div>
   );
@@ -411,7 +459,7 @@ function AdjustmentLines({ salary, empty }: { salary: EmployeeSalary; empty: str
 }
 
 // آخر 3 سطور: المرتب النهائي، الإضافي، الإجمالي مع الإضافي - the last 3 lines: final, overtime, total with overtime
-function FinalLines({ salary, formula }: { salary: EmployeeSalary; formula: React.ReactNode }) {
+function FinalLines({ salary, formula, month, paidToday }: { salary: EmployeeSalary; formula: React.ReactNode; month: string; paidToday: boolean }) {
   return (
     <>
       {/* المرتب النهائي = اللي اتكسب لحد النهارده (بيزيد كل يوم، وآخر الشهر هو اللي بيتقبض بالظبط)
@@ -426,15 +474,7 @@ function FinalLines({ salary, formula }: { salary: EmployeeSalary; formula: Reac
         </span>
       </div>
       <div className="flex flex-col gap-1 pt-2">
-        <p className="flex items-center justify-between gap-4">
-          <span className="text-gray-300">الإضافي الشهر ده</span>
-          <span className="font-bold text-sky-300">
-            {money(salary.overtime.total)} ج.م
-            {salary.overtime.hours > 0 && (
-              <span className="ms-2 text-[14px] font-normal text-gray-400">({money(salary.overtime.hours)} س)</span>
-            )}
-          </span>
-        </p>
+        <OvertimeMonthLine overtime={salary.overtime} month={month} paidToday={paidToday} />
         <p className="flex items-center justify-between gap-4 border-t border-cardBorder/60 pt-1">
           <span className="text-white font-bold">الإجمالي مع الإضافي</span>
           <span className="text-[26px] font-extrabold text-white leading-tight">{money(salary.totalWithOvertime)} ج.م</span>
@@ -577,7 +617,7 @@ function DailyWeekRow({ week, rate, paidToday, today }: { week: DailyWeek; rate:
 
 // عامل اليومية: أسبوع بأسبوع بس (مستحق هذا الأسبوع فوق، وتحته باقي الأسابيع) - مفيش إجمالي شهر
 // Daily worker: week by week only (this week on top, then the other weeks) - no month total
-function DailySalaryCard({ salary, paidToday, today }: { salary: EmployeeSalary; paidToday: boolean; today: string }) {
+function DailySalaryCard({ salary, paidToday, today, month }: { salary: EmployeeSalary; paidToday: boolean; today: string; month: string }) {
   const shown = salary.weeks.find((w) => w.shown);
   // الأحدث الأول - newest first
   const others = salary.weeks.filter((w) => !w.shown).reverse();
@@ -602,12 +642,16 @@ function DailySalaryCard({ salary, paidToday, today }: { salary: EmployeeSalary;
       {others.map((w) => (
         <DailyWeekRow key={w.start} week={w} rate={salary.dailyRate} paidToday={paidToday} today={today} />
       ))}
+      {/* الإضافي الشهر ده (بيتفتح أسبوع بأسبوع) - this month's overtime (expands week by week) */}
+      <div className="border-t border-cardBorder/60 pt-2 mt-1">
+        <OvertimeMonthLine overtime={salary.overtime} month={month} paidToday={paidToday} />
+      </div>
     </div>
   );
 }
 
 // المرتب الشهري - the monthly salary card
-function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay: number }) {
+function MonthlySalaryCard({ salary, perDay, month, paidToday }: { salary: EmployeeSalary; perDay: number; month: string; paidToday: boolean }) {
   const row = (label: string, value: React.ReactNode, tone = "text-white") => (
     <p className="flex items-center justify-between gap-4 border-b border-cardBorder/60 py-1.5">
       <span className="text-gray-400">{label}</span>
@@ -677,6 +721,8 @@ function MonthlySalaryCard({ salary, perDay }: { salary: EmployeeSalary; perDay:
       )}
       <FinalLines
         salary={salary}
+        month={month}
+        paidToday={paidToday}
         formula={
           <>
             {money(salary.daysPassed)} يوم × {money(salary.perDay)} ج.م − خصم غياب {money(salary.absence)} ج.م
