@@ -66,14 +66,14 @@ const erpLink = (base: string, move: AccountMove) =>
 
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
 
-// فلتر المنصرف - the outgoing filter chips
-type Filter = "all" | MoveOut["category"];
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "الكل" },
-  { id: "employee", label: "سلف وموظفين" },
-  { id: "supplier", label: "موردين" },
-  { id: "expense", label: "مصروفات" },
+// فلتر الحركات: الكل / وارد (مدين على الحساب) / منصرف - the movement filter: all / incoming (debit) / outgoing
+type Filter = "all" | "in" | "out";
+const FILTERS: { id: Filter; label: string; on: string }[] = [
+  { id: "all", label: "الكل", on: "border-brandOrange bg-brandOrange/15 text-brandOrange" },
+  { id: "in", label: "وارد", on: "border-statusGreen bg-statusGreen/15 text-statusGreen" },
+  { id: "out", label: "منصرف", on: "border-statusRed bg-statusRed/15 text-statusRed" },
 ];
+const isIn = (m: AccountMove) => m.debit > 0;
 
 // لون بادج نوع الصرف - the colour of a payment-type badge
 const KIND_STYLE: Record<string, string> = {
@@ -250,7 +250,6 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
   });
   const [range, setRange] = useState<Range>("half");
   const [filter, setFilter] = useState<Filter>("all");
-  const [showAdvances, setShowAdvances] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useIdleClose(onClose);
@@ -277,8 +276,8 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
     const result: { date: string; moves: AccountMove[]; incoming: number; outgoing: number; balance: number }[] = [];
     for (let date = data.to; date >= start; date = addDays(date, -1)) {
       const all = byDay.get(date) ?? [];
-      // الفلتر بيخفي الحركات بس، ومجاميع اليوم والرصيد من كل الحركات - the filter hides rows; day totals use every move
-      const moves = filter === "all" ? all : all.filter((m) => m.out?.category === filter);
+      // الفلتر بيخفي الجنب التاني، والرصيد من كل الحركات - the filter hides the other side; the balance uses every move
+      const moves = filter === "all" ? all : all.filter((m) => (filter === "in" ? isIn(m) : !isIn(m)));
       if ((months || filter !== "all") && moves.length === 0) continue;
       result.push({
         date,
@@ -413,39 +412,23 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
           </div>
         )}
 
-        {/* فلتر المنصرف وسلف الشهر - the outgoing filter and this month's advances */}
+        {/* فلتر الحركات: الكل / وارد / منصرف - the movement filter */}
         {data && (
           <div className="shrink-0 flex flex-col gap-2 px-5 py-2 border-b border-cardBorder">
             <div className="flex items-center gap-2 flex-wrap">
               {FILTERS.map((x) => (
-                <button key={x.id} type="button" onClick={() => setFilter(x.id)} className={tab(filter === x.id)}>
+                <button
+                  key={x.id}
+                  type="button"
+                  onClick={() => setFilter(x.id)}
+                  className={`shrink-0 rounded-xl border px-4 py-1.5 font-semibold whitespace-nowrap ${
+                    filter === x.id ? x.on : "border-cardBorder bg-background/70 text-gray-300 hover:border-gray-500"
+                  }`}
+                >
                   {x.label}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setShowAdvances(!showAdvances)}
-                disabled={data.advances.people.length === 0}
-                className="ms-auto flex items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-1.5 font-bold text-amber-300 whitespace-nowrap hover:bg-amber-400/20 disabled:opacity-60 disabled:cursor-default"
-              >
-                إجمالي سلف الشهر: {n(data.advances.total)} ج.م
-                <span className="text-gray-300 font-semibold">(لـ {n(data.advances.people.length)} موظف)</span>
-                {data.advances.people.length > 0 && <span className="text-[0.8em]">{showAdvances ? "▲" : "▼"}</span>}
-              </button>
             </div>
-            {showAdvances && data.advances.people.length > 0 && (
-              <div className="max-h-[22vh] overflow-auto rounded-xl border border-amber-400/30 bg-background/60 px-3 py-1.5 grid grid-cols-2 min-[1400px]:grid-cols-3 gap-x-6">
-                {data.advances.people.map((p) => (
-                  <p key={p.employee} className="flex items-center justify-between gap-3 border-b border-cardBorder/50 leading-[2]">
-                    <span className="text-gray-100 truncate">{p.name}</span>
-                    <span className="whitespace-nowrap">
-                      <b className="text-amber-300">{n(p.amount)}</b>
-                      <span className="text-gray-500 text-[0.85em]"> ج.م{p.count > 1 && <> ({n(p.count)} مرات)</>}</span>
-                    </span>
-                  </p>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -505,9 +488,9 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
                         <td colSpan={columns} className="px-4 py-1 border-b border-cardBorder bg-background/70 font-bold">
                           <span className="text-white">{formatDayName(day.date)}</span>
                           <span className="text-gray-500"> — </span>
-                          <span className="text-statusGreen">وارد {n(day.incoming)}</span>
-                          <span className="text-gray-500"> · </span>
-                          <span className="text-statusRed">منصرف {n(day.outgoing)}</span>
+                          {filter !== "out" && <span className="text-statusGreen">وارد {n(day.incoming)}</span>}
+                          {filter === "all" && <span className="text-gray-500"> · </span>}
+                          {filter !== "in" && <span className="text-statusRed">منصرف {n(day.outgoing)}</span>}
                           <span className="text-gray-500"> · </span>
                           <span className="text-gray-200">الرصيد آخر اليوم {n(day.balance)}</span>
                         </td>
