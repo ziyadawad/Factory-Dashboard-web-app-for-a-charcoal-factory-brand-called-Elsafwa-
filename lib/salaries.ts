@@ -4,8 +4,10 @@
 import { dashboardConfig } from "@/config/dashboard.config";
 import { addDays, attendanceDetails, cashWeekOf, cashWeekStarts, rangeStartOf, weekStartOf } from "./attendance-details";
 import { AttendanceSectionKey, outsideMode } from "./data-source";
-import { ErpError, erpPost } from "./erp";
-import { DailyWeek, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SectionSalaries } from "./types";
+import { ErpError, erpDocUrl, erpPost } from "./erp";
+import {
+  DailyWeek, DuplicateInfo, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SalaryDuplicate, SectionSalaries,
+} from "./types";
 
 const config = dashboardConfig.salaries;
 
@@ -35,6 +37,7 @@ type LoanGl = {
 type EmployeeAdvance = { name: string; employee: string; paid_amount: number | null; posting_date: string };
 // DocType مخصوص "Salary Adjustment" - the custom Salary Adjustment DocType (reason is read only if the field exists)
 type Adjustment = {
+  name: string;
   employee: string;
   adjustment_type: string;
   date: string;
@@ -48,6 +51,43 @@ type Adjustment = {
   paid?: number | null; // اتصرف (للإضافي) - overtime paid in cash
   reason?: string | null;
 };
+// المبلغ الفعلي للمقارنة: amount، والقسط بإجماليه وقسطه، والخصم من غير مبلغ بنوعه وأيامه
+// The amount compared: amount; an installment by total + monthly; a خصم with no amount by its type + days
+const amountKey = (a: Adjustment) => {
+  const amount = money(a.amount ?? 0);
+  if (a.adjustment_type === "قسط") return `${money(a.total_amount ?? 0)}/${money(a.monthly_installment ?? 0)}`;
+  if (a.adjustment_type === "خصم" && !amount) return `0/${a.deduction_type ?? ""}/${a.days ?? 0}`;
+  if (a.adjustment_type === "إضافي" && !amount) return `0/${money(a.hour_rate ?? 0)}`;
+  return String(amount);
+};
+
+// Salary Adjustment المتكررة (نفس الموظف + النوع + التاريخ + المبلغ، ونفس الساعات للإضافي) بتتحسب مرة واحدة (الأول)
+// Duplicated Salary Adjustments (same employee + type + date + amount, same hours for إضافي) count once (the first)
+function dedupeAdjustments(rows: Adjustment[]) {
+  const groups = new Map<string, Adjustment[]>();
+  for (const a of rows) {
+    const hours = a.adjustment_type === "إضافي" ? money(a.hours ?? 0) : "";
+    const key = [a.employee, a.adjustment_type, String(a.date).slice(0, 10), amountKey(a), hours].join("|");
+    const group = groups.get(key);
+    if (group) group.push(a);
+    else groups.set(key, [a]);
+  }
+  const unique: Adjustment[] = [];
+  const dupOf = new Map<string, DuplicateInfo>();
+  const groupsWithDup: { rows: Adjustment[]; info: DuplicateInfo }[] = [];
+  for (const group of Array.from(groups.values())) {
+    unique.push(group[0]);
+    if (group.length < 2) continue;
+    const info: DuplicateInfo = { count: group.length, docs: group.map((a) => ({ name: a.name, url: erpDocUrl("Salary Adjustment", a.name) })) };
+    dupOf.set(group[0].name, info);
+    groupsWithDup.push({ rows: group, info });
+  }
+  // نفس ترتيب ERPNext (التاريخ ثم الإنشاء) - keep ERPNext's order (date, then creation)
+  const order = new Map(rows.map((a, i) => [a.name, i]));
+  unique.sort((x, y) => (order.get(x.name) ?? 0) - (order.get(y.name) ?? 0));
+  return { unique, dupOf, groupsWithDup };
+}
+
 type EmployeePay = { name: string; ctc: number | null; date_of_joining: string | null } & Record<string, unknown>;
 
 // لو اليوزر مالوش صلاحية على الـ doctype (403) بنكمل من غيره ونكتب في اللوج مرة واحدة (من غير أرقام)
@@ -96,14 +136,14 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const dailyPay = { week: { start: cashWeek.start, end: cashWeek.end }, paidToday: cashWeek.paidToday };
   if (ids.length === 0) {
     return {
-      month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay,
+      month, today, daysPerMonth: config.daysPerMonth, people: [], dailyPay, duplicates: [],
       totals: { total: 0, absence: 0, bonuses: 0, deductions: 0, overtime: 0, overtimeHours: 0, dailyWeek: 0, dailyMonth: 0, overtimeWeek: 0, overtimeWeekHours: 0, advances: 0, totalWithOvertime: 0, installments: 0, fridayDays: 0, fridayPay: 0, earned: 0, expectedNet: 0, monthly: 0, daily: 0 },
     };
   }
 
   const monthEnd = lastDayOf(month);
   const extras = config.additionalSalary;
-  const [assignments, additional, salaryAdjustments, componentList, loanGl, employeeAdvances, employees] = await Promise.all([
+  const [assignments, additional, rawAdjustments, componentList, loanGl, employeeAdvances, employees] = await Promise.all([
     // الأحدث الأول، فأول واحد لكل موظف هو الساري النهارده - newest first: the first per employee is in force today
     list<Assignment>("Salary Structure Assignment", {
       filters: [["employee", "in", ids], ["docstatus", "=", 1], ["from_date", "<=", today]],
@@ -160,6 +200,8 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     }),
   ]);
 
+  // التكرار: كل الحسابات تحت بتستخدم النسخة من غير تكرار - every calculation below uses the de-duplicated list
+  const { unique: salaryAdjustments, dupOf, groupsWithDup } = dedupeAdjustments(rawAdjustments);
   const employeeOf = new Map(employees.map((e) => [e.name, e]));
   const assignmentOf = new Map<string, Assignment>();
   for (const a of assignments) if (!assignmentOf.has(a.employee)) assignmentOf.set(a.employee, a);
@@ -193,7 +235,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const overtimeEntry = (a: Adjustment): OvertimeEntry => {
     const hours = a.hours ?? 0;
     const rate = a.hour_rate ?? 0;
-    return { date: String(a.date).slice(0, 10), hours, rate, amount: money(a.amount || hours * rate) };
+    return { date: String(a.date).slice(0, 10), hours, rate, amount: money(a.amount || hours * rate), duplicate: dupOf.get(a.name) ?? null };
   };
   const overtimeOf = (id: string): OvertimeSummary => {
     const all = salaryAdjustments
@@ -285,7 +327,10 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
           continue;
         }
         const reason = a.reason ? String(a.reason).trim() || null : null;
-        const line = { source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null, detail: null };
+        const line = {
+          source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null, detail: null,
+          duplicate: dupOf.get(a.name) ?? null,
+        };
         if (a.adjustment_type === "مكافأة") {
           const amount = money(a.amount ?? 0);
           if (amount > 0) adjustments.push({ ...line, kind: "addition", label: "مكافأة", sign: 1, amount });
@@ -413,7 +458,10 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       const date = String(a.date).slice(0, 10);
       if (a.adjustment_type !== "قسط" && date < monthStart) continue; // أيام قبل الشهر (لأسابيع اليومية بس)
       const reason = a.reason ? String(a.reason).trim() || null : null;
-      const line = { source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null };
+      const line = {
+        source: "salary_adjustment" as const, component: a.adjustment_type, date, units: null, reason, remaining: null,
+        duplicate: dupOf.get(a.name) ?? null,
+      };
       if (a.adjustment_type === "قسط") {
         const totalAmount = a.total_amount ?? 0;
         const installment = a.monthly_installment ?? 0;
@@ -480,11 +528,21 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
   const sumIn = (list: EmployeeSalary[], pick: (p: EmployeeSalary) => number) => money(list.reduce((s, p) => s + pick(p), 0));
   const sum = (pick: (p: EmployeeSalary) => number) => sumIn(monthly, pick);
   const shownTotal = (p: EmployeeSalary) => p.weeks.find((w) => w.shown)?.total ?? 0;
+  const nameOf = new Map(attendance.people.map((p) => [p.id, p.name]));
+  const duplicates: SalaryDuplicate[] = groupsWithDup.map(({ rows, info }) => {
+    const a = rows[0];
+    const e = overtimeEntry(a);
+    return {
+      ...info, employee: a.employee, employeeName: nameOf.get(a.employee) ?? a.employee, type: a.adjustment_type,
+      date: e.date, amount: a.adjustment_type === "إضافي" ? e.amount : money(a.amount || a.total_amount || 0), hours: money(a.hours ?? 0),
+    };
+  });
   return {
     month,
     today,
     daysPerMonth: perDay,
     people,
+    duplicates,
     dailyPay,
     totals: {
       total: sumIn(monthly, (p) => p.total),

@@ -7,6 +7,7 @@ import {
   AttendanceDetails,
   DailyWeek,
   DayStatus,
+  DuplicateInfo,
   EmployeeAttendance,
   EmployeeSalary,
   OvertimeEntry,
@@ -14,6 +15,7 @@ import {
   OvertimeWeek,
   PersonStatus,
   SalaryAdjustment,
+  SalaryDuplicate,
   SalaryValue,
   SectionSalaries,
 } from "@/lib/types";
@@ -247,6 +249,36 @@ const shortDate = (date: string) => {
   );
 };
 
+// تحذير برتقالي: Salary Adjustment متكررة واتحسبت مرة واحدة، بلينك لكل مستند عشان الـ HR يلغي الزيادة
+// Orange warning: a duplicated Salary Adjustment counted once, with a link per document so HR can cancel the extra one
+function DupWarning({ dup }: { dup: DuplicateInfo | null | undefined }) {
+  if (!dup) return null;
+  return (
+    <div className="mt-0.5 rounded-lg border border-orange-400/50 bg-orange-400/10 px-2 py-1 text-[13px] leading-[1.7] text-orange-300">
+      <b>⚠ مكررة ×{dup.count} — اتحسبت مرة واحدة</b>
+      <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+        {dup.docs.map((d) => (
+          <span key={d.name} className="inline-flex items-center gap-1.5">
+            <span dir="ltr" className="font-numbers text-gray-200">
+              {d.name}
+            </span>
+            <a
+              href={d.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 font-bold text-orange-300 underline-offset-2 hover:underline"
+            >
+              <ExternalLink size={12} />
+              افتح في ERPNext
+            </a>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 // "يدوي" = مش متسجل في ERPNext (0 ولازم يتراجع) - "manual" = not in ERPNext (shown as 0)
 const ManualTag = () => <span className="ms-2 rounded-full bg-amber-400/15 text-amber-300 px-2 text-[13px] font-bold">يدوي</span>;
 
@@ -290,10 +322,13 @@ function OvertimeWeekRow({ week, paidToday }: { week: OvertimeWeek; paidToday: b
         <p className="text-gray-500 text-[14px]">مفيش إضافي</p>
       ) : (
         week.entries.map((e, i) => (
-          <p key={i} className="flex items-center justify-between gap-4 text-[15px]">
-            <span className="text-gray-300">{overtimeText(e)}</span>
-            <span className="text-sky-300">= {money(e.amount)} ج.م</span>
-          </p>
+          <div key={i}>
+            <p className="flex items-center justify-between gap-4 text-[15px]">
+              <span className="text-gray-300">{overtimeText(e)}</span>
+              <span className="text-sky-300">= {money(e.amount)} ج.م</span>
+            </p>
+            <DupWarning dup={e.duplicate} />
+          </div>
         ))
       )}
       <p className="flex items-center justify-between gap-4 border-t border-cardBorder/60 mt-1 pt-1">
@@ -452,6 +487,7 @@ function AdjustmentLines({ salary, empty }: { salary: EmployeeSalary; empty: str
               {a.reason && <>السبب: {a.reason}</>}
             </p>
           )}
+          <DupWarning dup={a.duplicate} />
         </div>
       ))}
     </>
@@ -529,12 +565,15 @@ function ItemList({ items, tone }: { items: SalaryAdjustment[]; tone: string }) 
   return (
     <ul className="ps-5 text-[13px] text-gray-400 leading-[1.7]">
       {items.map((a, i) => (
-        <li key={i} className="flex items-center justify-between gap-3">
-          <span>
-            {a.label} {shortDate(a.date)}
-            {a.reason && <span className="text-gray-500"> — {a.reason}</span>}
+        <li key={i}>
+          <span className="flex items-center justify-between gap-3">
+            <span>
+              {a.label} {shortDate(a.date)}
+              {a.reason && <span className="text-gray-500"> — {a.reason}</span>}
+            </span>
+            <span className={tone}>{money(a.amount)}</span>
           </span>
-          <span className={tone}>{money(a.amount)}</span>
+          <DupWarning dup={a.duplicate} />
         </li>
       ))}
     </ul>
@@ -752,8 +791,45 @@ function SectionSalaryList({ data, state, onPick }: { data: AttendanceDetails; s
   const dailyPeople = data.people.filter((p) => isDaily(p.id));
   return (
     <div className="flex flex-col gap-6">
+      {salaries.duplicates.length > 0 && <DuplicatesChip duplicates={salaries.duplicates} />}
       {monthlyPeople.length > 0 && <MonthlySalaryTable people={monthlyPeople} salaries={salaries} onPick={onPick} />}
       {dailyPeople.length > 0 && <DailySalaryTable people={dailyPeople} salaries={salaries} onPick={onPick} />}
+    </div>
+  );
+}
+
+// "⚠ X تسويات مكررة": بالضغط بتطلع القايمة - the duplicates chip; click to list them
+
+function DuplicatesChip({ duplicates }: { duplicates: SalaryDuplicate[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-2 -mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="self-start inline-flex items-center gap-1.5 rounded-full border border-orange-400/60 bg-orange-400/15 px-3 py-0.5 text-[15px] font-bold text-orange-300 hover:bg-orange-400/25"
+      >
+        ⚠ {duplicates.length} تسويات مكررة
+        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="rounded-xl border border-orange-400/40 bg-background p-3 flex flex-col gap-2 text-[15px]">
+          {duplicates.map((d) => (
+            <div key={d.docs[0].name} className="flex flex-col">
+              <p className="flex flex-wrap items-baseline gap-x-3 text-gray-200">
+                <b className="text-white">{d.employeeName}</b>
+                <span>{d.type}</span>
+                <span>{shortDate(d.date)}</span>
+                <span className="text-gray-100">
+                  {money(d.amount)} ج.م{d.type === "إضافي" && d.hours > 0 && <> ({money(d.hours)} س)</>}
+                </span>
+              </p>
+              <DupWarning dup={d} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -659,12 +659,30 @@ export interface DailyWeek {
   current: boolean; // الأسبوع اللي فيه النهارده - the week holding today
 }
 
+// Salary Adjustment متكررة (نفس الموظف + النوع + التاريخ + المبلغ، ونفس الساعات للإضافي): بتتحسب مرة واحدة
+// A duplicated Salary Adjustment (same employee + type + date + amount, same hours for إضافي): counted once
+export interface DuplicateInfo {
+  count: number; // عدد المستندات - how many documents
+  docs: { name: string; url: string }[]; // الأول هو اللي اتحسب - the first one is the one counted
+}
+
+// تكرار في قسم (للشريحة "⚠ X تسويات مكررة") - one duplicate group in a section
+export interface SalaryDuplicate extends DuplicateInfo {
+  employee: string;
+  employeeName: string;
+  type: string; // adjustment_type
+  date: string;
+  amount: number;
+  hours: number;
+}
+
 // إضافي (Salary Adjustment) بيتصرف كاش - one cash-paid overtime entry
 export interface OvertimeEntry {
   date: string; // "2026-11-01"
   hours: number;
   rate: number; // سعر الساعة - hour rate
   amount: number;
+  duplicate?: DuplicateInfo | null;
 }
 
 // إضافي أسبوع (السبت → الجمعة) بيتصرف كاش - one week of overtime (Saturday → Friday), paid in cash
@@ -704,6 +722,7 @@ export interface SalaryAdjustment {
   reason: string | null; // السبب (لو متسجل) - reason, when recorded
   // القسط: الباقي بعد قسط الشهر ده وعدد الشهور - installment: remaining after this month, and months left
   remaining: { amount: number; months: number } | null;
+  duplicate?: DuplicateInfo | null; // متكررة واتحسبت مرة واحدة - duplicated, counted once
 }
 
 export interface SectionSalaries {
@@ -711,6 +730,8 @@ export interface SectionSalaries {
   today: string;
   daysPerMonth: number;
   people: EmployeeSalary[];
+  // Salary Adjustment المتكررة في القسم (اتحسبت مرة واحدة) - the section's duplicated Salary Adjustments (counted once)
+  duplicates: SalaryDuplicate[];
   // أسابيع اليومية: الأسبوع اللي فات ويوم قبضه، والأسبوع ده لحد النهارده - daily-pay weeks
   // أسبوع القبض الكاش (يومية العمال + إضافي الشهريين): يوم القبض = الأسبوع اللي خلص، غير كده = الأسبوع الحالي
   // The cash-pay week (daily pay + monthly overtime): on pay day the week that ended, otherwise this week
