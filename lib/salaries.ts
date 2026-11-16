@@ -6,6 +6,7 @@ import { addDays, attendanceDetails, cashWeekOf, cashWeekStarts, rangeStartOf, w
 import { AttendanceSectionKey, outsideMode } from "./data-source";
 import { ErpError, erpDocUrl, erpPost } from "./erp";
 import { advanceDues, openLoans } from "./advance-due";
+import { normalizeText } from "./dup-fingerprint";
 import {
   AdvanceDue, DailyWeek, DuplicateInfo, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SalaryDuplicate, SectionSalaries,
 } from "./types";
@@ -67,8 +68,11 @@ const amountKey = (a: Adjustment) => {
 function dedupeAdjustments(rows: Adjustment[]) {
   const groups = new Map<string, Adjustment[]>();
   for (const a of rows) {
-    const hours = a.adjustment_type === "إضافي" ? money(a.hours ?? 0) : "";
-    const key = [a.employee, a.adjustment_type, String(a.date).slice(0, 10), amountKey(a), hours].join("|");
+    // صارم: لازم كمان نفس السبب والساعات ونوع الخصم والأيام - strict: the same reason, hours, deduction type and days too
+    const key = [
+      a.employee, a.adjustment_type, String(a.date).slice(0, 10), amountKey(a), money(a.hours ?? 0), money(a.hour_rate ?? 0),
+      normalizeText(a.deduction_type), money(a.days ?? 0), normalizeText(a.reason),
+    ].join("|");
     const group = groups.get(key);
     if (group) group.push(a);
     else groups.set(key, [a]);

@@ -247,12 +247,17 @@ export interface SuspectedDuplicateDoc {
   owner: string; // الاسم الكامل - full name
   creation: string; // "2026-11-15 14:30"
   docstatus: number; // 0 مسودة، 1 معتمد - draft / submitted
+  // للمقارنة جنب بعض: الخانات اللي اتقارنت وسطور الجدول - for the side-by-side view: the compared fields and the rows
+  compare: { fields: [string, string][]; rows: string[] };
 }
 export interface SuspectedDuplicate {
   id: string;
   doctype: string;
   label: string; // "سند دفع" ...
   rule: string; // القاعدة اللي اتطابقت - the matched rule
+  // sure = "مكررة أكيد" (كل حاجة زي بعض والكل معتمد)، draft = "مسودة شبه عملية متسجلة" (تحذير أخف)
+  // sure = everything identical and all submitted; draft = a draft looks like a recorded one (a softer warning)
+  level: "sure" | "draft";
   date: string; // "2026-11-15"
   amount: number | null; // null = مش بيظهر (تسويات المرتبات سرية) أو مالوش مبلغ - hidden or none
   summary: string; // الطرف / العميل / الصنف... - who / what
@@ -264,6 +269,9 @@ export interface DuplicatesReport {
   today: string;
   items: SuspectedDuplicate[]; // الأحدث الأول - newest first
   skipped: string[]; // DocTypes مش متاحة (صلاحيات) - doctypes not readable
+  checked: number; // المجموعات اللي اتفحصت بالمستند كامل - first-pass groups checked on the full documents
+  // اللي اتشال لأنه بيفرق في حاجة (وإيه اللي بيفرق) - groups dropped because something differs (and what)
+  rejected: { doctype: string; label: string; docs: string[]; diffs: string[] }[];
 }
 
 // عملية صدقة في لوحة التفاصيل - one charity operation in the details panel

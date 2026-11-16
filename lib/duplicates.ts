@@ -2,7 +2,8 @@
 // Suspected duplicates already in ERPNext (read-only, last 60 days), same rules as the duplicate-guard client scripts
 // money = الخزنة (سندات، قيود، فواتير، مطالبات، صدقات، تسويات مرتب)، stock = المخازن (أذون، فواتير مبيعات، طرحات)
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpDocUrl, erpPost, erpToday } from "./erp";
+import { erpDocUrl, erpGet, erpPost, erpToday } from "./erp";
+import { compareView, differences, fingerprint } from "./dup-fingerprint";
 import { fullNames } from "./account-details";
 import { doctypeInfo } from "./production";
 import { DuplicatesReport, SuspectedDuplicate } from "./types";
@@ -236,6 +237,20 @@ async function kilnGroups(from: string): Promise<{ group: Candidate[] }[]> {
   return out;
 }
 
+type Doc = Record<string, unknown>;
+// المستندات اللي ليها مسودة / معتمد - doctypes with draft / submitted
+const SUBMITTABLE = new Set(["Payment Entry", "Journal Entry", "Sales Invoice", "Purchase Invoice", "Stock Entry", "Expense Claim", "Salary Adjustment"]);
+
+// المستند كامل بجداوله (null لو مفيش صلاحية) - the full document with its child tables (null without permission)
+async function fullDoc(doctype: string, name: string): Promise<Doc | null> {
+  try {
+    return (await erpGet<{ data: Doc }>(`/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`)).data;
+  } catch (error) {
+    if (/HTTP 403|PermissionError/.test(error instanceof Error ? error.message : "")) return null;
+    throw error;
+  }
+}
+
 const cache = new Map<string, { at: number; value: DuplicatesReport }>();
 const inFlight = new Map<string, Promise<DuplicatesReport>>();
 
@@ -270,14 +285,50 @@ export async function duplicatesReport(scope: "money" | "stock"): Promise<Duplic
         skipped.push(kilnRule.doctype);
       }
     }
-    const names = await fullNames(Array.from(new Set(found.flatMap((f) => f.group.map((c) => c.doc.owner)).filter(Boolean))));
-    const items: SuspectedDuplicate[] = found.map(({ rule, group }) => {
+    // الفحص الصارم: كل مجموعة مبدئية بتتقارن بالمستندات كاملة (الخانات + كل السطور)، واللي يفرق في أي حاجة مش مكرر
+    // Strict check: each first-pass group is compared on the full documents (fields + every row); any difference = not a duplicate
+    const verified: { rule: (typeof found)[number]["rule"]; group: Candidate[]; docs: Map<string, Doc> }[] = [];
+    const rejected: DuplicatesReport["rejected"] = [];
+    for (const { rule, group } of found) {
+      const docs = new Map<string, Doc>();
+      for (const c of group) {
+        const doc = await fullDoc(rule.doctype, String(c.doc.name));
+        if (doc) docs.set(String(c.doc.name), doc);
+      }
+      const names = group.map((c) => String(c.doc.name));
+      if (docs.size < group.length) {
+        rejected.push({ doctype: rule.doctype, label: rule.label, docs: names, diffs: ["مش قادر أقرا المستند كامل (صلاحيات) — مش هتتعلم مكررة"] });
+        continue;
+      }
+      const clusters = new Map<string, Candidate[]>();
+      for (const c of group) {
+        const key = fingerprint(rule.doctype, docs.get(String(c.doc.name))!);
+        clusters.set(key, [...(clusters.get(key) ?? []), c]);
+      }
+      const kept = Array.from(clusters.values()).filter((g) => g.length > 1);
+      for (const g of kept) verified.push({ rule, group: g, docs });
+      // اللي اتشال: الخانة اللي بتفرق عن أول مستند - the rejected ones: the field that differs from the first document
+      const keptNames = new Set(kept.flat().map((c) => String(c.doc.name)));
+      const out = names.filter((n) => !keptNames.has(n));
+      if (out.length) {
+        const base = docs.get(names[0])!;
+        const diffs = Array.from(new Set(out.filter((n) => n !== names[0]).flatMap((n) => differences(rule.doctype, base, docs.get(n)!))));
+        rejected.push({ doctype: rule.doctype, label: rule.label, docs: names, diffs: diffs.length ? diffs : differences(rule.doctype, docs.get(out[0])!, docs.get(names[1])!) });
+      }
+    }
+
+    const names = await fullNames(Array.from(new Set(verified.flatMap((f) => f.group.map((c) => c.doc.owner)).filter(Boolean))));
+    const items: SuspectedDuplicate[] = verified.map(({ rule, group, docs }) => {
       const sorted = [...group].sort((a, b) => str(a.doc.creation).localeCompare(str(b.doc.creation)));
+      const statuses = sorted.map((c) => Number(c.doc.docstatus) || 0);
+      // مسودة جنب مستند معتمد (أو مسودات بس) = تحذير أخف - a draft next to a submitted doc (or drafts only) = a softer warning
+      const level: SuspectedDuplicate["level"] = SUBMITTABLE.has(rule.doctype) && statuses.some((s) => s === 0) ? "draft" : "sure";
       return {
         id: `${rule.doctype}:${sorted[0].doc.name}`,
         doctype: rule.doctype,
         label: rule.label,
         rule: rule.rule,
+        level,
         date: sorted[0].date,
         amount: sorted[0].amount,
         summary: sorted[0].summary,
@@ -287,11 +338,12 @@ export async function duplicatesReport(scope: "money" | "stock"): Promise<Duplic
           owner: names.get(c.doc.owner) ?? c.doc.owner,
           creation: str(c.doc.creation).slice(0, 16),
           docstatus: Number(c.doc.docstatus) || 0,
+          compare: compareView(rule.doctype, docs.get(String(c.doc.name)) ?? {}),
         })),
       };
     });
-    items.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-    const value: DuplicatesReport = { scope, from, today, items, skipped: skipped.sort() };
+    items.sort((a, b) => (a.level === b.level ? 0 : a.level === "sure" ? -1 : 1) || b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+    const value: DuplicatesReport = { scope, from, today, items, skipped: skipped.sort(), checked: found.length, rejected };
     cache.set(scope, { at: Date.now(), value });
     return value;
   })();
