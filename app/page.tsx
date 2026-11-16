@@ -12,6 +12,7 @@ import ProductionPage, { ProductionTarget } from "@/components/ProductionPage";
 import ActivityFeed from "@/components/ActivityFeed";
 import ProductionDetailsPanel from "@/components/ProductionDetailsPanel";
 import CharitySection from "@/components/CharitySection";
+import CharityDetailsPanel, { type CharityPanelTarget } from "@/components/CharityDetailsPanel";
 import SalesRepsSection from "@/components/SalesRepsSection";
 import AttendanceDetailsPanel from "@/components/AttendanceDetailsPanel";
 import AccountDetailsPanel from "@/components/AccountDetailsPanel";
@@ -124,6 +125,9 @@ export default function Dashboard() {
   // المحفظة المفتوحة (من كروت صفحة الخزن والمحافظ) - the open wallet (from the wallets page cards)
   const [wallet, setWallet] = useState<{ accountNumber: string; title: string } | null>(null);
   const closeWallet = useCallback(() => setWallet(null), []);
+  // صندوق الصدقات المفتوح (أو كل الصناديق) - the open charity fund (or all funds)
+  const [charityTarget, setCharityTarget] = useState<CharityPanelTarget | null>(null);
+  const closeCharity = useCallback(() => setCharityTarget(null), []);
   // تفاصيل كارت في أرصدة المخازن - the open stock card details
   const [stockItem, setStockItem] = useState<StockPanelTarget | null>(null);
   const closeStockItem = useCallback(() => setStockItem(null), []);
@@ -145,7 +149,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -315,7 +319,7 @@ export default function Dashboard() {
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>
-            <CharitySection data={data.charity} />
+            <CharitySection data={data.charity} onOpen={setCharityTarget} />
           </div>
         );
       default:
@@ -405,6 +409,7 @@ export default function Dashboard() {
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
       )}
       {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
+      {charityTarget && <CharityDetailsPanel target={charityTarget} onClose={closeCharity} />}
       {productionTarget && production && (
         <ProductionDetailsPanel data={production} target={productionTarget} onClose={closeProduction} />
       )}

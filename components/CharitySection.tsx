@@ -4,9 +4,12 @@ import { ArrowUpRight, CalendarDays, HandHeart, Vault, Wallet, type LucideIcon }
 import { Charity, CharityFund, CharityOperation } from "@/lib/types";
 import { DATE_LOCALE, formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
+import type { CharityPanelTarget } from "./CharityDetailsPanel";
 
 interface CharitySectionProps {
   data: Charity | null; // null = ERPNext مش بيرد ومفيش نتيجة قديمة - ERPNext down with no last good result
+  // الضغط على كارت صندوق أو "إجمالي صرف الشهر / اليوم" بيفتح التفاصيل - a card click opens the details
+  onOpen?: (target: CharityPanelTarget) => void;
 }
 
 // "2026-10-27" -> "الثلاثاء 27/10" (التاريخ من غير ساعة فبنقراه UTC) - date only, so read it as UTC
@@ -42,10 +45,15 @@ function OfflineBadge() {
 }
 
 // مربع في الشريط اللي فوق - a box in the top summary strip
-function SummaryBox({ label, value, icon: Icon, tone }: { label: string; value: number; icon: LucideIcon; tone: string }) {
+function SummaryBox({ label, value, icon: Icon, tone, onClick }: { label: string; value: number; icon: LucideIcon; tone: string; onClick?: () => void }) {
   const sizes = dashboardConfig.sizes.charityPage;
   return (
-    <div className="flex-1 min-w-0 bg-card border border-cardBorder rounded-2xl px-5 flex items-center gap-4">
+    <div
+      onClick={onClick}
+      className={`flex-1 min-w-0 bg-card border border-cardBorder rounded-2xl px-5 flex items-center gap-4 ${
+        onClick ? "cursor-pointer hover:border-gray-500" : ""
+      }`}
+    >
       <div className={`p-2.5 rounded-xl ${tone}`} style={{ backgroundColor: "color-mix(in srgb, currentColor 12%, transparent)" }}>
         <Icon size={26} />
       </div>
@@ -82,13 +90,18 @@ function OperationRow({ op }: { op: CharityOperation }) {
 }
 
 // كارت الصندوق (خزنة) - one fund's "safe" card
-function FundCard({ fund }: { fund: CharityFund }) {
+function FundCard({ fund, onOpen }: { fund: CharityFund; onOpen?: () => void }) {
   const sizes = dashboardConfig.sizes.charityPage;
   const page3 = dashboardConfig.sizes.page3;
   const negative = fund.balance < 0;
 
   return (
-    <div className="bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)]">
+    <div
+      onClick={onOpen}
+      className={`bg-card border border-emerald-500/30 rounded-2xl p-4 h-full min-h-0 flex flex-col gap-3 overflow-hidden shadow-[inset_0_1px_0_rgba(16,185,129,0.15)] ${
+        onOpen ? "cursor-pointer hover:border-emerald-400/60" : ""
+      }`}
+    >
       {/* اسم الصندوق وصرف الشهر - fund name and this month's spending */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400">
@@ -153,7 +166,7 @@ function FundCard({ fund }: { fund: CharityFund }) {
   );
 }
 
-export default function CharitySection({ data }: CharitySectionProps) {
+export default function CharitySection({ data, onOpen }: CharitySectionProps) {
   const sizes = dashboardConfig.sizes.charityPage;
 
   if (!data) {
@@ -170,8 +183,20 @@ export default function CharitySection({ data }: CharitySectionProps) {
       {/* الشريط اللي فوق - the summary strip */}
       <div className="shrink-0 flex gap-4 items-stretch" style={{ height: sizes.summaryHeight }}>
         <SummaryBox label="إجمالي أرصدة الصدقات" value={data.totalBalance} icon={Wallet} tone="text-emerald-400" />
-        <SummaryBox label="إجمالي صرف اليوم" value={data.todayOut} icon={ArrowUpRight} tone="text-statusRed" />
-        <SummaryBox label="إجمالي صرف الشهر" value={data.monthOut} icon={CalendarDays} tone="text-statusAmber" />
+        <SummaryBox
+          label="إجمالي صرف اليوم"
+          value={data.todayOut}
+          icon={ArrowUpRight}
+          tone="text-statusRed"
+          onClick={onOpen && (() => onOpen({ fund: null, filter: "out", todayOnly: true }))}
+        />
+        <SummaryBox
+          label="إجمالي صرف الشهر"
+          value={data.monthOut}
+          icon={CalendarDays}
+          tone="text-statusAmber"
+          onClick={onOpen && (() => onOpen({ fund: null, filter: "out", todayOnly: false }))}
+        />
         {data.offline && (
           <div className="flex items-center">
             <OfflineBadge />
@@ -182,7 +207,7 @@ export default function CharitySection({ data }: CharitySectionProps) {
       {/* 4 صناديق 2×2 - the 4 funds in a 2x2 grid */}
       <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-4">
         {data.funds.map((fund) => (
-          <FundCard key={fund.name} fund={fund} />
+          <FundCard key={fund.name} fund={fund} onOpen={onOpen && (() => onOpen({ fund: fund.name, filter: "all", todayOnly: false }))} />
         ))}
       </div>
     </div>

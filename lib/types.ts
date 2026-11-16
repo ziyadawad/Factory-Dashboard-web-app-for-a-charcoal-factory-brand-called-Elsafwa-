@@ -205,6 +205,39 @@ export interface AccountDetails {
   advances: AdvanceSummary; // سلف الشهر (monthStart → to) - this month's advances
 }
 
+// عملية صدقة في لوحة التفاصيل - one charity operation in the details panel
+export interface CharityDetailOp {
+  id: string;
+  fund: string;
+  date: string; // txn_date
+  type: "out" | "in" | "opening";
+  amount: number;
+  balanceAfter: number; // رصيد الصندوق بعدها - the fund's balance after it
+  totalAfter: number; // رصيد كل الصناديق بعدها - all funds' balance after it
+  beneficiary: string;
+  details: string;
+  owner: string; // الاسم الكامل - full name
+  creation: string; // "2026-11-15 14:30"
+  lateDays: number; // creation − txn_date بالأيام - days between the date and its creation
+  url: string; // افتح في ERPNext
+}
+
+// تفاصيل صندوق صدقات (أو كل الصناديق لو fund = null) لشهر - one fund's (or all funds') details for a month
+export interface CharityDetails {
+  fund: string | null;
+  month: string; // "2026-11"
+  today: string;
+  months: string[]; // الشهور اللي فيها عمليات، الأحدث الأول - months with operations, newest first
+  balance: number; // الرصيد الحالي (زي الكارت) - current balance (same as the card)
+  openingBalance: number; // رصيد أول الشهر - balance before the month
+  totalIn: number; // إجمالي الإيداع (من غير الرصيد الافتتاحي) - deposits, opening balance excluded
+  totalOut: number; // إجمالي الصرف
+  closingBalance: number; // رصيد آخر الشهر (أو النهارده) - balance at month end (or today)
+  count: number; // عدد العمليات في الشهر - operations in the month
+  lastOp: { date: string; creation: string; createdAt: number; owner: string } | null; // آخر عملية (بالـ creation)
+  ops: CharityDetailOp[]; // عمليات الشهر، الأحدث الأول - the month's operations, newest first
+}
+
 // الإنتاج والأفران (الصفحة 2) - production and kilns (page 2)
 // نوع فحم (من خيارات charcoal_type في Kiln Exit) ولونه - a charcoal type (Kiln Exit charcoal_type options) and its color
 export interface ProductionType {
