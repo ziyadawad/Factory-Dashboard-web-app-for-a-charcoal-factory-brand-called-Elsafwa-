@@ -301,3 +301,70 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     font-size: calc(var(--fs) * 0.74);
   }
 }
+
+/* رسمة الفرن: نار بترعش، دخان طالع، اهتزاز حراري خفيف، مفتاح صيانة بيتمرجح — transform / opacity بس
+   Kiln drawing: flickering fire, rising smoke, a subtle heat shimmer, a swinging wrench — transform / opacity only */
+@keyframes kiln-flicker {
+  0%, 100% { transform: scale(1, 1); opacity: 0.95; }
+  25% { transform: scale(0.94, 1.14); opacity: 1; }
+  50% { transform: scale(1.05, 0.9); opacity: 0.85; }
+  75% { transform: scale(0.97, 1.07); opacity: 1; }
+}
+.kiln-flame {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: kiln-flicker 0.9s ease-in-out infinite;
+}
+.kiln-flame-2 {
+  animation-duration: 0.65s;
+  animation-delay: -0.3s;
+}
+@keyframes kiln-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.95; }
+}
+.kiln-glow {
+  animation: kiln-glow 1.6s ease-in-out infinite;
+}
+@keyframes kiln-smoke {
+  0% { transform: translate(0, 0) scale(0.45); opacity: 0; }
+  15% { opacity: 0.4; }
+  100% { transform: translate(16px, -38px) scale(1.9); opacity: 0; }
+}
+.kiln-smoke {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kiln-smoke 3.6s ease-out infinite;
+}
+.kiln-smoke-1 { animation-delay: -1.2s; }
+.kiln-smoke-2 { animation-delay: -2.4s; }
+@keyframes kiln-shimmer {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(0, -0.7px); }
+}
+.kiln-body-hot {
+  animation: kiln-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes kiln-swing {
+  0%, 100% { transform: rotate(-14deg); }
+  50% { transform: rotate(14deg); }
+}
+.kiln-wrench {
+  transform-origin: 75% 25%;
+  animation: kiln-swing 2.4s ease-in-out infinite;
+}
+/* حركة أقل: النار ثابتة منورة، ومفيش دخان ولا حركة - reduced motion: static fire glow, no smoke, no movement */
+@media (prefers-reduced-motion: reduce) {
+  .kiln-flame,
+  .kiln-glow,
+  .kiln-body-hot,
+  .kiln-wrench {
+    animation: none !important;
+  }
+  .kiln-glow {
+    opacity: 0.8;
+  }
+  .kiln-smoke {
+    display: none;
+  }
+}

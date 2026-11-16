@@ -1,7 +1,8 @@
 "use client";
 
 import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Clock, Factory, Flame, Scale } from "lucide-react";
+import { Clock, Factory, Flame, PowerOff, Scale, Wrench } from "lucide-react";
+import KilnIllustration, { type KilnState } from "./KilnIllustration";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { ProductionData, ProductionExit } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
@@ -14,7 +15,6 @@ import {
   summarize,
   Tally,
   typeColor,
-  TypeSummary,
   useCompact,
   useMinutesSince,
 } from "@/lib/production-stats";
@@ -26,10 +26,10 @@ import { OfflineBadge } from "./OfflineBadge";
 
 export type ProductionTarget = { kind: "kiln" | "type"; name: string };
 
-const STATUS: Record<string, { label: string; text: string; border: string; dot: string }> = {
-  working: { label: "شغالة", text: "text-statusGreen", border: "border-statusGreen/60", dot: "bg-statusGreen" },
-  maintenance: { label: "صيانة", text: "text-statusAmber", border: "border-statusAmber/60", dot: "bg-statusAmber" },
-  stopped: { label: "متوقفة", text: "text-statusRed", border: "border-statusRed/50", dot: "bg-statusRed" },
+const STATUS: Record<string, { label: string; text: string; border: string; dot: string; chip: string }> = {
+  working: { label: "شغالة", text: "text-statusGreen", border: "border-statusGreen/60", dot: "bg-statusGreen", chip: "bg-statusGreen/15" },
+  maintenance: { label: "صيانة", text: "text-statusAmber", border: "border-statusAmber/60", dot: "bg-statusAmber", chip: "bg-statusAmber/15" },
+  stopped: { label: "متوقفة", text: "text-statusRed", border: "border-statusRed/50", dot: "bg-statusRed", chip: "bg-statusRed/15" },
 };
 
 const num = (text: string, className = "") => (
@@ -47,9 +47,23 @@ export const shortDate = (date: string) => {
 // أطنان مجموعة (والمتوزن بس) - a set's tons (weighed exits only)
 const tons = (t: Tally) => formatTons(t.kg);
 
-function Card({ title, icon, extra, children, className = "" }: { title: string; icon?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string }) {
+function Card({
+  title,
+  icon,
+  extra,
+  children,
+  className = "",
+  style,
+}: {
+  title: string;
+  icon?: ReactNode;
+  extra?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <section className={`bg-card border border-cardBorder rounded-2xl p-3 min-[1600px]:p-4 flex flex-col min-h-0 min-w-0 overflow-hidden ${className}`}>
+    <section className={`bg-card border border-cardBorder rounded-2xl p-3 min-[1600px]:p-4 flex flex-col min-h-0 min-w-0 overflow-hidden ${className}`} style={style}>
       <div className="flex items-center gap-2 mb-2 shrink-0">
         {icon}
         <h2 className="text-[16px] min-[1600px]:text-[20px] font-bold text-white whitespace-nowrap">{title}</h2>
@@ -223,36 +237,46 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
   );
 }
 
+// كارت فرن: رسمة الفرن بحالته (شغالة نار ودخان / صيانة / متوقفة)، وتحتها طرحات النهارده وأطنانها وآخر خروج
+// A kiln tile: the kiln drawing in its state (working fire + smoke / maintenance / stopped), then today's exits, tons, last exit
 function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: string; sizes: Sizes; onOpen: () => void }) {
-  const st = STATUS[kiln.status] ?? STATUS.stopped;
+  const state: KilnState = kiln.status === "working" ? "working" : kiln.status === "maintenance" ? "maintenance" : "stopped";
+  const st = STATUS[state];
   const active = kiln.today.count > 0;
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={`min-h-0 min-w-0 rounded-xl border-2 ${st.border} bg-background/60 px-2.5 py-1 flex flex-col justify-center text-start hover:bg-white/5 overflow-hidden`}
+      className={`relative min-h-0 min-w-0 rounded-xl border-2 ${st.border} bg-background/60 px-3 py-2 flex flex-col text-start hover:bg-white/5 overflow-hidden`}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-white font-extrabold text-[15px] min-[1600px]:text-[19px] whitespace-nowrap">{toEnglishDigits(kiln.name)}</span>
-        <span className={`ms-auto inline-flex items-center gap-1 text-[12px] min-[1600px]:text-[14px] font-bold ${st.text} whitespace-nowrap`}>
-          <span className={`w-2 h-2 rounded-full ${st.dot}`} />
-          {st.label}
-        </span>
+      {/* الحالة فوق الرسمة في الركن (عشان الرسمة تاخد الطول كله) - the status over the drawing's corner (so the drawing gets the full height) */}
+      <span
+        className={`absolute top-2 start-2.5 z-10 inline-flex items-center gap-1.5 rounded-full px-2.5 font-bold whitespace-nowrap leading-[1.7] ${st.text} ${st.chip}`}
+        style={{ fontSize: sizes.kilnChipFontSize }}
+      >
+        {state === "stopped" ? <PowerOff size={sizes.kilnChipFontSize} /> : <span className={`w-2 h-2 rounded-full ${st.dot}`} />}
+        {st.label}
+      </span>
+      {state === "maintenance" && (
+        <Wrench className="kiln-wrench absolute top-2 end-2.5 z-10 text-statusAmber" size={sizes.kilnChipFontSize * 1.6} />
+      )}
+      {/* الرسمة - the drawing */}
+      <div className={`flex-1 min-h-0 flex items-center justify-center pt-3 pb-1 ${state === "stopped" ? "opacity-50" : ""}`}>
+        <KilnIllustration state={state} label={toEnglishDigits(kiln.name)} className="w-full h-full" />
       </div>
-      <p className="whitespace-nowrap leading-[1.25]">
-        <span className={`font-extrabold ${active ? "text-white" : "text-gray-600"}`} style={{ fontSize: sizes.kilnTonsFontSize }}>
-          {num(tons(kiln.today))}
+      {/* طرحات النهارده · الأطنان · آخر خروج - today's exits · tons · last exit */}
+      <p className="shrink-0 flex items-baseline gap-3 whitespace-nowrap min-w-0 text-gray-400" style={{ fontSize: sizes.kilnStatFontSize }}>
+        <span>
+          <span className={`font-extrabold ${active ? "text-white" : "text-gray-600"}`} style={{ fontSize: sizes.kilnTonsFontSize }}>
+            {num(tons(kiln.today))}
+          </span>{" "}
+          طن
         </span>
-        <span className="text-gray-500 text-[13px] min-[1600px]:text-[15px] font-semibold"> طن</span>
-      </p>
-      <p className="flex items-center gap-2 text-[12px] min-[1600px]:text-[14px] text-gray-400 whitespace-nowrap min-w-0">
-        <span className={active ? "text-gray-200 font-bold" : ""}>{num(formatNumber(kiln.today.count))} طرحة</span>
-        <span className="ms-auto truncate">
+        <span className={active ? "text-gray-100 font-bold" : ""}>{num(formatNumber(kiln.today.count))} طرحة</span>
+        <span className="ms-auto truncate" title="آخر خروج">
           {kiln.last ? (
             <>
-              <span title="آخر خروج">
-                <Clock size={13} className="inline align-[-2px]" /> {num(kiln.last.time)}
-              </span>
+              <Clock size={sizes.kilnStatFontSize * 0.85} className="inline align-[-2px]" /> {num(kiln.last.time)}
               {kiln.last.date !== today && <span className="hidden min-[1600px]:inline"> ({num(shortDate(kiln.last.date))})</span>}
             </>
           ) : (
@@ -260,29 +284,6 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
           )}
         </span>
       </p>
-    </button>
-  );
-}
-
-// سطر نوع بشريط (أطنان، ولو مفيش أوزان بالعدد) - a type row with a bar (tons, or count without weights)
-function TypeRow({ type, max, byTons, onOpen, pick }: { type: TypeSummary; max: number; byTons: boolean; onOpen: () => void; pick: (t: TypeSummary) => Tally }) {
-  const t = pick(type);
-  const value = byTons ? t.kg : t.count;
-  return (
-    <button type="button" onClick={onOpen} className="min-h-0 w-full grid items-center gap-3 text-start rounded-lg hover:bg-white/5 px-1" style={{ gridTemplateColumns: "minmax(4.5em,auto) minmax(0,1fr) auto" }}>
-      <span className="flex items-center gap-2 font-bold whitespace-nowrap" style={{ color: t.count ? type.color : "#6B7280" }}>
-        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: type.color, opacity: t.count ? 1 : 0.4 }} />
-        {type.label}
-      </span>
-      <div className="h-3 min-[1600px]:h-4 rounded-full bg-cardBorder overflow-hidden">
-        <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${max > 0 ? (value / max) * 100 : 0}%`, backgroundColor: type.color }} />
-      </div>
-      <span className="whitespace-nowrap text-end">
-        <b className={t.count ? "text-white" : "text-gray-600"}>{num(tons(t))}</b>
-        <span className="text-gray-500 text-[0.85em]"> طن · </span>
-        <b className={t.count ? "text-gray-200" : "text-gray-600"}>{num(formatNumber(t.count))}</b>
-        <span className="text-gray-500 text-[0.85em]"> طرحة</span>
-      </span>
     </button>
   );
 }
@@ -457,7 +458,6 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
   const s = summarize(data);
   const byTonsToday = s.today.weighed > 0;
   const byTonsMonth = s.month.weighed > 0;
-  const typeMax = Math.max(0, ...s.types.map((t) => (byTonsToday ? t.today.kg : t.today.count)));
   const gap = compact ? 12 : 16;
 
   return (
@@ -465,8 +465,10 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
       className="grid h-full"
       style={{
         gap,
-        gridTemplateColumns: "minmax(0,1.2fr) minmax(0,1.45fr) minmax(0,0.95fr)",
-        gridTemplateRows: `${sizes.kpiHeight}px minmax(0,1.12fr) minmax(0,1fr)`,
+        // يمين: الأفران (الكارت الكبير)، النص: بالساعة + ملخص الشهر، شمال: آخر وزنة + طرحات النهارده
+        // Right: the kilns (the big card), middle: hourly + month summary, left: last weighing + today's exits
+        gridTemplateColumns: "minmax(0,1.45fr) minmax(0,1.2fr) minmax(0,0.95fr)",
+        gridTemplateRows: `${sizes.kpiHeight}px minmax(0,1fr) minmax(0,1fr)`,
       }}
     >
       <div className="col-span-2 min-h-0">
@@ -488,6 +490,7 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
       <Card
         title="الأفران"
         icon={<Flame className="text-brandOrange" size={compact ? 18 : 22} />}
+        style={{ gridColumn: 1, gridRow: "2 / span 2" }}
         extra={
           <>
             {data.offline && <OfflineBadge />}
@@ -497,7 +500,8 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
           </>
         }
       >
-        <div className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-2">
+        {/* 6 أفران: عمودين × 3 صفوف (الرسمة عريضة) - 6 kilns: 2 columns × 3 rows (the drawing is wide) */}
+        <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-3 gap-2 min-[1600px]:gap-3">
           {s.kilns.slice(0, 6).map((k) => (
             <KilnTile key={k.name} kiln={k} today={data.today} sizes={sizes} onOpen={() => onOpen({ kind: "kiln", name: k.name })} />
           ))}
@@ -506,6 +510,7 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
 
       <Card
         title="الإنتاج بالساعة النهارده"
+        style={{ gridColumn: 2, gridRow: 2 }}
         icon={<Clock className="text-brandOrange" size={compact ? 18 : 22} />}
         extra={<span className="text-gray-500 text-[13px] min-[1600px]:text-[15px] whitespace-nowrap">{byTonsToday ? "طن في الساعة" : "عدد الطرحات (مفيش أوزان)"}</span>}
       >
@@ -513,16 +518,9 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
       </Card>
 
 
-      <Card title="الأنواع النهارده" extra={<span className="text-gray-500 text-[13px] min-[1600px]:text-[15px] whitespace-nowrap">اضغط على نوع للتفاصيل</span>}>
-        <div className="flex-1 min-h-0 flex flex-col justify-around text-[14px] min-[1600px]:text-[18px]">
-          {s.types.map((t) => (
-            <TypeRow key={t.label} type={t} max={typeMax} byTons={byTonsToday} pick={(x) => x.today} onOpen={() => onOpen({ kind: "type", name: t.label })} />
-          ))}
-        </div>
-      </Card>
-
       <Card
         title="ملخص الشهر"
+        style={{ gridColumn: 2, gridRow: 3 }}
         extra={
           <span className="whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">
             <b className="text-brandOrange">{num(tons(s.month))}</b>

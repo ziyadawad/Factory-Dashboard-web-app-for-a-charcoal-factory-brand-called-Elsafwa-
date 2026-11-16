@@ -833,12 +833,16 @@ export const dashboardConfig = {
       kpiTonsFontSize: 72, // رقم "إنتاج النهارده" (الأكبر) - the "إنتاج النهارده" number (biggest)
       kpiFontSize: 46, // باقي أرقام الصف اللي فوق - the other KPI numbers
       kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
+      kilnStatFontSize: 18, // عدد الطرحات وساعة آخر خروج تحت رسمة الفرن - exits count and last exit time under the kiln drawing
+      kilnChipFontSize: 15, // شارة الحالة (شغالة / صيانة / متوقفة) - the status chip
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس المقاسات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
         kpiHeight: 96,
         kpiTonsFontSize: 50,
         kpiFontSize: 32,
         kilnTonsFontSize: 20,
+        kilnStatFontSize: 13,
+        kilnChipFontSize: 12,
       },
     },
 
