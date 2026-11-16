@@ -22,6 +22,7 @@ import { StockDetails, StockGroup, StockMove } from "@/lib/types";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
+import DuplicatesTab from "./DuplicatesTab";
 
 // لوحة تفاصيل كارت في أرصدة المخازن (الصفحة 2): الرصيد في المخازن / الحركة / ملخص الشهر
 // A stock card's details panel (page 2): balance per warehouse / movements / month summary
@@ -71,11 +72,12 @@ const erpLink = (base: string, move: StockMove) =>
 // اسم المخزن من غير " - AC" - warehouse name without the company suffix
 const shortWarehouse = (name: string) => name.replace(/\s*-\s*AC$/, "");
 
-type Tab = "warehouses" | "moves" | "summary";
+type Tab = "warehouses" | "moves" | "summary" | "duplicates";
 const TABS: { id: Tab; label: string }[] = [
   { id: "warehouses", label: "الرصيد في المخازن" },
   { id: "moves", label: "الحركة" },
   { id: "summary", label: "ملخص الشهر" },
+  { id: "duplicates", label: "⚠ عمليات مكررة" }, // كل المخازن، آخر 60 يوم - all stock, last 60 days
 ];
 
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
@@ -361,7 +363,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
               ))}
             </div>
           )}
-          {tab !== "warehouses" && (
+          {tab !== "warehouses" && tab !== "duplicates" && (
             // الشهور الكتير بتعمل scroll بالعرض جوه السطر ده بس - many months scroll sideways inside this row only
             <div className="ms-auto min-w-0 flex items-center gap-2 overflow-x-auto pb-0.5">
               {monthTabs.map((m) => (
@@ -382,8 +384,10 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
         </div>
 
         {/* المحتوى (بيعمل scroll جوه اللوحة) - the content (scrolls inside the panel) */}
-        <div className={`flex-1 min-h-0 overflow-auto ${loadingNew ? "opacity-50" : ""}`}>
-          {!data ? (
+        <div className={`flex-1 min-h-0 overflow-auto ${loadingNew && tab !== "duplicates" ? "opacity-50" : ""}`}>
+          {tab === "duplicates" ? (
+            <DuplicatesTab scope="stock" />
+          ) : !data ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">
               {error && !isLoading ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
             </div>

@@ -7,6 +7,7 @@ import { AccountDetails, AccountMove, MoveOut } from "@/lib/types";
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
+import DuplicatesTab from "./DuplicatesTab";
 
 // لوحة تفاصيل حساب مشتركة: كارت الخزنة (الرئيسية) وكروت المحافظ (الخزن والمحافظ)
 // Shared account details panel: the treasury card (main page) and the wallet cards (wallets page)
@@ -251,6 +252,8 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
   const [range, setRange] = useState<Range>("half");
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
+  // تاب "⚠ عمليات مكررة" (الخزنة بس) - the duplicates tab (treasury only)
+  const [showDups, setShowDups] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useIdleClose(onClose);
   useEffect(() => {
@@ -385,10 +388,27 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
             {!months && (
               <div className="ms-auto flex items-center gap-2">
                 {RANGES.map((r) => (
-                  <button key={r.id} type="button" onClick={() => setRange(r.id)} className={tab(range === r.id)}>
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      setRange(r.id);
+                      setShowDups(false);
+                    }}
+                    className={tab(range === r.id && !showDups)}
+                  >
                     {r.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setShowDups(true)}
+                  className={`shrink-0 rounded-xl border px-4 py-1.5 font-semibold whitespace-nowrap ${
+                    showDups ? "border-brandOrange bg-brandOrange/15 text-brandOrange" : "border-brandOrange/40 bg-background/70 text-brandOrange/90 hover:border-brandOrange"
+                  }`}
+                >
+                  ⚠ عمليات مكررة
+                </button>
               </div>
             )}
             {months && (
@@ -413,7 +433,7 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
         )}
 
         {/* فلتر الحركات: الكل / وارد / منصرف - the movement filter */}
-        {data && (
+        {data && !showDups && (
           <div className="shrink-0 flex flex-col gap-2 px-5 py-2 border-b border-cardBorder">
             <div className="flex items-center gap-2 flex-wrap">
               {FILTERS.map((x) => (
@@ -449,7 +469,9 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
 
         {/* الحركات (بتعمل scroll جوه اللوحة) - the movements (scroll inside the panel) */}
         <div className={`flex-1 min-h-0 overflow-auto ${loadingMonth && data ? "opacity-50" : ""}`}>
-          {!data ? (
+          {showDups ? (
+            <DuplicatesTab scope="money" />
+          ) : !data ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">
               {error && !isLoading ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل الحركات..."}
             </div>

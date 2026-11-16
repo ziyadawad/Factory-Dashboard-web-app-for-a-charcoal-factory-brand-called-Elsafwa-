@@ -205,6 +205,32 @@ export interface AccountDetails {
   advances: AdvanceSummary; // سلف الشهر (monthStart → to) - this month's advances
 }
 
+// ===== عمليات مكررة (فحص قراية بس، آخر 60 يوم) - suspected duplicates (read-only check, last 60 days) =====
+export interface SuspectedDuplicateDoc {
+  name: string;
+  url: string; // افتح في ERPNext
+  owner: string; // الاسم الكامل - full name
+  creation: string; // "2026-11-15 14:30"
+  docstatus: number; // 0 مسودة، 1 معتمد - draft / submitted
+}
+export interface SuspectedDuplicate {
+  id: string;
+  doctype: string;
+  label: string; // "سند دفع" ...
+  rule: string; // القاعدة اللي اتطابقت - the matched rule
+  date: string; // "2026-11-15"
+  amount: number | null; // null = مش بيظهر (تسويات المرتبات سرية) أو مالوش مبلغ - hidden or none
+  summary: string; // الطرف / العميل / الصنف... - who / what
+  docs: SuspectedDuplicateDoc[]; // الأقدم الأول - oldest first
+}
+export interface DuplicatesReport {
+  scope: "money" | "stock";
+  from: string;
+  today: string;
+  items: SuspectedDuplicate[]; // الأحدث الأول - newest first
+  skipped: string[]; // DocTypes مش متاحة (صلاحيات) - doctypes not readable
+}
+
 // عملية صدقة في لوحة التفاصيل - one charity operation in the details panel
 export interface CharityDetailOp {
   id: string;
