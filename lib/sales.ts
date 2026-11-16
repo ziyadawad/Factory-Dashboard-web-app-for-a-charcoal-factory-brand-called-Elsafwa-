@@ -2,6 +2,7 @@
 // قراية بس من ERPNext (Sales Invoice المعتمدة) - read-only from ERPNext (submitted Sales Invoices)
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpDocUrl, erpPost, erpToday } from "./erp";
+import { fullNames } from "./account-details";
 import {
   DebtCustomer,
   DebtInvoice,
@@ -539,6 +540,8 @@ type DetailRow = {
   grand_total: number;
   item_code: string | null;
   stock_qty: number | null;
+  owner: string | null;
+  creation: string | null;
 };
 
 // سطور فواتير عربية المندوب من أول الشهر لحد النهارده (طلب واحد) - the van's invoice lines this month, one request
@@ -559,6 +562,8 @@ async function loadDetailRows(warehouse: string, today: string): Promise<DetailR
       "posting_date",
       "is_return",
       "grand_total",
+      "owner",
+      "creation",
       `${child}.item_code as item_code`,
       `${child}.stock_qty as stock_qty`,
     ],
@@ -569,7 +574,23 @@ async function loadDetailRows(warehouse: string, today: string): Promise<DetailR
 // الأعمدة: الأصناف العادي (بالباكت) وبعدها الكراتين (بعددها) زي صفين الكارت - columns: regular products, then cartons, like the card's two chip rows
 export const detailColumns = (): string[] => [...sales.products.map((p) => p.label), ...sales.cartons.map((c) => c.label)];
 
-function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today: string, debt: RepDebt | null): RepDetails {
+function detailsFrom(
+  rep: (typeof sales.reps)[number],
+  rows: DetailRow[],
+  today: string,
+  debt: RepDebt | null,
+  names: Map<string, string>
+): RepDetails {
+  // اتسجلت إمتى ومين سجّلها (من غير أي تغيير في الأرقام) - when and by whom (numbers unchanged)
+  const dayDiff = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+  const entered = (row: DetailRow, date: string) => {
+    const creation = String(row.creation ?? "").slice(0, 16);
+    return {
+      creation,
+      owner: names.get(row.owner ?? "") ?? row.owner ?? "",
+      lateDays: creation ? Math.max(0, dayDiff(date, creation.slice(0, 10))) : 0,
+    };
+  };
   const { month } = monthBounds(today);
   const products = productOfItem();
   const cartonIndex = cartonOfItem();
@@ -589,6 +610,7 @@ function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today:
         columns: blank(),
         packets: 0,
         amount: money(row.grand_total ?? 0),
+        ...entered(row, date),
         date,
         touches: false,
       };
@@ -620,6 +642,9 @@ function detailsFrom(rep: (typeof sales.reps)[number], rows: DetailRow[], today:
       columns: invoice.columns,
       packets: invoice.packets,
       amount: invoice.amount,
+      creation: invoice.creation,
+      owner: invoice.owner,
+      lateDays: invoice.lateDays,
     });
     invoice.columns.forEach((value, i) => (day!.columns[i] += value));
     day.packets += invoice.packets;
@@ -672,8 +697,10 @@ export async function repDetails(warehouseOrName: string): Promise<RepDetails | 
   let pending = detailInFlight.get(key);
   if (!pending) {
     pending = Promise.all([loadDetailRows(rep.warehouse, today), repDebtsOrNull(today)])
-      .then(([rows, debts]) => {
-        const value = detailsFrom(rep, rows, today, debts?.get(rep.warehouse) ?? null);
+      .then(async ([rows, debts]) => {
+        // الأسامي الكاملة لمين سجّل الفواتير - full names of whoever entered the invoices
+        const names = await fullNames(Array.from(new Set(rows.map((r) => r.owner ?? "").filter(Boolean))));
+        const value = detailsFrom(rep, rows, today, debts?.get(rep.warehouse) ?? null, names);
         detailCache.set(key, { at: Date.now(), value });
         return value;
       })

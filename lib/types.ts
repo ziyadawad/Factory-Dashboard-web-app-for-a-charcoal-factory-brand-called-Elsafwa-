@@ -426,6 +426,9 @@ export interface RepInvoice {
   columns: number[];
   packets: number;
   amount: number;
+  creation: string; // وقت التسجيل "2026-11-15 09:42" - when it was entered
+  owner: string; // سجّلها (الاسم الكامل) - entered by (full name)
+  lateDays: number; // اتسجلت بعد تاريخها بكام يوم - days between posting_date and creation
 }
 
 export interface RepDay {

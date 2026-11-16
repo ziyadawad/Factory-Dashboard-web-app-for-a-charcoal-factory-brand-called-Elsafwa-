@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { useIdleClose } from "@/lib/useIdleClose";
 import useSWR from "swr";
 import { ChevronDown, ChevronLeft, ExternalLink, Truck, X } from "lucide-react";
-import { RepDebt, RepDetails, RepSales } from "@/lib/types";
+import { RepDebt, RepDetails, RepInvoice, RepSales } from "@/lib/types";
+import ActivityDetailsPanel from "./ActivityDetailsPanel";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { daysAgoText, monthName, Num, Percent } from "./SalesCommon";
 
@@ -271,9 +272,22 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
   });
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [tab, setTab] = useState<"days" | "debt">("days");
+  // الفاتورة المفتوحة (نفس لوحة تفاصيل "اللي بيحصل دلوقتي") - the open invoice (same panel as the activity feed)
+  const [invoice, setInvoice] = useState<RepInvoice | null>(null);
+  const invoiceOpen = useRef(false);
+  invoiceOpen.current = invoice !== null;
+  const openInvoice = useCallback((inv: RepInvoice) => setInvoice(inv), []);
+  const closeInvoice = useCallback(() => setInvoice(null), []);
 
   // Esc يقفل، وأي لمسة تعيد عداد الدقيقة - Esc closes; any touch restarts the 60 s idle timer
-  useIdleClose(onClose, IDLE_CLOSE_MS);
+  // لو فاتورة مفتوحة: Esc / الدقيقة بيقفلوا الفاتورة بس - with an invoice open, Esc / idle close only the invoice
+  useIdleClose(() => {
+    if (invoiceOpen.current) {
+      setInvoice(null);
+      return false;
+    }
+    onClose();
+  }, IDLE_CLOSE_MS);
 
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
   const reached = rep.target > 0 && rep.monthPackets >= rep.target;
@@ -372,6 +386,8 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
                   <th className={`${th} border-b border-cardBorder text-gray-200`}>إجمالي الباكت</th>
                   <th className={`${th} border-b border-cardBorder`}>إجمالي المبلغ (ج.م)</th>
                   <th className={`${th} border-b border-cardBorder`}>عدد العملاء</th>
+                  <th className={`${th} border-b border-cardBorder`}>اتسجلت</th>
+                  <th className={`${th} border-b border-cardBorder text-start`}>سجّلها</th>
                 </tr>
               </thead>
               <tbody>
@@ -395,21 +411,11 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
                         <Cell value={day.packets} strong />
                         <Cell value={day.amount} money />
                         <Cell value={day.customers} />
+                        <td colSpan={2} className="px-2 border-b border-cardBorder/60 text-[13px] leading-[1.5] text-gray-400 max-w-0">
+                          <DayEntered invoices={day.invoices} date={day.date} />
+                        </td>
                       </tr>
-                      {open &&
-                        day.invoices.map((invoice) => (
-                          <tr key={invoice.id} className="bg-background/60 text-[15px] leading-[1.9]">
-                            <td className="ps-10 pe-2 border-b border-cardBorder/40 text-gray-300 max-w-[260px] truncate" title={invoice.id}>
-                              {toEnglishDigits(invoice.customer)}
-                            </td>
-                            {invoice.columns.map((value, i) => (
-                              <Cell key={i} value={value} />
-                            ))}
-                            <Cell value={invoice.packets} strong />
-                            <Cell value={invoice.amount} money />
-                            <td className="px-2 text-center text-statusRed text-sm">{invoice.isReturn ? "مرتجع" : ""}</td>
-                          </tr>
-                        ))}
+                      {open && <DayCustomers invoices={day.invoices} onOpenInvoice={openInvoice} />}
                     </Fragment>
                   );
                 })}
@@ -432,12 +438,156 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
                   <td className="px-2 text-center border-t-2 border-brandOrange/50">
                     <Num value={data.total.customers} className="text-gray-300" />
                   </td>
+                  <td colSpan={2} className="border-t-2 border-brandOrange/50" />
                 </tr>
               </tfoot>
             </table>
           )}
         </div>
+        {invoice && (
+          <ActivityDetailsPanel
+            event={{
+              id: `sale:${invoice.id}`,
+              kind: invoice.isReturn ? "return" : "sale",
+              at: `${invoice.creation}:00`,
+              title: `${invoice.isReturn ? "مرتجع مبيعات" : "فاتورة مبيعات"} — ${toEnglishDigits(invoice.customer)}`,
+              details: `${toEnglishDigits(rep.name)} · ${toEnglishDigits(rep.van)}`,
+              amount: invoice.amount,
+              extra: null,
+              badge: null,
+              doctype: "Sales Invoice",
+              docname: invoice.id,
+            }}
+            icon={invoice.isReturn ? "↩️" : "🧾"}
+            color={invoice.isReturn ? "#F59E0B" : "#2F80ED"}
+            onClose={closeInvoice}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+// "2026-11-15 09:42" -> "15/11 09:42"
+function enteredAt(creation: string): string {
+  const [date, time = ""] = creation.split(" ");
+  const [, m, d] = date.split("-").map(Number);
+  return d && m ? `${d}/${m} ${time}` : creation;
+}
+
+// اتسجلت (والتأخير) - entered at (and the late badge)
+function EnteredCell({ invoice }: { invoice: RepInvoice }) {
+  return (
+    <td className="px-2 text-center whitespace-nowrap text-gray-300 text-[14px]">
+      <span dir="ltr" className="font-numbers tabular-nums">{enteredAt(invoice.creation)}</span>
+      {/* الشاشات الأصغر من 1600: الشارة تحت الوقت عشان الجدول ميعديش عرض اللوحة - below 1600 px the badge sits under the time */}
+      {invoice.lateDays > 1 && (
+        <span className="block w-fit mx-auto leading-[1.6] min-[1600px]:inline min-[1600px]:ms-1.5 rounded-full bg-brandOrange/15 text-brandOrange font-bold px-1.5 text-[12px]">
+          متأخر {formatNumber(invoice.lateDays)} يوم
+        </span>
+      )}
+    </td>
+  );
+}
+
+// سجّلها (الاسم بيتقص وكامل في التلميح) - entered by (truncated, full in the tooltip)
+function OwnerCell({ names }: { names: string[] }) {
+  const text = names.join("، ") || "—";
+  return (
+    <td className="px-2 text-gray-300 text-[14px] max-w-[11vw]">
+      <span className="block truncate" title={text}>
+        {text}
+      </span>
+    </td>
+  );
+}
+
+const distinct = (list: string[]) => Array.from(new Set(list.filter(Boolean)));
+
+// سطر صغير في صف اليوم: مدى أوقات التسجيل واللي سجّلوا - the day row's line: range of entry times and who entered
+function DayEntered({ invoices, date }: { invoices: RepInvoice[]; date: string }) {
+  const times = invoices.map((i) => i.creation).filter(Boolean).sort();
+  if (times.length === 0) return null;
+  const show = (c: string) => (c.slice(0, 10) === date ? c.slice(11, 16) : enteredAt(c));
+  const first = show(times[0]);
+  const last = show(times[times.length - 1]);
+  const who = distinct(invoices.map((i) => i.owner)).join("، ");
+  const text = `اتسجلت: ${first === last ? first : `من ${first} لـ ${last}`} · سجّلها: ${who || "—"}`;
+  return (
+    // بيلف على سطرين لو العرض مش كفاية (من غير ما يوسّع الجدول) - wraps instead of widening the table
+    <span className="block whitespace-normal break-words" title={text}>
+      اتسجلت: {first !== last && "من "}
+      <span dir="ltr" className="font-numbers text-gray-300 whitespace-nowrap">{first}</span>
+      {first !== last && (
+        <>
+          {" "}
+          لـ <span dir="ltr" className="font-numbers text-gray-300 whitespace-nowrap">{last}</span>
+        </>
+      )}
+      {" · "}سجّلها: <span className="text-gray-300">{who || "—"}</span>
+    </span>
+  );
+}
+
+// عملاء اليوم: صف لكل عميل (إجمالي العميل)، ولو ليه أكتر من فاتورة صف فرعي لكل فاتورة؛ الضغط على الفاتورة يفتح تفاصيلها
+// The day's customers: one row per customer (its total); with more than one invoice a sub-row per invoice; clicking opens it
+function DayCustomers({ invoices, onOpenInvoice }: { invoices: RepInvoice[]; onOpenInvoice: (invoice: RepInvoice) => void }) {
+  const groups = new Map<string, RepInvoice[]>();
+  for (const inv of invoices) groups.set(inv.customer, [...(groups.get(inv.customer) ?? []), inv]);
+  const row = "bg-background/60 text-[15px] leading-[1.9]";
+  const nameTd = "pe-2 border-b border-cardBorder/40 max-w-[260px] truncate";
+  return (
+    <>
+      {Array.from(groups.entries()).map(([customer, list]) => {
+        if (list.length === 1) {
+          const inv = list[0];
+          return (
+            <tr key={inv.id} onClick={() => onOpenInvoice(inv)} className={`${row} cursor-pointer hover:bg-white/5`}>
+              <td className={`ps-10 ${nameTd} text-gray-300`} title={`${toEnglishDigits(customer)} — ${inv.id}`}>
+                {toEnglishDigits(customer)}
+              </td>
+              {inv.columns.map((value, i) => (
+                <Cell key={i} value={value} />
+              ))}
+              <Cell value={inv.packets} strong />
+              <Cell value={inv.amount} money />
+              <td className="px-2 text-center text-statusRed text-sm">{inv.isReturn ? "مرتجع" : ""}</td>
+              <EnteredCell invoice={inv} />
+              <OwnerCell names={[inv.owner]} />
+            </tr>
+          );
+        }
+        const sum = (pick: (i: RepInvoice) => number) => list.reduce((s, i) => s + pick(i), 0);
+        const width = list[0].columns.length;
+        return (
+          <Fragment key={customer}>
+            <tr className={row}>
+              <td className={`ps-10 ${nameTd} text-gray-200 font-semibold`} title={toEnglishDigits(customer)}>
+                {toEnglishDigits(customer)} <span className="text-gray-500 font-normal text-[13px]">({formatNumber(list.length)} فواتير)</span>
+              </td>
+              {Array.from({ length: width }, (_, i) => (
+                <Cell key={i} value={Math.round(sum((inv) => inv.columns[i]) * 100) / 100} />
+              ))}
+              <Cell value={Math.round(sum((inv) => inv.packets) * 100) / 100} strong />
+              <Cell value={sum((inv) => inv.amount)} money />
+              <td className="px-2" />
+              <td className="px-2" />
+              <OwnerCell names={distinct(list.map((i) => i.owner))} />
+            </tr>
+            {list.map((inv) => (
+              <tr key={inv.id} onClick={() => onOpenInvoice(inv)} className="bg-background/40 text-[14px] leading-[1.8] cursor-pointer hover:bg-white/5 text-gray-400">
+                <td className={`ps-14 ${nameTd}`} title={inv.id}>
+                  ↳ <span dir="ltr" className="font-numbers">{inv.id}</span>
+                </td>
+                <td colSpan={width + 2} className="border-b border-cardBorder/40" />
+                <td className="px-2 text-center text-statusRed text-sm border-b border-cardBorder/40">{inv.isReturn ? "مرتجع" : ""}</td>
+                <EnteredCell invoice={inv} />
+                <OwnerCell names={[inv.owner]} />
+              </tr>
+            ))}
+          </Fragment>
+        );
+      })}
+    </>
   );
 }
