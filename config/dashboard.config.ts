@@ -832,19 +832,59 @@ export const dashboardConfig = {
       kpiHeight: 132, // ارتفاع صف الأرقام اللي فوق - top KPI row height (px)
       kpiTonsFontSize: 72, // رقم "إنتاج النهارده" (الأكبر) - the "إنتاج النهارده" number (biggest)
       kpiFontSize: 46, // باقي أرقام الصف اللي فوق - the other KPI numbers
-      lastWeightFontSize: 52, // الوزن في كارت "آخر وزنة" - the weight in the "آخر وزنة" card
       kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
-      exitRowHeight: 36, // ارتفاع كل سطر في قايمة طرحات النهارده - today's exits row height (px)
-      exitFontSize: 17, // حجم الكلام في قايمة الطرحات - exits list font size
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس المقاسات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
         kpiHeight: 96,
         kpiTonsFontSize: 50,
         kpiFontSize: 32,
-        lastWeightFontSize: 36,
         kilnTonsFontSize: 20,
-        exitRowHeight: 27,
-        exitFontSize: 13,
+      },
+    },
+
+    // صفحة الإنتاج — العمود الشمال بس ("آخر وزنة" + "طرحات النهارده")، كله بالبكسل
+    // The production page — left column only ("آخر وزنة" + "طرحات النهارده"), all in px
+    // لو العمود ضيق أوي (أضيق من 340 بكسل) الأرقام بتصغر خطوة واحدة بس عشان متطلعش برّه الكارت
+    // If the column gets very narrow (under 340 px) sizes step down once so nothing overflows
+    production: {
+      lastCardHeight: 220, // ارتفاع كارت "آخر وزنة"، والقايمة بتاخد باقي العمود - "آخر وزنة" card height; the list takes the rest
+      lastTitleFontSize: 20, // عنوان "آخر وزنة" - the card title
+      lastIconSize: 30, // أيقونة الميزان - the scale icon
+      lastWeightFontSize: 56, // رقم الوزن الكبير في النص - the big weight in the center
+      lastNoWeightFontSize: 32, // "بدون وزن" مكان الرقم (رمادي) - "بدون وزن" instead of the number (gray)
+      lastChipFontSize: 22, // الفرن والنوع تحت الوزن - kiln and type under the weight
+      lastTimeFontSize: 20, // ساعة الطرحة - the exit time
+      lastAgoFontSize: 18, // "من X دقيقة" - how long ago
+      exitRowHeight: 64, // ارتفاع سطر الطرحة العادي - a normal exit row height
+      exitRowMin: 44, // أقل ارتفاع لما الطرحات كتير (وبعدها "+N طرحة تانية") - minimum when there are many exits
+      exitRowMax: 90, // أكبر ارتفاع لما الطرحات قليلة - maximum when there are only a few exits
+      exitTimeFontSize: 22, // الساعة - the time
+      exitKilnFontSize: 20, // اسم الفرن - the kiln chip
+      exitTypeFontSize: 22, // النوع - the charcoal type
+      exitDotSize: 14, // النقطة الملونة جنب النوع - the colored dot next to the type
+      exitWeightFontSize: 22, // الوزن - the weight
+      exitNoWeightFontSize: 16, // "بدون وزن" في القايمة (رمادي) - "بدون وزن" in the list (gray)
+      exitMoreFontSize: 16, // سطر "+N طرحة تانية" - the "+N طرحة تانية" line
+      // شاشة أضيق من 1600 (لابتوب 1366×768): نفس الحاجات أصغر - screens under 1600 wide (1366x768 laptop): smaller
+      compact: {
+        lastCardHeight: 170,
+        lastTitleFontSize: 16,
+        lastIconSize: 24,
+        lastWeightFontSize: 44,
+        lastNoWeightFontSize: 26,
+        lastChipFontSize: 17,
+        lastTimeFontSize: 16,
+        lastAgoFontSize: 14,
+        exitRowHeight: 50,
+        exitRowMin: 38,
+        exitRowMax: 72,
+        exitTimeFontSize: 18,
+        exitKilnFontSize: 15,
+        exitTypeFontSize: 17,
+        exitDotSize: 12,
+        exitWeightFontSize: 18,
+        exitNoWeightFontSize: 13,
+        exitMoreFontSize: 13,
       },
     },
 

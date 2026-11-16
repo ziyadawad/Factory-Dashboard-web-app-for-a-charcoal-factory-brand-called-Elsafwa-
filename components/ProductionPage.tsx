@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Clock, Factory, Flame, Scale } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { ProductionData, ProductionExit } from "@/lib/types";
@@ -134,8 +134,12 @@ function KpiRow({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
   );
 }
 
+// مقاس بالبكسل من الكونفج (بيصغر بس لو العمود ضيق، من globals.css) - a px size from config (steps down only in a narrow column)
+const fs = (px: number) => ({ "--fs": `${px}px` }) as CSSProperties;
+
 // آخر وزنة: بتنور شوية لما طرحة جديدة توصل - the last weighing; glows briefly when a new exit arrives
-function LastExitCard({ data, last, sizes }: { data: ProductionData; last: ProductionExit | null; sizes: Sizes }) {
+// فوق: الميزان والعنوان، في النص: الوزن الكبير، تحت: الفرن · النوع · الساعة - top: icon + title, center: weight, bottom: kiln · type · time
+function LastExitCard({ data, last, sizes }: { data: ProductionData; last: ProductionExit | null; sizes: LeftSizes }) {
   const minutes = useMinutesSince(last);
   const [glow, setGlow] = useState(false);
   const seen = useRef<string | null | undefined>(undefined);
@@ -154,47 +158,66 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
   const color = last ? typeColor(data, last.type) : "#6B7280";
   return (
     <div
-      className={`h-full rounded-2xl border bg-card px-4 flex items-center gap-4 min-w-0 overflow-hidden transition-[box-shadow,border-color] duration-700 ${
+      className={`shrink-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden transition-[box-shadow,border-color] duration-700 ${
         glow ? "border-brandOrange shadow-[0_0_28px_6px_rgba(255,122,0,0.55)] animate-new-exit" : "border-cardBorder"
       }`}
+      style={{ height: sizes.lastCardHeight }}
     >
-      <Scale className="text-brandOrange shrink-0" size={sizes.kpiFontSize * 0.8} />
+      {/* فوق: الميزان والعنوان و"من X دقيقة" - top: icon, title, how long ago */}
+      <div className="shrink-0 flex items-center gap-2 whitespace-nowrap min-w-0">
+        <Scale className="text-brandOrange shrink-0" size={sizes.lastIconSize} />
+        <span className="prod-fs text-gray-300 font-bold" style={fs(sizes.lastTitleFontSize)}>
+          آخر وزنة
+        </span>
+        {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[14px] font-extrabold">جديدة</span>}
+        {last && (
+          <span className="prod-fs ms-auto text-gray-300 font-semibold truncate" style={fs(sizes.lastAgoFontSize)}>
+            {agoText(minutes)}
+          </span>
+        )}
+      </div>
       {last ? (
-        <div className="min-w-0 flex-1 flex flex-col justify-center">
-          <p className="flex items-center gap-2 text-gray-400 font-semibold text-[14px] min-[1600px]:text-[17px] whitespace-nowrap">
-            آخر وزنة
-            {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[0.8em] font-extrabold">جديدة</span>}
-            <span className="ms-auto text-gray-300">{agoText(minutes)}</span>
-          </p>
-          <p className="leading-[1.15] whitespace-nowrap">
+        <>
+          {/* الوزن الكبير في النص - the big weight in the center */}
+          <div className="flex-1 min-h-0 flex items-center justify-center whitespace-nowrap">
             {last.kg !== null ? (
-              <>
-                <span className="font-extrabold text-white" style={{ fontSize: sizes.lastWeightFontSize }}>
+              <p className="leading-none">
+                <span className="prod-fs font-extrabold text-white" style={fs(sizes.lastWeightFontSize)}>
                   {num(formatKg(last.kg))}
                 </span>
-                <span className="text-gray-400 font-bold"> كجم</span>
-              </>
+                <span className="prod-fs text-gray-400 font-bold" style={fs(sizes.lastChipFontSize)}>
+                  {" "}
+                  كجم
+                </span>
+              </p>
             ) : (
-              <span className="font-extrabold text-gray-500" style={{ fontSize: sizes.lastWeightFontSize * 0.6 }}>
+              <span className="prod-fs font-extrabold text-gray-500" style={fs(sizes.lastNoWeightFontSize)}>
                 بدون وزن
               </span>
             )}
-          </p>
-          <p className="flex items-center gap-2 min-w-0 whitespace-nowrap text-[14px] min-[1600px]:text-[17px] font-semibold">
-            <span className="rounded-md bg-white/10 text-white px-2">{toEnglishDigits(last.kiln || "—")}</span>
-            <span className="flex items-center gap-1.5 truncate" style={{ color }}>
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              {last.type || "غير محدد"}
+          </div>
+          {/* الفرن · النوع · الساعة في سطر واحد - kiln · type · time in one row */}
+          <div className="shrink-0 flex items-center justify-center gap-3 min-w-0 whitespace-nowrap font-bold">
+            <span className="prod-fs rounded-lg bg-white/10 text-white px-2.5 leading-[1.5]" style={fs(sizes.lastChipFontSize)}>
+              {toEnglishDigits(last.kiln || "—")}
             </span>
-            <span className="ms-auto text-gray-300 inline-flex items-center gap-1">
-              <Clock size={15} />
+            <span className="prod-fs flex items-center gap-1.5 min-w-0" style={{ ...fs(sizes.lastChipFontSize), color }}>
+              <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
+              <span className="truncate">{last.type || "غير محدد"}</span>
+            </span>
+            <span className="prod-fs text-gray-200 inline-flex items-center gap-1" style={fs(sizes.lastTimeFontSize)}>
+              <Clock size={sizes.lastTimeFontSize * 0.85} />
               {num(last.time)}
-              {last.date !== data.today && <span className="text-gray-500"> ({num(shortDate(last.date))})</span>}
+              {last.date !== data.today && <span className="text-gray-500 font-semibold"> ({num(shortDate(last.date))})</span>}
             </span>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="prod-fs text-gray-500 font-bold" style={fs(sizes.lastChipFontSize)}>
+            لسه مفيش طرحات
           </p>
         </div>
-      ) : (
-        <p className="text-gray-500 text-lg">لسه مفيش طرحات</p>
       )}
     </div>
   );
@@ -264,57 +287,86 @@ function TypeRow({ type, max, byTons, onOpen, pick }: { type: TypeSummary; max: 
   );
 }
 
-// قايمة طرحات النهارده: اللي ياخد مكانه، والباقي "و X طرحة أخرى" - today's exits: as many as fit, then "و X طرحة أخرى"
-function ExitList({ data, exits, sizes }: { data: ProductionData; exits: ProductionExit[]; sizes: Sizes }) {
-  const gap = 4;
+// قايمة طرحات النهارده: السطور بتملا الكارت (بتكبر لحد exitRowMax لو قليلة، وبتصغر لحد exitRowMin لو كتير)
+// من غير scroll ولا قص: لو أكتر من اللي ياخد مكانه، الأحدث اللي ياخدوا مكانهم وتحتهم "+N طرحة تانية"
+// Today's exits: rows fill the card (grow up to exitRowMax with few exits, shrink to exitRowMin with many);
+// never scroll, never cut: when more than fit, the newest that fit and a "+N طرحة تانية" line under them
+function ExitList({ data, exits, sizes }: { data: ProductionData; exits: ProductionExit[]; sizes: LeftSizes }) {
+  const gap = 6;
+  const moreHeight = Math.round(sizes.exitMoreFontSize * 1.9);
   const ref = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState(0);
-  const row = sizes.exitRowHeight;
+  const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => setFit(Math.max(0, Math.floor((el.clientHeight + gap) / (row + gap))));
+    const measure = () => setHeight(el.clientHeight);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [row]);
-  const shown = exits.length <= fit ? exits.length : Math.max(0, fit - 1);
-  const hidden = exits.length - shown;
+  }, []);
+
+  const n = exits.length;
+  let shown = n;
+  let row = sizes.exitRowHeight;
+  if (height > 0 && n > 0) {
+    const fitsAll = n * sizes.exitRowMin + (n - 1) * gap <= height;
+    if (fitsAll) {
+      row = Math.min(sizes.exitRowMax, Math.floor((height - (n - 1) * gap) / n));
+    } else {
+      // اللي ياخد مكانه بأقل ارتفاع، وسطر "+N" تحت - as many as fit at the minimum height, plus the "+N" line
+      shown = Math.max(0, Math.floor((height - moreHeight + 0) / (sizes.exitRowMin + gap)));
+      row = shown > 0 ? Math.min(sizes.exitRowMax, Math.floor((height - moreHeight - shown * gap) / shown)) : sizes.exitRowMin;
+    }
+  }
+  const hidden = n - shown;
   return (
     <div ref={ref} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ gap }}>
-      {exits.length === 0 && (
+      {n === 0 && (
         <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-cardBorder">
-          <p className="text-gray-500">لم تخرج طرحات النهارده</p>
+          <p className="prod-fs text-gray-500 font-semibold" style={fs(sizes.exitTypeFontSize)}>
+            لم تخرج طرحات النهارده
+          </p>
         </div>
       )}
-      {exits.slice(0, shown).map((exit, index) => {
-        const color = typeColor(data, exit.type);
-        return (
-          <div
-            key={exit.id}
-            className={`shrink-0 grid items-center gap-2 px-2 rounded-lg border ${index === 0 ? "border-brandOrange/50 bg-brandOrange/10" : "border-cardBorder bg-background/60"}`}
-            style={{ height: row, fontSize: sizes.exitFontSize, gridTemplateColumns: "3.2em auto minmax(0,1fr) auto" }}
-          >
-            <span className="text-gray-300 font-semibold">{num(exit.time)}</span>
-            <span className="px-2 rounded-md bg-white/10 text-white font-semibold whitespace-nowrap leading-[1.6]">{toEnglishDigits(exit.kiln || "—")}</span>
-            <span className="flex items-center gap-1.5 min-w-0 font-semibold" style={{ color }}>
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="truncate">{exit.type || "غير محدد"}</span>
-            </span>
-            {exit.kg !== null ? (
-              <span className="text-white font-bold whitespace-nowrap">
-                {num(formatKg(exit.kg))} <span className="text-gray-500 font-normal text-[0.85em]">كجم</span>
+      {height > 0 &&
+        exits.slice(0, shown).map((exit, index) => {
+          const color = typeColor(data, exit.type);
+          return (
+            <div
+              key={exit.id}
+              className={`shrink-0 grid items-center gap-2.5 px-3 rounded-xl border ${
+                index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_16px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
+              }`}
+              style={{ height: row, gridTemplateColumns: "auto auto minmax(0,1fr) auto" }}
+            >
+              <span className="prod-fs text-gray-100 font-bold tabular-nums" style={fs(sizes.exitTimeFontSize)}>
+                {num(exit.time)}
               </span>
-            ) : (
-              <span className="text-gray-500 whitespace-nowrap text-[0.9em]">بدون وزن</span>
-            )}
-          </div>
-        );
-      })}
-      {hidden > 0 && (
-        <div className="shrink-0 flex items-center justify-center text-gray-400 font-semibold" style={{ height: row, fontSize: sizes.exitFontSize }}>
-          و {formatNumber(hidden)} طرحة أخرى
+              <span className="prod-fs px-2 rounded-lg bg-white/10 text-white font-bold whitespace-nowrap leading-[1.5]" style={fs(sizes.exitKilnFontSize)}>
+                {toEnglishDigits(exit.kiln || "—")}
+              </span>
+              <span className="prod-fs flex items-center gap-2 min-w-0 font-bold" style={{ ...fs(sizes.exitTypeFontSize), color }}>
+                <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
+                <span className="truncate" title={exit.type || "غير محدد"}>
+                  {exit.type || "غير محدد"}
+                </span>
+              </span>
+              {exit.kg !== null ? (
+                <span className="prod-fs text-white font-bold whitespace-nowrap" style={fs(sizes.exitWeightFontSize)}>
+                  {num(formatKg(exit.kg))} <span className="text-gray-500 font-semibold text-[0.7em]">كجم</span>
+                </span>
+              ) : (
+                <span className="prod-fs text-gray-500 font-semibold whitespace-nowrap" style={fs(sizes.exitNoWeightFontSize)}>
+                  بدون وزن
+                </span>
+              )}
+            </div>
+          );
+        })}
+      {height > 0 && hidden > 0 && (
+        <div className="prod-fs shrink-0 flex items-center justify-center text-gray-400 font-semibold" style={{ ...fs(sizes.exitMoreFontSize), height: moreHeight }}>
+          {num(`+${formatNumber(hidden)}`)} طرحة تانية
         </div>
       )}
     </div>
@@ -386,11 +438,13 @@ function MonthTable({ title, rows, onOpen }: { title: string; rows: { key: strin
 }
 
 type Sizes = typeof dashboardConfig.sizes.productionPage.compact;
+type LeftSizes = typeof dashboardConfig.sizes.production.compact;
 
 export default function ProductionPage({ data, onOpen }: { data: ProductionData | null; onOpen: (target: ProductionTarget) => void }) {
   const compact = useCompact();
   const page = dashboardConfig.sizes.productionPage;
   const sizes: Sizes = compact ? page.compact : page;
+  const left: LeftSizes = compact ? dashboardConfig.sizes.production.compact : dashboardConfig.sizes.production;
 
   if (!data) {
     return (
@@ -418,8 +472,17 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
       <div className="col-span-2 min-h-0">
         <KpiRow s={s} sizes={sizes} />
       </div>
-      <div className="min-h-0 min-w-0">
-        <LastExitCard data={data} last={s.last} sizes={sizes} />
+      {/* العمود الشمال كله: "آخر وزنة" فوق والقايمة باقي الطول - the whole left column: "آخر وزنة" on top, the list fills the rest */}
+      <div className="prod-left min-h-0 min-w-0 flex flex-col" style={{ gridColumn: 3, gridRow: "1 / span 3", gap }}>
+        <LastExitCard data={data} last={s.last} sizes={left} />
+        <Card
+          title="طرحات النهارده"
+          icon={<Factory className="text-brandOrange" size={compact ? 18 : 22} />}
+          extra={<span className="text-gray-400 whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">{num(formatNumber(s.today.count))} طرحة</span>}
+          className="flex-1"
+        >
+          <ExitList data={data} exits={s.todayExits} sizes={left} />
+        </Card>
       </div>
 
       <Card
@@ -449,14 +512,6 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
         <HourlyChart s={s} />
       </Card>
 
-      <Card
-        title="طرحات النهارده"
-        icon={<Factory className="text-brandOrange" size={compact ? 18 : 22} />}
-        extra={<span className="text-gray-400 whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">{num(formatNumber(s.today.count))} طرحة</span>}
-        className="row-span-2"
-      >
-        <ExitList data={data} exits={s.todayExits} sizes={sizes} />
-      </Card>
 
       <Card title="الأنواع النهارده" extra={<span className="text-gray-500 text-[13px] min-[1600px]:text-[15px] whitespace-nowrap">اضغط على نوع للتفاصيل</span>}>
         <div className="flex-1 min-h-0 flex flex-col justify-around text-[14px] min-[1600px]:text-[18px]">

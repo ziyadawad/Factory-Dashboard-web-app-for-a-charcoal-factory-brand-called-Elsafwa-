@@ -273,3 +273,31 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     transform: none;
   }
 }
+
+/* صفحة الإنتاج — العمود الشمال: المقاسات بالبكسل من الكونفج (--fs)، وبتصغر خطوة بس لو العمود نفسه ضيق
+   Production page left column: sizes are fixed px from config (--fs); they step down only when the column itself is narrow */
+.prod-left {
+  container-type: inline-size;
+  container-name: prodleft;
+}
+.prod-fs {
+  font-size: var(--fs);
+}
+.prod-dot {
+  width: var(--dot);
+  height: var(--dot);
+}
+@container prodleft (max-width: 340px) {
+  .prod-fs {
+    font-size: calc(var(--fs) * 0.86);
+  }
+  .prod-dot {
+    width: calc(var(--dot) * 0.86);
+    height: calc(var(--dot) * 0.86);
+  }
+}
+@container prodleft (max-width: 280px) {
+  .prod-fs {
+    font-size: calc(var(--fs) * 0.74);
+  }
+}
