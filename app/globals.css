@@ -368,3 +368,28 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     display: none;
   }
 }
+
+/* رسمة الفلوس في كارت رصيد الخزنة: طفو بالراحة ولمعة دهب كل ~6 ثواني — transform / opacity بس
+   The money drawing in the treasury card: a slow float and a gold shine every ~6 s — transform / opacity only */
+@keyframes money-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.money-float {
+  animation: money-float 4s ease-in-out infinite;
+}
+@keyframes money-shine {
+  0%, 62% { transform: translateX(0) skewX(-20deg); opacity: 0; }
+  66% { opacity: 0.75; }
+  80% { transform: translateX(120px) skewX(-20deg); opacity: 0; }
+  100% { transform: translateX(120px) skewX(-20deg); opacity: 0; }
+}
+.money-shine {
+  animation: money-shine 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .money-float,
+  .money-shine {
+    animation: none !important;
+  }
+}

@@ -6,6 +6,7 @@ import { useCountUp } from "@/lib/useCountUp";
 import { formatNumber } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
+import MoneyIllustration from "./MoneyIllustration";
 
 // حجم بالـ cqi على قد عدد الحروف: الرقم الأطول بيصغر عشان عمره ما يعدّي العرض
 // cqi size adjusted for the text length: a longer number gets smaller so it never gets wider than its box
@@ -78,6 +79,12 @@ export default function TreasurySection({ data, offline = false, onOpen }: Treas
             </span>{" "}
             ج.م
           </span>
+        </div>
+
+        {/* رسمة الفلوس في المساحة الفاضية: عرضها على قد الكارت (لحد 140 بكسل)، ولو الطول مش كفاية بتصغر هي بس
+            The money drawing in the empty space: width follows the card (up to 140 px); if height is short only it shrinks */}
+        <div className="w-full flex justify-center min-h-0" style={{ flex: "0 1 min(104px, 46cqi)" }}>
+          <MoneyIllustration red={data.outgoingToday > data.incomingToday} className="h-full max-w-full" style={{ width: "min(140px, 60cqi)" }} />
         </div>
 
         {/* وارد اليوم فوق ومنصرف اليوم تحته، كل واحد بعرض الكارت - incoming on top, outgoing under it, full width */}
