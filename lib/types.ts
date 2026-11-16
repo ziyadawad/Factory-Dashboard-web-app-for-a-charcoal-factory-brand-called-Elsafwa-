@@ -155,6 +155,11 @@ export interface AccountMove {
   voucherNo: string;
   owner: string; // اسم اللي سجّلها - full name of who entered it
   out: MoveOut | null; // المنصرف: لمين وليه - an outgoing move: for whom and why
+  // سلفة / قرض (صرف أو سداد) للموظف ده - an advance / loan (payout or repayment) of this employee
+  advance: { employee: string | null; name: string } | null;
+  // فلوس صدقات: المستند فيه سطر على حساب الصدقات؛ out / in = نصيب الصدقات بس من الحركة (مطالبة فيها بنود تانية بتتحسب بجزء الصدقات)
+  // Charity money: the voucher has a charity-account line; out / in = the charity part only (a mixed claim counts its charity line)
+  charity: { out: number; in: number } | null;
 }
 
 // منصرف: لمين وليه (من الطرف التاني في نفس المستند) - an outgoing move: who it was for and why (the voucher's other side)

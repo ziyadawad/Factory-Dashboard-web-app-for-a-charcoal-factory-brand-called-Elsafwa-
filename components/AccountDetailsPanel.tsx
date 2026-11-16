@@ -68,13 +68,85 @@ const erpLink = (base: string, move: AccountMove) =>
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
 
 // فلتر الحركات: الكل / وارد (مدين على الحساب) / منصرف - the movement filter: all / incoming (debit) / outgoing
-type Filter = "all" | "in" | "out";
+// + سلف (صرف وسداد على حساب سلف الموظفين) وصدقات (المستند فيه سطر على حساب الصدقات) - + advances and charity
+type Filter = "all" | "in" | "out" | "advance" | "charity";
 const FILTERS: { id: Filter; label: string; on: string }[] = [
   { id: "all", label: "الكل", on: "border-brandOrange bg-brandOrange/15 text-brandOrange" },
   { id: "in", label: "وارد", on: "border-statusGreen bg-statusGreen/15 text-statusGreen" },
   { id: "out", label: "منصرف", on: "border-statusRed bg-statusRed/15 text-statusRed" },
+  { id: "advance", label: "سلف", on: "border-amber-400 bg-amber-400/15 text-amber-300" },
+  { id: "charity", label: "صدقات", on: "border-teal-400 bg-teal-400/15 text-teal-300" },
 ];
 const isIn = (m: AccountMove) => m.debit > 0;
+const matches = (m: AccountMove, filter: Filter) =>
+  filter === "all" ? true : filter === "in" ? isIn(m) : filter === "out" ? !isIn(m) : filter === "advance" ? !!m.advance : !!m.charity;
+const sum = (list: AccountMove[], pick: (m: AccountMove) => number) => list.reduce((s, m) => s + pick(m), 0);
+
+// ملخص "سلف": الإجمالي، عدد الموظفين، أقرب ميعاد، والتفصيل لكل موظف بالضغط
+// The "سلف" summary: total, employees, the nearest due date, and a per-employee breakdown on click
+function AdvanceSummaryBar({ moves, today }: { moves: AccountMove[]; today: string }) {
+  const [open, setOpen] = useState(false);
+  const byEmployee = new Map<string, { name: string; out: number; back: number; due: string | null; overdue: number }>();
+  for (const m of moves) {
+    const key = m.advance?.employee ?? m.advance?.name ?? "—";
+    const row = byEmployee.get(key) ?? { name: m.advance?.name || "—", out: 0, back: 0, due: null, overdue: 0 };
+    row.out += m.credit;
+    row.back += m.debit;
+    const due = m.out?.due;
+    if (due?.overdue) row.overdue += 1;
+    else if (due && due.date >= today && (!row.due || due.date < row.due)) row.due = due.date;
+    byEmployee.set(key, row);
+  }
+  const people = Array.from(byEmployee.values()).sort((a, b) => b.out - a.out);
+  const total = sum(moves, (m) => m.credit);
+  const back = sum(moves, (m) => m.debit);
+  const nearest = people.map((p) => p.due).filter((d): d is string => !!d).sort()[0] ?? null;
+  const overdue = people.reduce((s, p) => s + p.overdue, 0);
+  return (
+    <div className="shrink-0 px-5 py-2 border-b border-cardBorder flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="self-start flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-1.5 font-bold text-amber-300 hover:bg-amber-400/20"
+      >
+        <span>
+          إجمالي السلف: {n(total)} ج.م · لـ {n(people.length)} موظف
+        </span>
+        {back > 0 && <span className="text-statusGreen">· اترد: {n(back)} ج.م</span>}
+        <span className="text-gray-200">
+          · المستحق الجاي: {nearest ? <span dir="ltr" className="font-numbers">{shortDate(nearest)}</span> : "—"}
+        </span>
+        {overdue > 0 && <span className="text-statusRed">· ⚠ {n(overdue)} متأخرة</span>}
+        <span className="text-[0.8em]">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && people.length > 0 && (
+        <div className="max-h-[24vh] overflow-auto rounded-xl border border-amber-400/30 bg-background/60 px-3 py-1.5 grid grid-cols-2 min-[1400px]:grid-cols-3 gap-x-6">
+          {people.map((p) => (
+            <p key={p.name} className="flex items-center justify-between gap-3 border-b border-cardBorder/50 leading-[2]">
+              <span className="text-gray-100 truncate" title={p.name}>
+                {p.name}
+              </span>
+              <span className="whitespace-nowrap text-[0.95em]">
+                {p.out > 0 && <b className="text-amber-300">{n(p.out)}</b>}
+                {p.back > 0 && <span className="text-statusGreen"> (+{n(p.back)})</span>}
+                {p.overdue > 0 ? (
+                  <span className="text-statusRed"> · متأخرة</span>
+                ) : (
+                  p.due && (
+                    <span className="text-gray-400">
+                      {" "}
+                      · <span dir="ltr" className="font-numbers">{shortDate(p.due)}</span>
+                    </span>
+                  )
+                )}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // لون بادج نوع الصرف - the colour of a payment-type badge
 const KIND_STYLE: Record<string, string> = {
@@ -162,6 +234,10 @@ function MoveRow({
         </td>
         <td className={`${td} text-center font-bold whitespace-nowrap ${incoming ? "text-statusGreen" : "text-statusRed"}`}>
           {n(amount)}
+          {/* صدقات جوه حركة فيها بنود تانية: نصيب الصدقات تحت المبلغ - charity inside a mixed move: its part under the amount */}
+          {move.charity && move.charity.out > 0 && move.charity.out < move.credit && (
+            <span className="block text-[0.75em] leading-[1.4] font-semibold text-teal-300">منها صدقات: {n(move.charity.out)}</span>
+          )}
           {/* سلفة: ميعاد استحقاقها تحت المبلغ - an advance: its due date under the amount */}
           {move.out?.due && (
             <span
@@ -297,19 +373,24 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
     const result: { date: string; moves: AccountMove[]; incoming: number; outgoing: number; balance: number }[] = [];
     for (let date = data.to; date >= start; date = addDays(date, -1)) {
       const all = byDay.get(date) ?? [];
-      // الفلتر بيخفي الجنب التاني، والرصيد من كل الحركات - the filter hides the other side; the balance uses every move
-      const moves = filter === "all" ? all : all.filter((m) => (filter === "in" ? isIn(m) : !isIn(m)));
+      // الفلتر بيخفي اللي مش منه، ومجاميع اليوم من الفلتر بس، والرصيد من كل الحركات
+      // The filter hides the rest; the day totals use only the filtered moves; the balance uses every move
+      const moves = all.filter((m) => matches(m, filter));
       if ((months || filter !== "all") && moves.length === 0) continue;
       result.push({
         date,
         moves,
-        incoming: all.reduce((sum, m) => sum + m.debit, 0),
-        outgoing: all.reduce((sum, m) => sum + m.credit, 0),
+        // صدقات: نصيب الصدقات بس - charity: only the charity part
+        incoming: sum(moves, (m) => (filter === "charity" ? m.charity?.in ?? 0 : m.debit)),
+        outgoing: sum(moves, (m) => (filter === "charity" ? m.charity?.out ?? 0 : m.credit)),
         balance: all[0]?.balanceAfter ?? 0,
       });
     }
     return result;
   }, [data, range, months, filter]);
+
+  // حركات الفلتر في المدة اللي ظاهرة (لملخص سلف / صدقات) - the filtered moves in the shown period (for the summaries)
+  const filteredMoves = useMemo(() => days.flatMap((d) => d.moves), [days]);
 
   // تابات الشهور: الشهور اللي فيها حركات + الشهر ده دايما - month tabs: months with movements + always this month
   const monthTabs = useMemo(() => {
@@ -470,6 +551,20 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
           </div>
         )}
 
+        {/* ملخص "سلف" / "صدقات" للمدة اللي ظاهرة - the "سلف" / "صدقات" summary for the shown period */}
+        {data && !showDups && filter === "advance" && <AdvanceSummaryBar moves={filteredMoves} today={data.today} />}
+        {data && !showDups && filter === "charity" && (
+          <div className="shrink-0 px-5 py-2 border-b border-cardBorder">
+            <span className="inline-flex flex-wrap items-center gap-x-3 rounded-xl border border-teal-400/50 bg-teal-400/10 px-4 py-1.5 font-bold text-teal-300">
+              <span>إجمالي الصدقات: {n(sum(filteredMoves, (m) => m.charity?.out ?? 0))} ج.م</span>
+              {sum(filteredMoves, (m) => m.charity?.in ?? 0) > 0 && (
+                <span className="text-statusGreen">· رجع للخزنة: {n(sum(filteredMoves, (m) => m.charity?.in ?? 0))} ج.م</span>
+              )}
+              <span className="text-gray-400 font-semibold">· {n(filteredMoves.length)} حركة</span>
+            </span>
+          </div>
+        )}
+
         {/* ملخص الشهر - the month summary */}
         {months && data && (
           <div className={`shrink-0 flex items-stretch gap-3 px-5 py-2.5 border-b border-cardBorder ${loadingMonth ? "opacity-50" : ""}`}>
@@ -528,9 +623,21 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
                         <td colSpan={columns} className="px-4 py-1 border-b border-cardBorder bg-background/70 font-bold">
                           <span className="text-white">{formatDayName(day.date)}</span>
                           <span className="text-gray-500"> — </span>
-                          {filter !== "out" && <span className="text-statusGreen">وارد {n(day.incoming)}</span>}
-                          {filter === "all" && <span className="text-gray-500"> · </span>}
-                          {filter !== "in" && <span className="text-statusRed">منصرف {n(day.outgoing)}</span>}
+                          {filter === "advance" || filter === "charity" ? (
+                            // إجمالي الفلتر بس (والراجع للخزنة لو فيه) - only the filter's total (plus money back, if any)
+                            <>
+                              <span className={filter === "advance" ? "text-amber-300" : "text-teal-300"}>
+                                {filter === "advance" ? "سلف" : "صدقات"} {n(day.outgoing)}
+                              </span>
+                              {day.incoming > 0 && <span className="text-statusGreen"> · {filter === "advance" ? "اترد" : "رجع"} {n(day.incoming)}</span>}
+                            </>
+                          ) : (
+                            <>
+                              {filter !== "out" && <span className="text-statusGreen">وارد {n(day.incoming)}</span>}
+                              {filter === "all" && <span className="text-gray-500"> · </span>}
+                              {filter !== "in" && <span className="text-statusRed">منصرف {n(day.outgoing)}</span>}
+                            </>
+                          )}
                           <span className="text-gray-500"> · </span>
                           <span className="text-gray-200">الرصيد آخر اليوم {n(day.balance)}</span>
                         </td>

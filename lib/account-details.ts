@@ -247,6 +247,53 @@ export async function describeOutgoing(account: string, rows: GlRow[]): Promise<
   return result;
 }
 
+// ===== فلاتر "سلف" و"صدقات" - the "سلف" and "صدقات" filters =====
+// سطور نفس المستندات على حسابات السلف والصدقات (من config.accounts) - the vouchers' lines on the advance / charity accounts
+type TagLine = { voucher_no: string; account: string; party_type: string | null; party: string | null; debit: number | null; credit: number | null };
+type Tagged = { lines: Map<string, TagLine[]>; names: Map<string, string> };
+const ADVANCE_VOUCHERS = new Set(["Loan Disbursement", "Loan Repayment", "Employee Advance"]);
+
+async function tagLines(rows: GlRow[]): Promise<Tagged> {
+  const { advanceAccounts, charityAccounts } = dashboardConfig.accounts;
+  const vouchers = Array.from(new Set(rows.map((r) => r.voucher_no)));
+  const found = vouchers.length
+    ? await listOrEmpty<TagLine>("GL Entry", {
+        filters: [
+          ["voucher_no", "in", vouchers],
+          ["account", "in", [...advanceAccounts, ...charityAccounts]],
+          ["is_cancelled", "=", 0],
+        ],
+        fields: ["voucher_no", "account", "party_type", "party", "debit", "credit"],
+      })
+    : [];
+  const lines = new Map<string, TagLine[]>();
+  for (const l of found) lines.set(l.voucher_no, [...(lines.get(l.voucher_no) ?? []), l]);
+  const ids = Array.from(new Set(found.filter((l) => l.party_type === "Employee" && l.party).map((l) => l.party as string)));
+  const employees = ids.length
+    ? await listOrEmpty<{ name: string; employee_name: string | null }>("Employee", { filters: [["name", "in", ids]], fields: ["name", "employee_name"] })
+    : [];
+  return { lines, names: new Map(employees.map((e) => [e.name, (e.employee_name || e.name).trim()])) };
+}
+
+function tagOf(row: GlRow, out: MoveOut | null, tagged: Tagged): Pick<AccountMove, "advance" | "charity"> {
+  const { advanceAccounts, charityAccounts } = dashboardConfig.accounts;
+  const lines = tagged.lines.get(row.voucher_no) ?? [];
+  // نصيب الصدقات = سطور حساب الصدقات (ومش أكتر من مبلغ الحركة نفسها) - the charity part = the charity lines, capped by the move
+  const charityLines = lines.filter((l) => charityAccounts.includes(l.account));
+  const charity = charityLines.length
+    ? {
+        out: money(Math.min(money(row.credit), charityLines.reduce((s, l) => s + money(l.debit), 0))),
+        in: money(Math.min(money(row.debit), charityLines.reduce((s, l) => s + money(l.credit), 0))),
+      }
+    : null;
+  const advanceLine = lines.find((l) => advanceAccounts.includes(l.account));
+  const isAdvance = !!advanceLine || ADVANCE_VOUCHERS.has(row.voucher_type) || out?.kind === "سلفة";
+  if (!isAdvance) return { advance: null, charity };
+  const employee = (advanceLine?.party_type === "Employee" ? advanceLine.party : null) ?? out?.employee ?? null;
+  const name = (employee && (tagged.names.get(employee) ?? (out?.employee === employee ? out.name : null))) || employee || (row.party ?? "").trim();
+  return { advance: { employee, name }, charity };
+}
+
 // سلف الشهر لكل موظف - this month's advances per employee
 function advanceSummary(moves: AccountMove[], monthStart: string): AdvanceSummary {
   const byEmployee = new Map<string, { employee: string; name: string; amount: number; count: number }>();
@@ -315,9 +362,10 @@ async function load(accountNumber: string, month: string | null, today: string):
   ]);
   if (typeof balance !== "number" || typeof opening !== "number") throw new Error(`${account}: balance is not a number`);
 
-  const [names, outgoing] = await Promise.all([
+  const [names, outgoing, tagged] = await Promise.all([
     fullNames(Array.from(new Set([...rows, ...lastRows].map((r) => r.owner).filter(Boolean)))),
     describeOutgoing(account, rows),
+    tagLines(rows),
   ]);
   const nameOf = (owner: string) => names.get(owner) ?? owner;
 
@@ -376,6 +424,7 @@ async function load(accountNumber: string, month: string | null, today: string):
       voucherNo: row.voucher_no,
       owner: nameOf(row.owner),
       out: outgoing.get(row.name) ?? null,
+      ...tagOf(row, outgoing.get(row.name) ?? null, tagged),
     };
   });
   if (to === today && Math.abs(running - money(balance)) > 0.01) {

@@ -404,6 +404,19 @@ export const dashboardConfig = {
   // on top, pulses pulseCount times, then slides into the list. Several at once wait their turn, one after another
   // ============================================================
 
+  // ============================================================
+  // حسابات فلاتر "سلف" و"صدقات" في لوحة تفاصيل الخزنة والمحافظ
+  // Accounts behind the "سلف" and "صدقات" filters in the treasury / wallet details panel
+  // ============================================================
+  accounts: {
+    // حساب سلف الموظفين (القروض والسلف للموظفين). قروض البنوك (24xx) مش هنا لأنها قروض على الشركة
+    // The employee advances / loans account. Bank loans (24xx) are not here: they are the company's own loans
+    advanceAccounts: ["1620 - سلف الموظفيين - AC"] as string[],
+    // حساب الصدقات: أي قيد على الخزنة / المحفظة في نفس المستند بتاعه سطر على الحساب ده يتحسب صدقة
+    // The charity account: a cash entry whose voucher also has a line on this account counts as charity
+    charityAccounts: ["5222 - صدقات - AC"] as string[],
+  },
+
   activity: {
     refreshSeconds: 10, // الشاشة بتسأل كل 10 ثواني - the screen asks every 10 s
     cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
