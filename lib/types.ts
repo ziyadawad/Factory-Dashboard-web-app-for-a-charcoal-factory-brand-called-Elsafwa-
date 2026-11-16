@@ -434,6 +434,8 @@ export interface EmployeeAttendance {
   name: string; // الاسم الكامل (أو اسم العرض من الكونفج) - full name (or the config display name)
   erpName?: string; // اسم ERPNext لو اسم العرض مختلف - the ERPNext name when a display name overrides it
   section: string; // اسم القسم - section label
+  // القسم جه منين: البايو / كود البصمة / الفرع / قاعدة اليومية / الكونفج - where the section came from
+  sectionFrom: "bio" | "code" | "branch" | "daily" | "config";
   today: PersonStatus; // نفس حالة الكارت - same status as the card
   todayFirstPunch: string | null;
   presentDays: number;

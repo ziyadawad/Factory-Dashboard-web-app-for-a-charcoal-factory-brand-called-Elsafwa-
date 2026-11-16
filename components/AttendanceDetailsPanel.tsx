@@ -32,7 +32,16 @@ const fetcher = async (url: string) => {
 };
 
 // أول الأسبوع السبت - weeks start on Saturday
-const WEEK_HEADER = ["السبت", "الأحد", "الاتنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+// القسم جه منين - where the section came from
+const SECTION_FROM: Record<EmployeeAttendance["sectionFrom"], string> = {
+  bio: "البايو",
+  code: "كود البصمة",
+  branch: "الفرع",
+  daily: "قاعدة اليومية",
+  config: "الإعدادات (خارج البصمة)",
+};
+
+const WEEK_HEADER =["السبت", "الأحد", "الاتنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
 
 const n = (value: number) => (
   <span dir="ltr" className="font-numbers tabular-nums">
@@ -1234,6 +1243,8 @@ function EmployeeView({
             {info("كود البصمة", person.code, true)}
             {info("Employee ID", person.id, true)}
             {info("القسم", person.section)}
+            {/* القسم جه منين - where the section came from */}
+            <p className="text-[14px] text-gray-500 py-1">القسم من: {SECTION_FROM[person.sectionFrom]}</p>
             <div className="flex items-center justify-between gap-4 py-1.5">
               <span className="text-gray-400">النهارده</span>
               <TodayPill status={person.today} punch={person.todayFirstPunch} />

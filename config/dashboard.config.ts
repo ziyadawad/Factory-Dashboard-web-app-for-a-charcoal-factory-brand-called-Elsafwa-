@@ -96,6 +96,28 @@ export const dashboardConfig = {
       "مصنع التعبئة": "packing", // مصنع التعبئة ← عمال تعبئة
       "مصنع الإنتاج": "production", // مصنع الإنتاج ← مصنع إنتاج / عمال إنتاج
     } as Record<string, string>,
+    // ===== القسم من البايو (أول قاعدة، قبل كود البصمة والفرع) =====
+    // ملف الموظف في ERPNext ← تاب Profile ← Bio / Cover Letter: لو فيه اسم قسم أو كلمة من دول، الموظف بيروح القسم ده
+    // - بيتشال الـ HTML وبيتوحد العربي (أ/إ/آ = ا، ة = ه، ى = ي، والمسافات) قبل المقارنة، فـ"الغفر" = "غفر"
+    // - اسم القسم نفسه (label) بيتطابق لوحده، والكلمات هنا زيادة عليه
+    // - لو أكتر من كلمة اتطابقت، الأطول هي اللي بتكسب ("عمال يوميه" قبل "يوميه")
+    // - لو البايو مفيهوش ولا كلمة: القواعد القديمة (كود البصمة ← الفرع ← قاعدة اليومية)
+    // - "خارج البصمة" من البايو = default_present (حاضر إلا لو اتسجل Absent)، إلا لو مكتوب في outsideBiometric فوق
+    // ===== Section from the bio (FIRST rule, before the device code and the branch) =====
+    // Employee -> Profile tab -> Bio / Cover Letter: a section label or one of these words puts him in that section
+    // (HTML stripped, Arabic normalized; the longest match wins; no match -> the old rules)
+    bioSections: {
+      management: ["اداره", "الاداره"], // الإدارة
+      production: ["انتاج", "عمال انتاج"], // عمال إنتاج
+      workshop: ["ورشه"], // ورشة
+      operators: ["اوبريتر", "اوبراتور"], // أوبريتر
+      packing: ["تعبئه", "تعبيه"], // عمال تعبئة
+      drivers: ["سواق", "سائق"], // سواقين
+      reps: ["مندوب", "مناديب"], // مناديب
+      daily: ["يوميه"], // عمال يومية
+      guards: ["غفر", "غفير"], // غفر
+      outside: ["خارج البصمه"], // خارج البصمة
+    } as Record<string, string[]>,
 
     // ===== تفاصيل الحضور (الضغط على كارت حضور) - attendance details (click an attendance card) =====
     // أول يوم البصمة اشتغلت فيه (أول Employee Checkin في ERPNext). الأيام اللي قبله مش بتتحسب حضور ولا غياب

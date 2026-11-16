@@ -52,6 +52,7 @@ export type TodayAttendanceRows = {
     designation: string | null;
     branch: string | null;
     ctc?: number | null; // Cost to Company - لقاعدة عمال اليومية التلقائية - for the automatic daily rule
+    bio?: string | null; // Profile → Bio / Cover Letter - أول قاعدة للقسم - the first section rule
   }[];
   attendance: { employee: string; employee_name: string | null; status: string }[];
   checkins: { employee: string; time: string; log_type: string | null }[];
@@ -66,7 +67,7 @@ export async function loadTodayAttendance(): Promise<TodayAttendanceRows> {
   const [employees, attendance, checkins] = await Promise.all([
     erpGet<{ data: TodayAttendanceRows["employees"] }>("/api/resource/Employee", {
       filters: JSON.stringify([["status", "=", "Active"]]),
-      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "ctc"]),
+      fields: JSON.stringify(["name", "employee_name", "attendance_device_id", "department", "designation", "branch", "ctc", "bio"]),
       limit_page_length: 0,
     }),
     erpGet<{ data: TodayAttendanceRows["attendance"] }>("/api/resource/Attendance", {
@@ -116,7 +117,9 @@ export function employeeStatuses(rows: TodayAttendanceRows): Map<string, PersonS
   return statuses;
 }
 
-type SectionPerson = AttendancePerson & { id: string };
+// القسم جه منين - where the section came from
+export type SectionSource = "bio" | "code" | "branch" | "daily" | "config";
+type SectionPerson = AttendancePerson & { id: string; source: SectionSource };
 
 // توحيد الأسامي العربي: أ/إ/آ = ا، ة = ه، ى = ي، والمسافات - normalize Arabic names before matching
 export function normalizeArabic(text: string | null | undefined): string {
@@ -139,6 +142,34 @@ export function branchSection(branch: string | null | undefined): AttendanceSect
   return undefined;
 }
 
+// نص البايو من غير HTML وموحد - the bio as plain normalized text
+export function bioText(bio: string | null | undefined): string {
+  const plain = String(bio ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/[ً-ْـ]/g, ""); // تشكيل وتطويل - tashkeel and tatweel
+  return normalizeArabic(toEnglishDigits(plain));
+}
+
+// القسم من البايو (attendance.bioSections + اسم القسم): الأطول يكسب - section from the bio; the longest match wins
+export function bioSection(bio: string | null | undefined): AttendanceSectionKey | undefined {
+  const text = bioText(bio);
+  if (!text) return undefined;
+  const { sections, bioSections } = dashboardConfig.attendance;
+  let best: { key: AttendanceSectionKey; length: number } | undefined;
+  for (const key of Object.keys(sections) as AttendanceSectionKey[]) {
+    const words = [sections[key].label, ...(bioSections[key] ?? [])].map((w) => normalizeArabic(w)).filter(Boolean);
+    for (const word of words) {
+      if (text.includes(word) && (!best || word.length > best.length)) best = { key, length: word.length };
+    }
+  }
+  return best?.key;
+}
+
+// "خارج البصمة" من البايو (مالوش طريقة في الكونفج = default_present) - outside the biometric from the bio
+const bioOutside = new Set<string>();
+
 // اسم العرض من الكونفج (null = اسم ERPNext) - the config display name (null = the ERPNext name)
 export function displayNameOf(id: string): string | null {
   return dashboardConfig.attendance.displayNames[id] ?? null;
@@ -151,7 +182,7 @@ function cardName(id: string, erpName: string | null | undefined) {
 
 // خارج البصمة: الطريقة لموظف (null = على البصمة) - the outside-the-biometric mode of an employee
 export function outsideMode(id: string): "fixed" | "default_present" | null {
-  return dashboardConfig.attendance.outsideBiometric[id] ?? null;
+  return dashboardConfig.attendance.outsideBiometric[id] ?? (bioOutside.has(id) ? "default_present" : null);
 }
 
 // حالة واحد خارج البصمة يوم ما: fixed = حاضر دايما، default_present = حاضر إلا لو اتسجل Absent (أو إجازة)
@@ -181,14 +212,26 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
   const placed = new Set<string>(dashboardConfig.attendance.excludedEmployees);
   // خارج البصمة الأول (ومش بيدخلوا أي قسم تاني) - outside the biometric first (never in another section)
   for (const employee of rows.employees) {
+    const configMode = dashboardConfig.attendance.outsideBiometric[employee.name];
+    const fromBio = !configMode && bioSection(employee.bio) === "outside";
+    if (fromBio) bioOutside.add(employee.name);
+    else bioOutside.delete(employee.name);
     const mode = outsideMode(employee.name);
     if (!mode || placed.has(employee.name)) continue;
     placed.add(employee.name);
     const status = outsideStatus(mode, marks.get(employee.name));
-    result.outside.push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status });
+    result.outside.push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status, source: fromBio ? "bio" : "config" });
   }
   for (const employee of rows.employees) {
     if (placed.has(employee.name)) continue;
+    // 0) البايو الأول (Profile → Bio): لو فيه اسم قسم بيروح له، حاضر أو غايب - the bio first, present or absent
+    const byBio = bioSection(employee.bio);
+    if (byBio && byBio !== "outside") {
+      placed.add(employee.name);
+      const bioStatus = statuses.get(employee.name) ?? "absent";
+      result[byBio].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status: bioStatus, source: "bio" });
+      continue;
+    }
     const code = deviceCode(employee.attendance_device_id);
     const status = statuses.get(employee.name) ?? "absent";
     // 1) كود البصمة  2) الفرع (اللي مالوش كود: بس لو حاضر)  3) الحاضر اللي مالوش قسم → اليومية
@@ -203,13 +246,14 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     const target = key ?? (status === "present" || autoDaily ? "daily" : undefined);
     if (!target) continue;
     placed.add(employee.name);
-    result[target].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status });
+    const source: SectionSource = byCode ? "code" : key ? "branch" : "daily";
+    result[target].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status, source });
   }
   // حاضر النهارده بس مش في قايمة الـ Active - present today but not in the Active list
   const attendanceNames = new Map(rows.attendance.map((record) => [record.employee, record.employee_name]));
   for (const [id, status] of Array.from(statuses)) {
     if (status !== "present" || placed.has(id)) continue;
-    result.daily.push({ id, name: cardName(id, attendanceNames.get(id)), status });
+    result.daily.push({ id, name: cardName(id, attendanceNames.get(id)), status, source: "daily" });
   }
   return result;
 }
