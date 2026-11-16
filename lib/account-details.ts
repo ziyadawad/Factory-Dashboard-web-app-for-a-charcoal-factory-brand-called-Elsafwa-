@@ -4,6 +4,7 @@
 // Fetched only when a panel opens, 30 s cache, read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpBalanceOn, erpPost, erpToday } from "./erp";
+import { advanceDues } from "./advance-due";
 import { AccountDetails, AccountMonth, AccountMove, AdvanceSummary, MoveOut } from "./types";
 
 const CACHE_MS = 30_000;
@@ -319,6 +320,38 @@ async function load(accountNumber: string, month: string | null, today: string):
     describeOutgoing(account, rows),
   ]);
   const nameOf = (owner: string) => names.get(owner) ?? owner;
+
+  // ميعاد استحقاق كل سلفة (قرض بجدوله لو مسموح، وإلا قاعدة المرتب) - each advance's due date (loan schedule if readable, else the salary rule)
+  const advanceRows = rows.filter((r) => outgoing.get(r.name)?.kind === "سلفة" && outgoing.get(r.name)?.employee);
+  if (advanceRows.length) {
+    try {
+      const dues = await advanceDues(
+        advanceRows.map((r) => {
+          const out = outgoing.get(r.name)!;
+          return {
+            key: r.name,
+            kind: out.link === "loan" ? "loan" : out.link === "employee_advance" ? "employee_advance" : out.link === "adjustment" ? "salary_adjustment" : "advance",
+            employee: out.employee!,
+            date: String(r.posting_date).slice(0, 10),
+            amount: money(r.credit),
+            voucherType: r.voucher_type,
+            voucherNo: r.voucher_no,
+          };
+        })
+      );
+      for (const r of advanceRows) {
+        const due = dues.get(r.name);
+        const out = outgoing.get(r.name)!;
+        if (due) {
+          // قرض: القسط الجاي (أو أقدم متأخر)؛ غير كده ميعاد الخصم - a loan: the next (or oldest overdue) installment; else the deduction date
+          const date = due.overdue ? due.schedule.find((s) => s.status === "overdue")?.date ?? due.dueDate : due.dueDate;
+          out.due = date ? { date, overdue: due.overdue, text: due.text } : null;
+        }
+      }
+    } catch (error) {
+      console.warn("[erp] account details: advance due dates skipped:", error instanceof Error ? error.message.slice(0, 120) : "error");
+    }
+  }
 
   // ترتيب ERPNext (التاريخ ثم وقت التسجيل) للرصيد بعد كل حركة - ERPNext order (date, then creation) for the running balance
   rows.sort((a, b) => a.posting_date.localeCompare(b.posting_date) || a.creation.localeCompare(b.creation));

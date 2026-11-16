@@ -6,6 +6,7 @@
 
 import { erpDocUrl, erpGet, erpPost } from "./erp";
 import { fullNames, shortAccount } from "./account-details";
+import { advanceDues, AdvanceRef } from "./advance-due";
 import { packetsOf, productOfItem } from "./sales";
 import { ActivityDetails, ActivityDetailsTable } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -71,7 +72,8 @@ async function employeeNames(ids: string[]): Promise<Map<string, string>> {
 const dayDiff = (from: string, to: string) =>
   Math.round((Date.parse(`${to.slice(0, 10)}T00:00:00Z`) - Date.parse(`${from.slice(0, 10)}T00:00:00Z`)) / 86_400_000);
 
-type Body = { postingDate: string | null; postingTime: string | null; fields: ActivityDetails["fields"]; tables: ActivityDetailsTable[] };
+// advance = لو المستند سلفة / قرض (عشان صندوق "ميعاد الاستحقاق") - set when the document is an advance / loan (for the due box)
+type Body = { postingDate: string | null; postingTime: string | null; fields: ActivityDetails["fields"]; tables: ActivityDetailsTable[]; advance?: AdvanceRef };
 type Header = { owner: string; creation: string };
 
 // ===== وارد / منصرف: القيد من GL Entry (دايما متاح) + بيانات المستند لو متاحة =====
@@ -132,11 +134,29 @@ async function moneyBody(doctype: string, name: string, doc: Doc | null): Promis
       rows: links,
     });
   }
+  // سلفة / قرض: موظف مدين على حساب السلف، أو Loan Disbursement / Employee Advance - an advance: an employee debited on the advances account
+  const advanceLine = lines.find(
+    (l) => l.party_type === "Employee" && l.party && Number(l.debit) > 0 && (l.account === dashboardConfig.salaries.advancesAccount || doctype === "Loan Disbursement" || doctype === "Employee Advance")
+  );
+  const postingDate = str(doc?.posting_date) || str(first?.posting_date) || null;
+  const advance: AdvanceRef | undefined = advanceLine
+    ? {
+        key: name,
+        kind: doctype === "Loan Disbursement" ? "loan" : doctype === "Employee Advance" ? "employee_advance" : "advance",
+        employee: advanceLine.party as string,
+        date: (postingDate ?? "").slice(0, 10),
+        amount: Number(advanceLine.debit) || null,
+        loan: doctype === "Loan Disbursement" ? str(doc?.against_loan) || null : null,
+        voucherType: doctype,
+        voucherNo: name,
+      }
+    : undefined;
   return {
-    postingDate: str(doc?.posting_date) || str(first?.posting_date) || null,
+    postingDate,
     postingTime: null,
     fields,
     tables,
+    advance,
     ...(doc ? {} : first ? { owner: first.owner, creation: first.creation } : {}),
   };
 }
@@ -308,7 +328,12 @@ async function salaryBody(doc: Doc): Promise<Body> {
   ];
   for (const [key, label] of SALARY_TEXT_FIELDS) if (str(doc[key]) && str(doc[key]) !== "0") fields.push({ label, value: str(doc[key]) });
   fields.push({ label: "المبلغ", value: "سري — مش بيظهر على الشاشة" });
-  return { postingDate: str(doc.date) || null, postingTime: null, fields, tables: [] };
+  // سلفة: إمتى هتتخصم (من غير مبلغ) - an advance: when it will be deducted (no amount)
+  const advance: AdvanceRef | undefined =
+    str(doc.adjustment_type) === "سلفة" && id
+      ? { key: str(doc.name), kind: "salary_adjustment", employee: id, date: str(doc.date).slice(0, 10), amount: null, voucherType: "Salary Adjustment", voucherNo: str(doc.name) }
+      : undefined;
+  return { postingDate: str(doc.date) || null, postingTime: null, fields, tables: [], advance };
 }
 
 export class UnknownDocError extends Error {}
@@ -331,8 +356,19 @@ async function load(doctype: string, name: string): Promise<ActivityDetails> {
               : await moneyBody(doctype, name, doc);
   const owner = str(doc?.owner ?? body.owner);
   const creation = stamp(doc?.creation ?? body.creation);
-  const names = await fullNames(owner ? [owner] : []);
+  const [names, due] = await Promise.all([
+    fullNames(owner ? [owner] : []),
+    body.advance
+      ? advanceDues([body.advance])
+          .then((m) => m.get(body.advance!.key) ?? null)
+          .catch((e) => {
+            console.warn("[erp] activity details: due date skipped:", e instanceof Error ? e.message.slice(0, 120) : "error");
+            return null;
+          })
+      : Promise.resolve(null),
+  ]);
   return {
+    due,
     doctype,
     name,
     postingDate: body.postingDate,

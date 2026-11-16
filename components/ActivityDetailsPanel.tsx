@@ -5,6 +5,7 @@ import { ExternalLink, X } from "lucide-react";
 import { ActivityDetails, ActivityEvent } from "@/lib/types";
 import { formatDayName } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
+import AdvanceDueBox from "./AdvanceDueBox";
 
 // لوحة تفاصيل حدث من "اللي بيحصل دلوقتي" (نفس شكل باقي اللوحات): المستند كامل بيتجاب بس لما تتفتح
 // An activity event's details panel (same style as the other panels): the full document is fetched only when opened
@@ -105,6 +106,8 @@ export default function ActivityDetailsPanel({ event, icon, color, onClose }: { 
             </div>
           ) : (
             <div className="flex flex-col gap-4">
+              {/* ميعاد الاستحقاق (سلفة / قرض) - the due date (advance / loan) */}
+              {data.due && <AdvanceDueBox due={data.due} showAmounts={data.doctype !== "Salary Adjustment"} />}
               {/* الخانات: النص كامل من غير قص - the fields: full text, never cut */}
               <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
                 {data.fields.map((f, i) => (

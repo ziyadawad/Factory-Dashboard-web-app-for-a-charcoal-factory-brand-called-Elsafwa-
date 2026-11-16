@@ -160,7 +160,19 @@ function MoveRow({
             {incoming ? "وارد" : "منصرف"}
           </span>
         </td>
-        <td className={`${td} text-center font-bold whitespace-nowrap ${incoming ? "text-statusGreen" : "text-statusRed"}`}>{n(amount)}</td>
+        <td className={`${td} text-center font-bold whitespace-nowrap ${incoming ? "text-statusGreen" : "text-statusRed"}`}>
+          {n(amount)}
+          {/* سلفة: ميعاد استحقاقها تحت المبلغ - an advance: its due date under the amount */}
+          {move.out?.due && (
+            <span
+              className={`block text-[0.75em] leading-[1.4] font-semibold ${move.out.due.overdue ? "text-statusRed" : "text-sky-300"}`}
+              title={move.out.due.text}
+            >
+              {move.out.due.overdue ? "⚠ متأخرة: " : "مستحقة: "}
+              <span dir="ltr" className="font-numbers">{shortDate(move.out.due.date)}</span>
+            </span>
+          )}
+        </td>
         <td className={`${td} text-center text-white font-semibold whitespace-nowrap`}>{n(move.balanceAfter)}</td>
         <td className={`${td} text-gray-200`}>
           <PartyCell move={move} />
@@ -194,6 +206,12 @@ function MoveRow({
                       {move.party}
                     </p>
                   )
+                )}
+                {move.out?.due && (
+                  <p className={move.out.due.overdue ? "text-statusRed font-bold" : "text-sky-300"}>
+                    <span className="text-gray-500">ميعاد الاستحقاق: </span>
+                    {move.out.due.text}
+                  </p>
                 )}
                 <p className="text-gray-100 whitespace-pre-wrap break-words leading-[1.8]">
                   {move.remarks || <span className="text-gray-500">مفيش بيان</span>}

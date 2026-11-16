@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, ChevronDown, ChevronLeft, Download, ExternalLink, Loader2, Users, X } from "lucide-react";
 import {
+  AdvanceDue,
   AttendanceDetails,
   DailyWeek,
   DayStatus,
@@ -22,6 +23,7 @@ import {
 import { formatDayName, formatNumber } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
+import AdvanceDueBox from "./AdvanceDueBox";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -402,6 +404,42 @@ function OvertimeMonthLine({ overtime, month, paidToday }: { overtime: OvertimeS
   );
 }
 
+// السلف والقروض: كل سلفة / قرض مفتوح بميعاد استحقاقه، والمتأخر بالأحمر - open advances / loans with their due dates, overdue in red
+function LoansSection({ loans }: { loans: AdvanceDue[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (!loans || loans.length === 0) return null;
+  return (
+    <div className="rounded-xl bg-background border border-sky-400/30 p-4 flex flex-col gap-2 text-[17px]">
+      <p className="text-sky-300 font-extrabold text-[19px]">🗓 السلف والقروض</p>
+      {loans.map((l) => {
+        const key = `${l.kind}|${l.id}|${l.date}`;
+        const expanded = open === key;
+        return (
+          <div key={key} className={`rounded-lg border px-3 py-2 ${l.overdue ? "border-statusRed/60 bg-statusRed/[0.07]" : "border-cardBorder/70"}`}>
+            <button type="button" onClick={() => setOpen(expanded ? null : key)} className="w-full flex flex-col gap-0.5 text-start">
+              <span className="flex items-center justify-between gap-3 text-[15px]">
+                <span className="text-gray-300 font-semibold">
+                  {l.label} <span className="text-gray-500 font-normal">· اتصرفت {shortDate(l.date)}</span>
+                </span>
+                {l.schedule.length > 0 && <ChevronDown size={16} className={`text-sky-300 transition-transform ${expanded ? "rotate-180" : ""}`} />}
+              </span>
+              <span className={`font-bold ${l.overdue ? "text-statusRed" : "text-white"}`}>{l.text}</span>
+              <span className="flex flex-wrap gap-x-4 text-[14px] text-gray-400">
+                {l.monthly !== null && <span>القسط الشهري: <b className="text-gray-100">{money(l.monthly)} ج.م</b></span>}
+                {l.remaining !== null && <span>الباقي: <b className="text-gray-100">{money(l.remaining)} ج.م</b></span>}
+                {l.left !== null && <span>أقساط فاضلة: <b className="text-gray-100">{money(l.left)}</b></span>}
+                {l.overdue && <span className="text-statusRed font-bold">⚠ متأخر {money(l.overdueCount)} قسط ({money(l.overdueAmount)} ج.م)</span>}
+              </span>
+            </button>
+            {l.note && <p className="text-[13px] text-gray-500">{l.note}</p>}
+            {expanded && <div className="mt-2"><AdvanceDueBox due={l} /></div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // كارت مرتب موظف + صندوق الإضافي - one employee's salary card + the overtime box
 function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; state: SalaryState }) {
   if (state.error) return <SalaryMessage text="المرتبات مش متاحة دلوقتي — جرب تاني بعد شوية" />;
@@ -414,6 +452,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
       <div className="flex flex-col gap-3">
         <DailySalaryCard salary={salary} paidToday={paidToday} today={state.data.today} month={month} />
         <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
+        <LoansSection loans={salary.loans} />
       </div>
     );
   }
@@ -427,6 +466,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
               <OvertimeMonthLine overtime={salary.overtime} month={month} paidToday={paidToday} />
             </div>
             <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
+        <LoansSection loans={salary.loans} />
           </>
         )}
       </div>
@@ -436,6 +476,7 @@ function SalaryCard({ salary, state }: { salary: EmployeeSalary | undefined; sta
     <div className="flex flex-col gap-3">
       <MonthlySalaryCard salary={salary} perDay={state.data.daysPerMonth} month={month} paidToday={paidToday} />
       <OvertimeBox overtime={salary.overtime} paidToday={paidToday} />
+        <LoansSection loans={salary.loans} />
     </div>
   );
 }

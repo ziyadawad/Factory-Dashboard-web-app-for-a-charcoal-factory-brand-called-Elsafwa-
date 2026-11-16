@@ -167,6 +167,8 @@ export interface MoveOut {
   // سلفة: مربوطة بإيه (Loan بيتخصم من المرتب، تسوية مرتب، Employee Advance) - what an advance is tied to
   link: "loan" | "adjustment" | "employee_advance" | null;
   warn: boolean; // ⚠ سلفة مش متسجلة على المرتب - an advance not recorded against the salary
+  // ميعاد استحقاق السلفة (للسلف بس) - the advance's due date (advances only)
+  due?: { date: string; overdue: boolean; text: string } | null;
 }
 
 // سلف الشهر لكل موظف (من منصرف الحساب) - this month's advances per employee (from the account's outgoing moves)
@@ -203,6 +205,34 @@ export interface AccountDetails {
   erpUrl: string; // عشان لينك "افتح في ERPNext" - for the "open in ERPNext" link
   moves: AccountMove[]; // الأحدث الأول - newest first
   advances: AdvanceSummary; // سلف الشهر (monthStart → to) - this month's advances
+}
+
+// ميعاد استحقاق سلفة / قرض - the due date of an advance / loan
+// source: schedule = من جدول القرض في ERPNext، rule = من قاعدة المرتب (مفيش جدول أو مفيش صلاحية)
+export interface AdvanceDue {
+  id: string; // اسم القرض أو المستند - the loan or voucher name
+  kind: "loan" | "employee_advance" | "salary_adjustment" | "advance";
+  label: string;
+  employee: string;
+  employeeName: string;
+  date: string; // تاريخ الصرف - when it was paid out
+  amount: number | null;
+  source: "schedule" | "rule";
+  text: string; // "القسط الجاي: 500 ج.م يوم 1/12/2026" / "بتتخصم من مرتب شهر نوفمبر 2026"
+  dueDate: string | null;
+  dueAmount: number | null;
+  left: number | null; // أقساط فاضلة - installments left
+  remaining: number | null; // الباقي - total remaining
+  monthly: number | null; // القسط الشهري - monthly installment
+  method: string | null; // طريقة السداد - repayment method
+  periods: number | null; // عدد الأقساط - number of installments
+  startDate: string | null; // أول قسط - repayment start date
+  overdue: boolean;
+  overdueCount: number;
+  overdueAmount: number;
+  schedule: { date: string; amount: number; status: "paid" | "pending" | "overdue" }[];
+  url: string | null; // افتح في ERPNext
+  note: string | null; // ملاحظة (زي مفيش صلاحية) - a note (e.g. no permission)
 }
 
 // ===== عمليات مكررة (فحص قراية بس، آخر 60 يوم) - suspected duplicates (read-only check, last 60 days) =====
@@ -691,6 +721,8 @@ export interface EmployeeSalary {
   expectedNet: number; // الصافي المتوقع آخر الشهر (لو مغابش تاني) - expected net at month end (no more absences)
   // الإجمالي مع الإضافي = المرتب النهائي (earned) + الإضافي - earned so far + this month's overtime
   totalWithOvertime: number;
+  // السلف والقروض المفتوحة بميعاد استحقاقها - open advances / loans with their due dates
+  loans: AdvanceDue[];
 }
 
 // يوم في أسبوع عامل اليومية: worked = 1 / 0.5 / 0 - one day of a daily worker's week
@@ -914,6 +946,7 @@ export interface ActivityDetails {
   erpUrl: string;
   fields: { label: string; value: string; tone?: "in" | "out" | "accent" }[];
   tables: ActivityDetailsTable[];
+  due?: AdvanceDue | null; // صندوق "ميعاد الاستحقاق" (سلفة / قرض بس) - the due box (advances / loans only)
 }
 
 // events = الأحدث الأول، now = وقت السيرفر بتوقيت القاهرة (الواجهة بتبعته since في الطلب الجاي)

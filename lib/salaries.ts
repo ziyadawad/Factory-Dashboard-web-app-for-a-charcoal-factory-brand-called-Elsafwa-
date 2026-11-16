@@ -5,8 +5,9 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { addDays, attendanceDetails, cashWeekOf, cashWeekStarts, rangeStartOf, weekStartOf } from "./attendance-details";
 import { AttendanceSectionKey, outsideMode } from "./data-source";
 import { ErpError, erpDocUrl, erpPost } from "./erp";
+import { advanceDues, openLoans } from "./advance-due";
 import {
-  DailyWeek, DuplicateInfo, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SalaryDuplicate, SectionSalaries,
+  AdvanceDue, DailyWeek, DuplicateInfo, EmployeeDay, EmployeeSalary, OvertimeEntry, OvertimeSummary, OvertimeWeek, SalaryAdjustment, SalaryDuplicate, SectionSalaries,
 } from "./types";
 
 const config = dashboardConfig.salaries;
@@ -263,6 +264,22 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     d.status === "present" ? (d.half ? 0.5 : 1) : (d.status === "off" || d.status === "holiday") && d.firstPunch ? 1 : 0;
   const perDay = config.daysPerMonth;
 
+  // القروض المفتوحة لكل موظف (بميعاد استحقاقها) - each employee's open loans (with their due dates)
+  const loansByEmployee = await openLoans(ids).catch((e) => {
+    console.warn("[erp] salaries: open loans skipped:", e instanceof Error ? e.message.slice(0, 120) : "error");
+    return new Map<string, AdvanceDue[]>();
+  });
+  const monthEndDate = lastDayOf(month);
+  // أقساط القروض اللي ميعادها الشهر ده (من الجدول، للقروض اللي اتصرفت قبل الشهر) - loan installments due this month (schedule, loans paid out before this month)
+  const scheduledThisMonth = (id: string) =>
+    money(
+      (loansByEmployee.get(id) ?? [])
+        .filter((l) => l.source === "schedule" && l.date < monthStart)
+        .flatMap((l) => l.schedule)
+        .filter((row) => row.date >= monthStart && row.date <= monthEndDate)
+        .reduce((s, row) => s + row.amount, 0)
+    );
+
   const people: EmployeeSalary[] = attendance.people.map((person) => {
     const assignment = assignmentOf.get(person.id);
     const employee = employeeOf.get(person.id);
@@ -303,6 +320,7 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const common = {
       id: person.id, kind, source, daysPassed, absentDays, dailyRate: isDaily ? dailyRate : 0, presentDays, presentDates, overtime,
       weeks: [] as DailyWeek[], outsideMode: mode, friday: { days: 0, rate: 0, amount: 0, dates: [] as { date: string; half: boolean }[] },
+      loans: [...(loansByEmployee.get(person.id) ?? [])],
     };
     if (kind === "none" || (kind === "daily" && dailyRate <= 0)) {
       return {
@@ -501,7 +519,9 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
     const adjustmentInstallments = sumOf("installment");
 
     const advancesValue = { value: money(advancesOf.get(person.id) ?? 0), manual: false };
-    const loan = { value: money(loanOf.get(person.id) ?? 0), manual: false };
+    // قسط القرض: المسدد الشهر ده (Loan Repayment)، أو قسط الجدول لو أكبر (لو فيه صلاحية على الجدول)
+    // The loan installment: repaid this month (Loan Repayment), or the scheduled installment when larger (schedule readable)
+    const loan = { value: money(Math.max(loanOf.get(person.id) ?? 0, scheduledThisMonth(person.id))), manual: false };
     const insurance = { value: 0, manual: true };
     // الخصومات = خصم Salary Adjustment + خصومات Additional Salary؛ السلف لوحدها = سلف الشهر (Loan) + سلفة (Salary Adjustment)
     // Deductions = Salary Adjustment خصم + Additional Salary deductions; advances apart = loan advances + سلفة
@@ -522,6 +542,31 @@ async function load(key: AttendanceSectionKey): Promise<SectionSalaries> {
       totalWithOvertime: money(earned + overtime.total),
     };
   });
+
+  // سلف الشهر اللي مش قروض (تسوية مرتب سلفة / Employee Advance): بتتخصم إمتى - this month's non-loan advances: when deducted
+  try {
+    const refs = people.flatMap((p) =>
+      p.adjustments
+        .filter((a) => a.kind === "advance" && a.source !== "loan" && a.date >= monthStart)
+        .map((a, i) => ({
+          key: `${p.id}|${i}|${a.date}`,
+          kind: (a.source === "employee_advance" ? "employee_advance" : "salary_adjustment") as AdvanceDue["kind"],
+          employee: p.id,
+          date: a.date,
+          amount: a.amount,
+          voucherType: a.source === "employee_advance" ? "Employee Advance" : undefined,
+          voucherNo: a.source === "employee_advance" ? a.detail ?? undefined : undefined,
+        }))
+    );
+    const dues = await advanceDues(refs);
+    for (const ref of refs) {
+      const due = dues.get(ref.key);
+      const person = people.find((p) => p.id === ref.employee);
+      if (due && person) person.loans.push(due);
+    }
+  } catch (e) {
+    console.warn("[erp] salaries: advance due dates skipped:", e instanceof Error ? e.message.slice(0, 120) : "error");
+  }
 
   const monthly = people.filter((p) => p.kind === "monthly");
   const dailyPaid = people.filter((p) => p.kind === "daily" && p.dailyRate > 0);
