@@ -25,6 +25,7 @@ import { ErpError, erpBalanceOn, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
 import { distributorsSection, salesRepsSection } from "./sales";
 import { walletsSection } from "./wallets";
+import { CharityRaw, charityDuplicates, loadCharityRaw, unfundedCharity } from "./charity-auto";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
 // Every number comes from the config, except those set to source "erp" in dashboardConfig.erp
@@ -324,15 +325,7 @@ function buildAttendance(rows: TodayAttendanceRows | null): Attendance {
   };
 }
 
-type CharityRow = {
-  name: string | number; // ممكن يبقى رقم (naming = autoincrement) - may be a number (autoincrement naming)
-  fund: string | null;
-  txn_type: string | null;
-  amount: number | null;
-  txn_date: string | null;
-  beneficiary: string | null;
-  details: string | null;
-};
+type CharityRow = CharityRaw;
 
 // txn_type في Charity Transaction ← نوع العملية - txn_type -> operation type
 const CHARITY_TYPES: Record<string, CharityOperation["type"]> = { صرف: "out", إيداع: "in", "رصيد افتتاحي": "opening" };
@@ -340,26 +333,25 @@ const CHARITY_TYPES: Record<string, CharityOperation["type"]> = { صرف: "out",
 // مبلغ متقرب لقرشين - amount rounded to 2 decimals
 const money = (value: number) => Math.round(value * 100) / 100;
 
-// كل عمليات الصدقات (كل الصناديق في طلب واحد)، الأحدث الأول - every charity operation in one request, newest first
-async function loadCharityRows(doctype: string): Promise<CharityRow[]> {
-  const { data } = await erpGet<{ data: CharityRow[] }>(`/api/resource/${encodeURIComponent(doctype)}`, {
-    fields: JSON.stringify(["name", "fund", "txn_type", "amount", "txn_date", "beneficiary", "details"]),
-    limit_page_length: 0,
-    order_by: "txn_date desc, creation desc",
-  });
-  return data;
+// كل عمليات الصدقات (كل الصناديق في طلب واحد)، الأحدث الأول، ومعاها مستند الخزنة (لو اتسجلت لوحدها)
+// Every charity operation in one request, newest first, with its treasury voucher (if recorded automatically)
+async function loadCharityRows(): Promise<CharityRow[]> {
+  return loadCharityRaw("desc");
 }
 
 // الصناديق من العمليات: الرصيد من الأول، والصرف بتوقيت القاهرة (اليوم = today، الشهر = أول 7 حروف)
 // Funds from the operations: all-time balance; spending by Cairo date (month = first 7 chars of today)
-function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<Charity, "offline"> {
+function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<Charity, "offline" | "unfunded"> {
   const month = today.slice(0, 7);
+  // المتسجلة مرتين: اليدوية مش بتتحسب (التلقائية بس) - recorded twice: the manual copy is not counted
+  const dups = charityDuplicates(rows);
   const recentCount = dashboardConfig.sizes.page3.recentOpsCount;
   const byFund = new Map<string, CharityFund>(
     funds.map((name) => [name, { name, balance: 0, monthOut: 0, opening: null, lastOut: null, recent: [] }])
   );
   let todayOut = 0;
   for (const row of rows) {
+    if (dups.skip.has(String(row.name))) continue;
     const fund = byFund.get((row.fund ?? "").trim());
     const type = CHARITY_TYPES[(row.txn_type ?? "").trim()];
     if (!fund || !type) {
@@ -406,6 +398,7 @@ function charityFrom(rows: CharityRow[], funds: string[], today: string): Omit<C
     totalBalance: money(list.reduce((sum, fund) => sum + fund.balance, 0)),
     todayOut: money(todayOut),
     monthOut: money(list.reduce((sum, fund) => sum + fund.monthOut, 0)),
+    duplicates: dups.pairs.length,
   };
 }
 
@@ -415,20 +408,23 @@ let lastGoodCharityRows: CharityRow[] | null = null;
 // الصدقات من ERPNext، ولو فشل آخر عمليات نجحت (بيتحسب صرف اليوم/الشهر من جديد) مع offline، ولو مفيش null
 // Charity from ERPNext; on failure the last good rows (today / month recomputed) marked offline, else null
 async function charitySection(results: ErpStatus[]): Promise<Charity | null> {
-  const { doctype, funds } = dashboardConfig.erp.charity;
+  const { funds } = dashboardConfig.erp.charity;
   const today = erpToday();
+  // "صدقة من غير صندوق" (كاش 5 دقايق، والفشل مش بيوقع الصفحة) - cached 5 min; a failure never breaks the page
+  const unfundedPromise = unfundedCharity().catch(() => null);
   try {
-    const rows = await loadCharityRows(doctype);
+    const rows = await loadCharityRows();
     lastGoodCharityRows = rows;
     results.push({ fromErp: true, failed: false });
-    return { ...charityFrom(rows, funds, today), offline: false };
+    const unfunded = await unfundedPromise;
+    return { ...charityFrom(rows, funds, today), offline: false, unfunded: unfunded?.length ?? null };
   } catch (error) {
     console.error(
       `[erp] charity failed, showing ${lastGoodCharityRows ? "last good value" : '"غير متصل"'}:`,
       error instanceof Error ? error.message : error
     );
     results.push({ fromErp: true, failed: true, error: errorText(error) });
-    return lastGoodCharityRows && { ...charityFrom(lastGoodCharityRows, funds, today), offline: true };
+    return lastGoodCharityRows && { ...charityFrom(lastGoodCharityRows, funds, today), offline: true, unfunded: null };
   }
 }
 

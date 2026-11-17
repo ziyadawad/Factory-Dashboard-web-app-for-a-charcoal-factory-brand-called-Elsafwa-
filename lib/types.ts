@@ -289,6 +289,9 @@ export interface CharityDetailOp {
   creation: string; // "2026-11-15 14:30"
   lateDays: number; // creation − txn_date بالأيام - days between the date and its creation
   url: string; // افتح في ERPNext
+  source: CharitySource | null; // "🔗 من الخزنة" - recorded automatically from this treasury voucher
+  // "⚠ متسجلة مرتين": العملية التانية، وuncounted = اليدوية اللي مش محسوبة - the other copy; uncounted = the manual one
+  duplicate: { id: string; url: string; uncounted: boolean } | null;
 }
 
 // تفاصيل صندوق صدقات (أو كل الصناديق لو fund = null) لشهر - one fund's (or all funds') details for a month
@@ -305,6 +308,8 @@ export interface CharityDetails {
   count: number; // عدد العمليات في الشهر - operations in the month
   lastOp: { date: string; creation: string; createdAt: number; owner: string } | null; // آخر عملية (بالـ creation)
   ops: CharityDetailOp[]; // عمليات الشهر، الأحدث الأول - the month's operations, newest first
+  duplicates: CharityDuplicatePair[]; // متسجلة مرتين (اللي في الصندوق ده) - recorded twice (this fund)
+  unfunded: UnfundedCharity[] | null; // صدقة من غير صندوق (كل الصناديق بس) - all-funds view only
 }
 
 // الإنتاج والأفران (الصفحة 2) - production and kilns (page 2)
@@ -373,6 +378,37 @@ export interface Charity {
   todayOut: number; // إجمالي صرف اليوم
   monthOut: number; // إجمالي صرف الشهر
   offline: boolean;
+  duplicates: number; // "⚠ X صدقات مكررة" (يدوي + تلقائي لنفس العملية) - charity recorded twice
+  unfunded: number | null; // "⚠ صدقة من غير صندوق" (null = مقدرناش نقرا) - treasury charity with no fund word
+}
+
+// مستند الخزنة اللي العملية اتسجلت منه لوحدها - the treasury voucher an automatic operation came from
+export interface CharitySource {
+  type: string; // Payment Entry / Journal Entry / Expense Claim
+  name: string;
+  url: string;
+}
+
+// عملية صدقات متسجلة مرتين: يدوي + تلقائي (بيتحسبوا مرة واحدة: التلقائي) - recorded twice (counted once: the automatic)
+export interface CharityDuplicatePair {
+  fund: string;
+  type: "out" | "in";
+  amount: number;
+  manual: { id: string; date: string; url: string };
+  auto: { id: string; date: string; url: string; source: CharitySource };
+}
+
+// صدقة على الخزنة من غير صندوق (أو أكتر من صندوق): مش بتتسجل لوحدها - treasury charity without a (single) fund
+export interface UnfundedCharity {
+  voucherType: string;
+  voucherNo: string;
+  url: string;
+  date: string;
+  type: "out" | "in";
+  amount: number;
+  text: string; // البيان - the voucher text
+  funds: string[]; // الصناديق اللي اتلقت (أكتر من واحد = "many") - funds found
+  reason: "none" | "many";
 }
 
 // باكتات منتج واحد (ربع / نص / كيلو / 2 كيلو / 3 كيلو) - packets of one product
@@ -614,7 +650,12 @@ export type ConfigErpBatches = (
 ) & { types: ConfigBatchType[]; defaultTypeColor: string; optionsCacheMinutes: number };
 
 // الصدقات: doctype = سجل لكل عملية، funds = الصناديق بالترتيب - Charity: one record per operation, funds in order
-export type ConfigErpCharity = { doctype: string; funds: string[] };
+export type ConfigErpCharity = {
+  doctype: string;
+  funds: string[];
+  // صدقات الخزنة التلقائية - treasury charity recorded automatically
+  auto: { treasuryAccounts: string[]; since: string; fundWords: Record<string, string[]> };
+};
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)
 // A stock number: total actual_qty of every itemCode in warehouses (empty = all warehouses)

@@ -3,23 +3,12 @@
 // بتتجاب بس لما اللوحة تتفتح، كاش 30 ثانية، قراية بس من ERPNext
 // Fetched only when a panel opens, 30 s cache, read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpDocUrl, erpPost, erpToday } from "./erp";
+import { erpDocUrl, erpToday } from "./erp";
 import { fullNames } from "./account-details";
-import { CharityDetailOp, CharityDetails } from "./types";
+import { charityDuplicates, loadCharityRaw, sourceOf, unfundedCharity } from "./charity-auto";
+import { CharityDetailOp, CharityDetails, CharityDuplicatePair } from "./types";
 
 const CACHE_MS = 30_000;
-
-type Row = {
-  name: string | number;
-  fund: string | null;
-  txn_type: string | null;
-  amount: number | null;
-  txn_date: string | null;
-  beneficiary: string | null;
-  details: string | null;
-  owner: string | null;
-  creation: string;
-};
 
 // نفس أنواع كارت الصدقات - same types as the charity cards
 const TYPES: Record<string, CharityDetailOp["type"]> = { صرف: "out", إيداع: "in", "رصيد افتتاحي": "opening" };
@@ -43,7 +32,7 @@ function cairoEpoch(text: string): number {
 export class UnknownFundError extends Error {}
 
 // كل العمليات (كل الصناديق، الأقدم الأول) بأرصدتها بعد كل عملية - every operation, oldest first, with running balances
-type Loaded = { ops: CharityDetailOp[] };
+type Loaded = { ops: CharityDetailOp[]; pairs: CharityDuplicatePair[] };
 let cache: { at: number; value: Loaded } | null = null;
 let inFlight: Promise<Loaded> | null = null;
 
@@ -52,12 +41,9 @@ async function loadAll(): Promise<Loaded> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     const { doctype, funds } = dashboardConfig.erp.charity;
-    const { message: rows } = await erpPost<{ message: Row[] }>("/api/method/frappe.client.get_list", {
-      doctype,
-      fields: ["name", "fund", "txn_type", "amount", "txn_date", "beneficiary", "details", "owner", "creation"],
-      order_by: "txn_date asc, creation asc",
-      limit_page_length: 0,
-    });
+    const rows = await loadCharityRaw("asc");
+    // المتسجلة مرتين: اليدوية بتظهر بس مش بتتحسب في الرصيد - recorded twice: the manual copy shows but is not counted
+    const dups = charityDuplicates(rows);
     const names = await fullNames(Array.from(new Set(rows.map((r) => r.owner ?? "").filter(Boolean))));
     const known = new Set(funds);
     const balances = new Map<string, number>();
@@ -69,12 +55,14 @@ async function loadAll(): Promise<Loaded> {
       // نفس الكارت: صندوق أو نوع مش معروف بيتساب - same as the cards: unknown fund / type is skipped
       if (!known.has(fund) || !type) continue;
       const amount = Number(r.amount) || 0;
-      const delta = type === "out" ? -amount : amount;
+      const id = String(r.name);
+      const uncounted = dups.skip.has(id);
+      const delta = uncounted ? 0 : type === "out" ? -amount : amount;
       balances.set(fund, (balances.get(fund) ?? 0) + delta);
       total += delta;
       const date = String(r.txn_date ?? "").slice(0, 10);
       const creation = String(r.creation ?? "").slice(0, 19);
-      const id = String(r.name);
+      const other = dups.partner.get(id);
       ops.push({
         id, fund, date, type, amount: money(amount),
         balanceAfter: money(balances.get(fund) ?? 0), totalAfter: money(total),
@@ -82,9 +70,11 @@ async function loadAll(): Promise<Loaded> {
         owner: names.get(r.owner ?? "") ?? r.owner ?? "",
         creation: creation.slice(0, 16), lateDays: date ? Math.max(0, dayDiff(date, creation.slice(0, 10))) : 0,
         url: erpDocUrl(doctype, id),
+        source: sourceOf(r),
+        duplicate: other ? { id: other, url: erpDocUrl(doctype, other), uncounted } : null,
       });
     }
-    const value = { ops };
+    const value = { ops, pairs: dups.pairs };
     cache = { at: Date.now(), value };
     return value;
   })();
@@ -100,14 +90,16 @@ export async function charityDetails(fund: string | null, month: string | null):
   if (fund !== null && !dashboardConfig.erp.charity.funds.includes(fund)) throw new UnknownFundError(`Unknown fund ${fund}`);
   const today = erpToday();
   const wanted = month ?? today.slice(0, 7);
-  const { ops: all } = await loadAll();
+  const [{ ops: all, pairs }, unfunded] = await Promise.all([loadAll(), fund === null ? unfundedCharity() : Promise.resolve(null)]);
   const ops = fund === null ? all : all.filter((o) => o.fund === fund);
   const after = (o: CharityDetailOp) => (fund === null ? o.totalAfter : o.balanceAfter);
 
   const before = ops.filter((o) => o.date.slice(0, 7) < wanted);
   const inMonth = ops.filter((o) => o.date.slice(0, 7) === wanted);
   const upTo = ops.filter((o) => o.date.slice(0, 7) <= wanted);
-  const sum = (type: CharityDetailOp["type"]) => money(inMonth.filter((o) => o.type === type).reduce((s, o) => s + o.amount, 0));
+  // اليدوية المتكررة مش بتتحسب في الإجماليات - the manual duplicate is left out of the totals
+  const sum = (type: CharityDetailOp["type"]) =>
+    money(inMonth.filter((o) => o.type === type && !o.duplicate?.uncounted).reduce((s, o) => s + o.amount, 0));
   // آخر عملية = الأحدث في التسجيل (creation) - the latest by creation
   const last = ops.reduce<CharityDetailOp | null>((best, o) => (!best || o.creation > best.creation ? o : best), null);
   const months = Array.from(new Set(ops.map((o) => o.date.slice(0, 7)))).sort().reverse();
@@ -126,5 +118,7 @@ export async function charityDetails(fund: string | null, month: string | null):
     lastOp: last && { date: last.date, creation: last.creation, createdAt: cairoEpoch(`${last.creation}:00`), owner: last.owner },
     // الأحدث الأول، والرصيد بعدها حسب العرض (الصندوق أو كل الصناديق) - newest first; balance after per the view
     ops: inMonth.map((o) => ({ ...o, balanceAfter: after(o) })).reverse(),
+    duplicates: fund === null ? pairs : pairs.filter((p) => p.fund === fund),
+    unfunded: fund === null ? unfunded : null,
   };
 }

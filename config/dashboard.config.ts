@@ -315,6 +315,26 @@ export const dashboardConfig = {
       doctype: "Charity Transaction",
       // الأسامي بتظهر على الشاشة زي ما هي مكتوبة هنا بالظبط - names are shown exactly as written
       funds: ["خزينة حصة التعبئة", "خزينة حصة الانتاج", "خزينة خارجية 1", "خزينة خارجية 2"],
+      // ===== صدقات الخزنة اللي بتتسجل لوحدها (Server Scripts في reports/erpnext-scripts/charity-auto.md) =====
+      // مستند خزنة (Payment Entry / Journal Entry / سطر صدقات في Expense Claim) يبقى صدقة لو فيه سطر على
+      // accounts.charityAccounts (5222 - صدقات) وفي نفس الوقت دخل أو خرج من treasuryAccounts.
+      // الصندوق من كلام المستند (البيان / الملاحظات / المرجع / اسم الحساب) بعد توحيد العربي، بالكلمات دي.
+      // لو مفيش كلمة (أو أكتر من صندوق) مفيش حاجة بتتسجل، وبيظهر على الداشبورد "⚠ صدقة من غير صندوق".
+      // ⚠️ لو غيرت الكلمات هنا لازم تولّد السكربتات تاني وتلزقها في ERPNext عشان يفضلوا زي بعض
+      // Treasury charity recorded automatically (Server Scripts): a voucher is charity when it has a line on
+      // accounts.charityAccounts AND moves money in/out of treasuryAccounts. The fund comes from the voucher text
+      // (normalized Arabic) by these words; no word (or several funds) = nothing created, listed as "صدقة من غير صندوق"
+      auto: {
+        treasuryAccounts: ["1110 - الخزينة - AC"], // الخزنة - the treasury
+        // من التاريخ ده بس بيتعرض "صدقة من غير صندوق" (يوم ما السكربتات اتلزقت) - only from this date
+        since: "2026-11-17",
+        fundWords: {
+          "خزينة حصة الانتاج": ["انتاج"], // خزينة حصة الانتاج
+          "خزينة حصة التعبئة": ["تعبئه", "تعبيه"], // خزينة حصة التعبئة
+          "خزينة خارجية 1": ["خارجيه 1"], // خزينة خارجية 1 (خارجية١ / خارجيه1 كمان)
+          "خزينة خارجية 2": ["خارجيه 2"], // خزينة خارجية 2 (خارجية٢ / خارجيه2 كمان)
+        } as Record<string, string[]>,
+      },
     } as ConfigErpCharity,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)

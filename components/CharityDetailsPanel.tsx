@@ -2,8 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowDownLeft, ArrowUpRight, ExternalLink, HandHeart, Vault, X } from "lucide-react";
-import { CharityDetailOp, CharityDetails } from "@/lib/types";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ExternalLink, HandHeart, Vault, X } from "lucide-react";
+import { CharityDetailOp, CharityDetails, CharityDuplicatePair, UnfundedCharity } from "@/lib/types";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -109,8 +109,18 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
         <td className={`${td} text-center text-white font-semibold whitespace-nowrap`}>{n(op.balanceAfter)}</td>
         {/* البيان / لمين بياخد اللي فاضل من العرض، والنص كامل في التفاصيل - takes the leftover width; full text when opened */}
         <td className={`${td} text-gray-200 w-full max-w-0`}>
-          <span className="block truncate" title={toEnglishDigits(text)}>
-            {text ? toEnglishDigits(text) : <span className="text-gray-600">—</span>}
+          <span className="flex items-center gap-2 min-w-0">
+            {op.duplicate && (
+              <span className="shrink-0 rounded-full bg-statusRed/20 text-statusRed font-bold px-2 text-[0.85em] leading-[1.8]">⚠ متسجلة مرتين</span>
+            )}
+            {op.source && (
+              <span className="shrink-0 rounded-full bg-sky-400/15 text-sky-300 font-semibold px-2 text-[0.85em] leading-[1.8]" title={op.source.type}>
+                🔗 من الخزنة <span dir="ltr" className="font-numbers">{op.source.name}</span>
+              </span>
+            )}
+            <span className={`min-w-0 truncate ${op.duplicate?.uncounted ? "line-through decoration-statusRed/70" : ""}`} title={toEnglishDigits(text)}>
+              {text ? toEnglishDigits(text) : <span className="text-gray-600">—</span>}
+            </span>
           </span>
         </td>
         <td className={`${td} whitespace-nowrap`}>
@@ -141,6 +151,26 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
                   <span className="text-gray-500">البيان: </span>
                   {op.details ? toEnglishDigits(op.details) : <span className="text-gray-500">مفيش بيان</span>}
                 </p>
+                {op.source && (
+                  <p className="text-sky-300">
+                    🔗 اتسجلت لوحدها من مستند الخزنة{" "}
+                    <a href={op.source.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold underline underline-offset-2">
+                      <span dir="ltr" className="font-numbers">{op.source.name}</span>
+                    </a>{" "}
+                    <span className="text-gray-500">({op.source.type})</span>
+                  </p>
+                )}
+                {op.duplicate && (
+                  <p className="text-statusRed font-semibold">
+                    ⚠ متسجلة مرتين مع{" "}
+                    <a href={op.duplicate.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="underline underline-offset-2">
+                      <span dir="ltr" className="font-numbers">{op.duplicate.id}</span>
+                    </a>
+                    {op.duplicate.uncounted
+                      ? " — دي اليدوية ومش محسوبة في الرصيد، ألغيها من ERPNext"
+                      : " — دي اللي محسوبة، ألغي اليدوية من ERPNext"}
+                  </p>
+                )}
                 <p className="text-gray-400">
                   سجّلها: <span className="text-gray-200">{op.owner || "—"}</span>
                   <span className="text-gray-500"> · وقت التسجيل </span>
@@ -169,6 +199,67 @@ export interface CharityPanelTarget {
   fund: string | null; // null = كل الصناديق - all funds
   filter: CharityFilter; // الفلتر في الأول - the initial filter
   todayOnly: boolean; // "إجمالي صرف اليوم": النهارده بس - today only
+  issues?: boolean; // من شيب التحذيرات: صندوق التحذيرات مفتوح - opened from a warning chip: the warnings box starts open
+}
+
+const link = "inline-flex items-center gap-1 font-bold text-brandOrange hover:underline underline-offset-2";
+
+// صندوق التحذيرات: المتسجلة مرتين + صدقة من غير صندوق - the warnings box: recorded twice + no fund
+function IssuesBox({ duplicates, unfunded, startOpen }: { duplicates: CharityDuplicatePair[]; unfunded: UnfundedCharity[] | null; startOpen: boolean }) {
+  const [open, setOpen] = useState(startOpen);
+  const noFund = unfunded ?? [];
+  if (duplicates.length === 0 && noFund.length === 0) return null;
+  return (
+    <div className="shrink-0 border-b border-cardBorder px-5 py-2 max-h-[40%] overflow-auto">
+      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-3 font-bold">
+        {duplicates.length > 0 && <span className="rounded-full bg-statusRed/15 text-statusRed px-3 leading-[1.9]">⚠ {n(duplicates.length)} صدقات مكررة</span>}
+        {noFund.length > 0 && <span className="rounded-full bg-statusAmber/15 text-statusAmber px-3 leading-[1.9]">⚠ {n(noFund.length)} صدقة من غير صندوق</span>}
+        <ChevronDown size={20} className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-1.5 leading-[1.8]">
+          {duplicates.map((p) => (
+            <p key={p.manual.id} className="rounded-lg border border-statusRed/40 bg-statusRed/[0.06] px-3 py-1 flex flex-wrap items-center gap-x-3">
+              <b className="text-statusRed">⚠ متسجلة مرتين</b>
+              <span className="text-gray-200">{toEnglishDigits(p.fund)}</span>
+              <span className={p.type === "in" ? "text-statusGreen" : "text-statusRed"}>
+                {p.type === "in" ? "إيداع" : "صرف"} {n(p.amount)} ج.م
+              </span>
+              <span className="text-gray-400">اتحسبت مرة واحدة (التلقائية)</span>
+              <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
+                <ExternalLink size={14} /> اليدوية <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)} (ألغيها)
+              </a>
+              <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
+                <ExternalLink size={14} /> التلقائية <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
+              </a>
+              <a href={p.auto.source.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+                🔗 <span dir="ltr" className="font-numbers">{p.auto.source.name}</span>
+              </a>
+            </p>
+          ))}
+          {noFund.map((u, i) => (
+            <p key={`${u.voucherNo}-${i}`} className="rounded-lg border border-statusAmber/40 bg-statusAmber/[0.06] px-3 py-1 flex flex-wrap items-center gap-x-3">
+              <b className="text-statusAmber">⚠ صدقة من غير صندوق</b>
+              <span className="text-gray-300">{shortDate(u.date)}</span>
+              <span className={u.type === "in" ? "text-statusGreen" : "text-statusRed"}>
+                {u.type === "in" ? "إيداع" : "صرف"} {n(u.amount)} ج.م
+              </span>
+              <span className="text-gray-200 min-w-0 break-words">{u.text ? toEnglishDigits(u.text) : "مفيش بيان"}</span>
+              {u.reason === "many" && <span className="text-gray-400">(فيه أكتر من صندوق: {u.funds.join(" و ")})</span>}
+              <a href={u.url} target="_blank" rel="noopener noreferrer" className={link}>
+                <ExternalLink size={14} /> افتح <span dir="ltr" className="font-numbers">{u.voucherNo}</span>
+              </a>
+            </p>
+          ))}
+          {noFund.length > 0 && (
+            <p className="text-gray-500 text-[0.9em]">
+              اكتب اسم الصندوق في بيان المستند (انتاج / تعبئة / خارجية 1 / خارجية 2) أو سجّلها بإيدك في Charity Transaction.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CharityDetailsPanel({ target, onClose }: { target: CharityPanelTarget; onClose: () => void }) {
@@ -349,6 +440,8 @@ export default function CharityDetailsPanel({ target, onClose }: { target: Chari
             <SummaryBox label="عدد العمليات" value={data.count} color="text-gray-100" isCount />
           </div>
         )}
+
+        {data && <IssuesBox duplicates={data.duplicates} unfunded={data.unfunded} startOpen={!!target.issues} />}
 
         {/* العمليات (بتعمل scroll جوه اللوحة) - the operations (scroll inside the panel) */}
         <div className={`flex-1 min-h-0 overflow-auto ${loadingMonth && data ? "opacity-50" : ""}`}>

@@ -44,6 +44,15 @@ function OfflineBadge() {
   );
 }
 
+// عدد من غير "ج.م" - a plain count (no currency)
+function Count({ value }: { value: number }) {
+  return (
+    <span dir="ltr" className="font-numbers tabular-nums">
+      {formatNumber(value)}
+    </span>
+  );
+}
+
 // مربع في الشريط اللي فوق - a box in the top summary strip
 function SummaryBox({ label, value, icon: Icon, tone, onClick }: { label: string; value: number; icon: LucideIcon; tone: string; onClick?: () => void }) {
   const sizes = dashboardConfig.sizes.charityPage;
@@ -57,8 +66,8 @@ function SummaryBox({ label, value, icon: Icon, tone, onClick }: { label: string
       <div className={`p-2.5 rounded-xl ${tone}`} style={{ backgroundColor: "color-mix(in srgb, currentColor 12%, transparent)" }}>
         <Icon size={26} />
       </div>
-      <p className="text-gray-300 font-semibold text-lg whitespace-nowrap">{label}</p>
-      <p className={`ms-auto font-bold leading-none ${value < 0 ? "text-statusRed" : tone}`} style={{ fontSize: sizes.summaryNumberFontSize }}>
+      <p className="min-w-0 text-gray-300 font-semibold text-lg leading-snug min-[1600px]:whitespace-nowrap">{label}</p>
+      <p className={`ms-auto shrink-0 whitespace-nowrap font-bold leading-none ${value < 0 ? "text-statusRed" : tone}`} style={{ fontSize: sizes.summaryNumberFontSize }}>
         <Money value={value} />
       </p>
     </div>
@@ -200,6 +209,29 @@ export default function CharitySection({ data, onOpen }: CharitySectionProps) {
         {data.offline && (
           <div className="flex items-center">
             <OfflineBadge />
+          </div>
+        )}
+        {/* تحذيرات: متسجلة مرتين / من غير صندوق (الضغط بيفتح التفاصيل) - warnings; a click opens the details */}
+        {(data.duplicates > 0 || (data.unfunded ?? 0) > 0) && (
+          <div className="shrink-0 flex flex-col justify-center gap-2">
+            {data.duplicates > 0 && (
+              <button
+                type="button"
+                onClick={onOpen && (() => onOpen({ fund: null, filter: "all", todayOnly: false, issues: true }))}
+                className="rounded-full border border-statusRed/60 bg-statusRed/15 text-statusRed font-bold text-[14px] min-[1600px]:text-lg px-3 min-[1600px]:px-4 py-0.5 min-[1600px]:py-1 whitespace-nowrap hover:bg-statusRed/25"
+              >
+                ⚠ <Count value={data.duplicates} /> صدقات مكررة
+              </button>
+            )}
+            {(data.unfunded ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={onOpen && (() => onOpen({ fund: null, filter: "all", todayOnly: false, issues: true }))}
+                className="rounded-full border border-statusAmber/60 bg-statusAmber/15 text-statusAmber font-bold text-[14px] min-[1600px]:text-lg px-3 min-[1600px]:px-4 py-0.5 min-[1600px]:py-1 whitespace-nowrap hover:bg-statusAmber/25"
+              >
+                ⚠ <Count value={data.unfunded ?? 0} /> صدقة من غير صندوق
+              </button>
+            )}
           </div>
         )}
       </div>
