@@ -830,3 +830,25 @@ export async function repYear(warehouseOrName: string, year: number): Promise<Re
     };
   });
 }
+
+// كل فواتير المندوب في سنة يوم بيوم (للبحث عن عميل في "كل الشهور") - نفس حساب جدول الشهر، بس على السنة كلها
+// All of a rep's invoices in a year, day by day (for the customer search across "كل الشهور") - the month table's math over the whole year
+const yearDaysCache = cached<RepDetails>();
+
+export async function repYearDays(warehouseOrName: string, year: number): Promise<RepDetails | null> {
+  const rep = findRep(warehouseOrName);
+  if (!rep) return null;
+  const today = erpToday();
+  const thisYear = Number(today.slice(0, 4));
+  if (year !== thisYear && year !== thisYear - 1) return null;
+  const to = year === thisYear ? today : `${year}-12-31`;
+  return yearDaysCache(`${rep.warehouse}|${year}|${today}`, async () => {
+    const [rows, months] = await Promise.all([
+      loadDetailRows(rep.warehouse, `${year}-01-01`, to),
+      repMonths(rep.warehouse, today).catch(() => [today.slice(0, 7)]),
+    ]);
+    const names = await fullNames(Array.from(new Set(rows.map((r) => r.owner ?? "").filter(Boolean))));
+    // "month" هنا = السنة ("2026") فكل أيام السنة بتدخل - "month" here is the year, so every day of the year is kept
+    return detailsFrom(rep, rows, String(year), today, null, names, months);
+  });
+}

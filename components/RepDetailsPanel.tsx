@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useIdleClose } from "@/lib/useIdleClose";
 import useSWR from "swr";
 import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Truck, X } from "lucide-react";
-import { RepDebt, RepDetails, RepInvoice, RepSales, RepYear } from "@/lib/types";
+import { RepDay, RepDebt, RepDetails, RepInvoice, RepSales, RepYear } from "@/lib/types";
 import ActivityDetailsPanel from "./ActivityDetailsPanel";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { daysAgoText, monthName, Num, Percent } from "./SalesCommon";
@@ -55,7 +55,7 @@ function DebtCell({ value, className }: { value: number; className: string }) {
 // The debt tab: this month / before this month / total on top, then customers (biggest first); clicking a customer
 // shows their unpaid invoices. Split by invoice date over the same open invoices (calculation unchanged):
 // before = customer total - this month, so the sum always equals the card number
-function DebtTab({ debt, month }: { debt: RepDebt; month: string }) {
+function DebtTab({ debt, month, emptyText }: { debt: RepDebt; month: string; emptyText?: string }) {
   const [openCustomer, setOpenCustomer] = useState<string | null>(null);
   const th = "px-3 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
   const monthStart = `${month}-01`;
@@ -108,7 +108,7 @@ function DebtTab({ debt, month }: { debt: RepDebt; month: string }) {
 
       <div className="flex-1 min-h-0 overflow-auto">
         {debt.list.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xl text-statusGreen">مفيش مديونية برّه ✅</div>
+          <div className={`h-full flex items-center justify-center text-xl ${emptyText ? "text-gray-400" : "text-statusGreen"}`}>{emptyText ?? "مفيش مديونية برّه ✅"}</div>
         ) : (
           <table className="w-full border-separate border-spacing-0 text-[16px] leading-[2.1]">
             <thead className="sticky top-0 z-10 bg-card">
@@ -293,6 +293,43 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
     setTab("days");
   }, []);
   const pickMonth = useCallback((month: string) => pick(month === currentMonth ? "" : month), [pick, currentMonth]);
+
+  // ===== البحث عن عميل - the customer search =====
+  // query = المكتوب، term = نفس المكتوب بعد 200ms، picked = عميل اتختار من الاقتراحات (مطابقة بالظبط)
+  // query = typed text, term = the same after 200 ms, picked = a customer chosen from the suggestions (exact match)
+  const [query, setQuery] = useState("");
+  const [term, setTerm] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
+  const [allMonths, setAllMonths] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const needle = normalizeAr(term);
+  const filtering = picked !== null || needle !== "";
+  const matches = useCallback((name: string) => (picked !== null ? name === picked : normalizeAr(name).includes(needle)), [picked, needle]);
+  const clearSearch = useCallback(() => {
+    setQuery("");
+    setTerm("");
+    setPicked(null);
+    setSuggestOpen(false);
+  }, []);
+  const choose = useCallback((name: string) => {
+    setQuery(name);
+    setTerm(name);
+    setPicked(name);
+    setSuggestOpen(false);
+  }, []);
+  // "كل الشهور" (أو البحث وانت في ملخص السنة): بيدور في السنة كلها، وبيتجاب بس لما يكون فيه بحث
+  // "كل الشهور" (or searching from the year summary): searches the whole year, fetched only while searching
+  const wholeYear = allMonths || yearView;
+  const searchYear = (yearView ? view.slice(5) : (shownMonth || currentMonth).slice(0, 4)) || "";
+  const yearDays = useSWR<RepDetails>(filtering && wholeYear && searchYear ? `${base}&year=${searchYear}&days=1` : null, fetcher, swrOptions);
+  const source = wholeYear ? yearDays.data : data;
+  const sourceError = wholeYear ? yearDays.error : error;
   // الفاتورة المفتوحة (نفس لوحة تفاصيل "اللي بيحصل دلوقتي") - the open invoice (same panel as the activity feed)
   const [invoice, setInvoice] = useState<RepInvoice | null>(null);
   const invoiceOpen = useRef(false);
@@ -332,6 +369,31 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Ctrl+F أو "/" بيروحوا للبحث؛ Esc بيمسح البحث الأول، وبعدين بيقفل اللوحة (قبل useIdleClose: capture)
+  // Ctrl+F or "/" focus the search; Esc clears the search first, then closes the panel (runs before useIdleClose: capture)
+  const searchActive = useRef(false);
+  searchActive.current = query !== "" || picked !== null;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (invoiceOpen.current) return;
+      const target = e.target as HTMLElement | null;
+      const inField = !!target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      const ctrlF = (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === "KeyF" || e.key.toLowerCase() === "f");
+      const slash = !inField && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "/" || e.code === "Slash");
+      if (ctrlF || slash) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      } else if (e.key === "Escape" && searchActive.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSearch();
+      }
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  }, [clearSearch]);
+
   // أرقام العنوان: الشهر الحالي من الكارت بالظبط، وأي شهر تاني من تفاصيله، والسنة = مجموع الشهور
   // Header numbers: the current month exactly as the card, other months from their details, the year = sum of months
   const isCurrent = view === "";
@@ -342,6 +404,31 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
   const columns = data?.columns ?? [];
   const years = Array.from(new Set(months.map((m) => m.slice(0, 4))));
   const debt = current.data?.debt ?? data?.debt ?? null;
+
+  // البحث: الأيام والإجماليات والمديونية بتاعة العميل بس (من نفس الأرقام، من غير أي حساب جديد)
+  // The search: the customer's own days, totals and debt (from the same numbers, no new calculation)
+  const width = (source?.columns ?? data?.columns ?? []).length;
+  const filtered = filtering && source ? filterDays(source.days, matches, width) : null;
+  const shownDebt = debt && filtering ? debtFor(debt, matches) : debt;
+  const suggestions = (() => {
+    if (!needle || picked !== null) return [];
+    const names = tab === "debt" ? (debt?.list ?? []).map((c) => c.customer) : (source?.days ?? []).flatMap((d) => d.invoices.map((i) => i.customer));
+    const hits = Array.from(new Set(names)).filter((n) => normalizeAr(n).includes(needle));
+    return hits.sort((a, b) => Number(!normalizeAr(a).startsWith(needle)) - Number(!normalizeAr(b).startsWith(needle)) || a.localeCompare(b, "ar")).slice(0, 8);
+  })();
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!suggestions.length) return;
+      e.preventDefault();
+      setSuggestOpen(true);
+      setHighlight((h) => (h + (e.key === "ArrowDown" ? 1 : suggestions.length - 1)) % suggestions.length);
+    } else if (e.key === "Enter" && suggestOpen && suggestions[highlight]) {
+      e.preventDefault();
+      choose(suggestions[highlight]);
+    }
+  };
+  const filterLabel = picked ?? query.trim();
+
   const arrow = "p-1 rounded-lg border border-cardBorder bg-background/70 text-gray-300 hover:text-white disabled:opacity-30 disabled:hover:text-gray-300";
   const th = "px-2 py-2 text-center font-semibold text-gray-400 whitespace-nowrap";
 
@@ -357,7 +444,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
         onClick={(e) => e.stopPropagation()}
       >
         {/* العنوان - header */}
-        <div className="shrink-0 flex items-center gap-4 px-5 py-3 border-b border-cardBorder">
+        <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 border-b border-cardBorder">
           <h2 className="font-extrabold text-white text-[26px] leading-[1.6] truncate">{toEnglishDigits(rep.name)}</h2>
           <span className="shrink-0 flex items-center gap-1.5 rounded-full border border-brandOrange/40 bg-brandOrange/10 text-brandOrange px-3 font-semibold text-lg leading-[1.75]">
             <Truck size={20} />
@@ -391,15 +478,99 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
               <ChevronLeft size={22} />
             </button>
           </div>
+          {/* البحث عن عميل + "كل الشهور" - the customer search + "all months" */}
+          <div className="flex items-center gap-2 min-w-[170px] flex-1 max-w-[340px]">
+            <div className="relative flex-1 min-w-0">
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                dir="rtl"
+                placeholder="🔍 ابحث عن عميل…"
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPicked(null);
+                  setSuggestOpen(true);
+                  setHighlight(0);
+                }}
+                onFocus={() => setSuggestOpen(true)}
+                onBlur={() => setSuggestOpen(false)}
+                onKeyDown={onSearchKey}
+                className="w-full rounded-lg border border-cardBorder bg-background text-gray-100 placeholder:text-gray-500 text-lg leading-[1.6] ps-2 pe-8 outline-none focus:border-brandOrange/70 [&::-webkit-search-cancel-button]:hidden"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={clearSearch}
+                  aria-label="امسح البحث"
+                  className="absolute inset-y-0 end-1.5 my-auto h-fit p-0.5 rounded text-gray-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              )}
+              {suggestOpen && suggestions.length > 0 && (
+                <ul className="absolute z-30 top-full mt-1 inset-x-0 rounded-lg border border-cardBorder bg-card shadow-2xl py-1 max-h-[50vh] overflow-auto">
+                  {suggestions.map((name, i) => (
+                    <li key={name}>
+                      <button
+                        type="button"
+                        // mousedown عشان الاختيار يحصل قبل ما الخانة تفقد التركيز - mousedown so the pick lands before the input blurs
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          choose(name);
+                        }}
+                        onMouseEnter={() => setHighlight(i)}
+                        className={`w-full text-start px-3 text-[16px] leading-[2] truncate ${i === highlight ? "bg-brandOrange/15 text-white" : "text-gray-300"}`}
+                      >
+                        {toEnglishDigits(name)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAllMonths((v) => !v)}
+              aria-pressed={allMonths}
+              title="دوّر على العميل في السنة كلها"
+              className={`shrink-0 rounded-lg border px-2 text-[15px] font-semibold leading-[1.9] whitespace-nowrap ${
+                allMonths ? "border-brandOrange/70 bg-brandOrange/15 text-brandOrange" : "border-cardBorder bg-background/70 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              كل الشهور
+            </button>
+          </div>
           <div className="ms-auto flex items-center gap-5 whitespace-nowrap">
-            <p className="text-lg text-gray-400">
-              الإجمالي{" "}
-              <Num value={headPackets} className={`text-[28px] font-extrabold ${reached ? "text-statusGreen" : "text-white"}`} /> باكت
-            </p>
-            <p className="text-lg text-gray-400">
-              التارجت <Num value={headTarget} className="text-gray-200 font-bold" />{" "}
-              <Percent value={percent} className={`text-[26px] font-extrabold ${reached ? "text-statusGreen" : "text-brandOrange"}`} />
-            </p>
+            {filtering ? (
+              <>
+                {/* أرقام العميل بدل أرقام المندوب - the customer's numbers instead of the rep's */}
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-400/10 text-sky-300 ps-3 pe-1.5 text-lg leading-[1.75] max-w-[260px]">
+                  <span className="truncate">عميل: {toEnglishDigits(filterLabel)}</span>
+                  <button type="button" onClick={clearSearch} aria-label="امسح العميل" className="p-0.5 rounded-full hover:bg-white/10 hover:text-white">
+                    <X size={16} />
+                  </button>
+                </span>
+                <p className="text-lg text-gray-400">
+                  الإجمالي <Num value={filtered?.total.packets ?? 0} className="text-[28px] font-extrabold text-white" /> باكت
+                </p>
+                <p className="text-lg text-gray-400">
+                  <Money value={filtered?.total.amount ?? 0} className="text-[24px] font-extrabold text-gray-100" />
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg text-gray-400">
+                  الإجمالي{" "}
+                  <Num value={headPackets} className={`text-[28px] font-extrabold ${reached ? "text-statusGreen" : "text-white"}`} /> باكت
+                </p>
+                <p className="text-lg text-gray-400">
+                  التارجت <Num value={headTarget} className="text-gray-200 font-bold" />{" "}
+                  <Percent value={percent} className={`text-[26px] font-extrabold ${reached ? "text-statusGreen" : "text-brandOrange"}`} />
+                </p>
+              </>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -441,17 +612,39 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
         <div className={`flex-1 min-h-0 ${tab === "debt" ? "overflow-hidden" : "overflow-auto"}`}>
           {tab === "debt" ? (
             // المديونية دايماً لحد النهارده مهما كان الشهر المختار - debt is always as of today, whatever month is picked
-            debt ? (
+            shownDebt ? (
               <div className="h-full min-h-0 flex flex-col">
                 <p className="shrink-0 px-5 pt-2 text-[15px] text-sky-400">المديونية الحالية — مش مرتبطة بالشهر</p>
                 <div className="flex-1 min-h-0">
-                  <DebtTab debt={debt} month={currentMonth} />
+                  <DebtTab
+                    debt={shownDebt}
+                    month={currentMonth}
+                    emptyText={filtering ? `مفيش مديونية على "${toEnglishDigits(filterLabel)}"` : undefined}
+                  />
                 </div>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-xl text-gray-400">
                 {current.data || current.error ? "المديونية مش متاحة دلوقتي — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
               </div>
+            )
+          ) : filtering ? (
+            // البحث: أيام العميل بس مفتوحة، وفواتيره بس - the search: only the customer's days, expanded, with only their invoices
+            !filtered ? (
+              <div className="h-full flex items-center justify-center text-xl text-gray-400">
+                {sourceError ? "غير متصل — جرب تاني بعد شوية" : wholeYear ? "جاري البحث في السنة كلها..." : "جاري تحميل التفاصيل..."}
+              </div>
+            ) : (
+              <CustomerSales
+                f={filtered}
+                columns={source?.columns ?? []}
+                wholeYear={wholeYear}
+                showCustomer={picked === null}
+                debt={shownDebt ? shownDebt.amount : null}
+                period={wholeYear ? `سنة ${searchYear}` : monthLabel(source?.month ?? "")}
+                name={filterLabel}
+                onOpenInvoice={openInvoice}
+              />
             )
           ) : yearView ? (
             year ? (
@@ -764,6 +957,227 @@ function DayCustomers({ invoices, onOpenInvoice }: { invoices: RepInvoice[]; onO
           </Fragment>
         );
       })}
+    </>
+  );
+}
+
+// ===== البحث عن عميل - the customer search =====
+
+// توحيد الكتابة العربي: أ/إ/آ = ا، ة = ه، ى = ي، من غير تشكيل ولا مسافات - Arabic-normalized text for matching
+function normalizeAr(text: string): string {
+  return toEnglishDigits(text)
+    .toLowerCase()
+    .replace(/[ً-ٰٟـ]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, "");
+}
+
+type CustomerFilter = {
+  days: RepDay[]; // الأيام اللي فيها فواتير العميل بس، وفيها فواتيره بس - only the customer's days, with only their invoices
+  total: { columns: number[]; packets: number; amount: number; customers: number };
+  invoices: number;
+  lastBuy: string | null; // آخر فاتورة بيع (مش مرتجع) - the latest sale (not a return)
+};
+
+// نفس أرقام الفواتير، متجمعة تاني لفواتير العميل بس - the same invoice numbers, re-summed over the customer's invoices only
+function filterDays(days: RepDay[], match: (name: string) => boolean, width: number): CustomerFilter {
+  const list: RepDay[] = [];
+  for (const day of days) {
+    const invoices = day.invoices.filter((inv) => match(inv.customer));
+    if (invoices.length === 0) continue;
+    const columns = new Array<number>(width).fill(0);
+    for (const inv of invoices) inv.columns.forEach((v, i) => (columns[i] += v));
+    list.push({
+      date: day.date,
+      columns,
+      packets: invoices.reduce((s, i) => s + i.packets, 0),
+      amount: Math.round(invoices.reduce((s, i) => s + i.amount, 0) * 100) / 100,
+      customers: new Set(invoices.filter((i) => !i.isReturn).map((i) => i.customer)).size,
+      invoices,
+    });
+  }
+  const columns = new Array<number>(width).fill(0);
+  for (const day of list) day.columns.forEach((v, i) => (columns[i] += v));
+  const sales = list.filter((d) => d.invoices.some((i) => !i.isReturn)).map((d) => d.date);
+  return {
+    days: list,
+    total: {
+      columns,
+      packets: list.reduce((s, d) => s + d.packets, 0),
+      amount: Math.round(list.reduce((s, d) => s + d.amount, 0) * 100) / 100,
+      customers: list.reduce((s, d) => s + d.customers, 0),
+    },
+    invoices: list.reduce((s, d) => s + d.invoices.length, 0),
+    lastBuy: sales.length ? sales.reduce((a, b) => (a > b ? a : b)) : null,
+  };
+}
+
+// مديونية العملاء اللي بيطابقوا البحث بس - the debt of the matching customers only
+function debtFor(debt: RepDebt, match: (name: string) => boolean): RepDebt {
+  const list = debt.list.filter((c) => match(c.customer));
+  return { ...debt, list, amount: Math.round(list.reduce((s, c) => s + c.amount, 0) * 100) / 100, customers: list.length };
+}
+
+// أيام العميل (مفتوحة) وفواتيره، مقسمة بالشهر في "كل الشهور"، وفوقهم ملخص صغير
+// The customer's days (expanded) and invoices, grouped by month in "كل الشهور", under a small summary
+function CustomerSales({
+  f,
+  columns,
+  wholeYear,
+  showCustomer,
+  debt,
+  period,
+  name,
+  onOpenInvoice,
+}: {
+  f: CustomerFilter;
+  columns: string[];
+  wholeYear: boolean;
+  showCustomer: boolean;
+  debt: number | null;
+  period: string;
+  name: string;
+  onOpenInvoice: (invoice: RepInvoice) => void;
+}) {
+  const th = "px-2 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+  const foot = "px-2 text-center border-t-2 border-brandOrange/50";
+  const span = columns.length + 6;
+  const box = "rounded-xl border border-cardBorder bg-background/70 px-4 py-1";
+  const label = "text-gray-400 font-semibold text-[14px] leading-[1.7]";
+  const value = "text-[24px] font-extrabold leading-[1.35]";
+  const months = new Map<string, RepDay[]>();
+  for (const day of f.days) months.set(day.date.slice(0, 7), [...(months.get(day.date.slice(0, 7)) ?? []), day]);
+
+  return (
+    <>
+      {/* الملخص - the summary */}
+      <div className="flex flex-wrap items-stretch gap-3 px-5 py-3 border-b border-cardBorder">
+        <div className={box}>
+          <p className={label}>عدد الفواتير</p>
+          <Num value={f.invoices} className={`${value} text-white`} />
+        </div>
+        <div className={box}>
+          <p className={label}>إجمالي الباكت</p>
+          <Num value={f.total.packets} className={`${value} text-brandYellow`} />
+        </div>
+        <div className={box}>
+          <p className={label}>إجمالي المبلغ</p>
+          <Money value={f.total.amount} className={`${value} text-white`} />
+        </div>
+        <div className={box}>
+          <p className={label}>آخر شراء</p>
+          <p className={`${value} text-gray-100`}>{f.lastBuy ? <span dir="ltr" className="font-numbers">{formatDate(f.lastBuy)}</span> : "—"}</p>
+        </div>
+        <div className={box}>
+          <p className={label}>المديونية الحالية</p>
+          {debt === null ? (
+            <p className={`${value} text-gray-500`}>—</p>
+          ) : (
+            <Money value={debt} className={`${value} ${Math.round(debt) > 0 ? "text-brandOrange" : "text-statusGreen"}`} />
+          )}
+        </div>
+      </div>
+
+      {f.days.length === 0 ? (
+        <div className="py-16 text-center text-xl text-gray-400">
+          مفيش فواتير لـ &quot;{toEnglishDigits(name)}&quot; في {period}
+        </div>
+      ) : (
+        <table className="w-full border-separate border-spacing-0 text-[16px] leading-[2.1]">
+          <thead className="sticky top-0 z-10 bg-card">
+            <tr>
+              <th className={`${th} text-start ps-5`}>التاريخ / الفاتورة</th>
+              {columns.map((c) => (
+                <th key={c} className={th}>
+                  {c}
+                </th>
+              ))}
+              <th className={`${th} text-gray-200`}>إجمالي الباكت</th>
+              <th className={th}>إجمالي المبلغ (ج.م)</th>
+              <th className={th}>عدد العملاء</th>
+              <th className={th}>اتسجلت</th>
+              <th className={`${th} text-start`}>سجّلها</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from(months.entries()).map(([month, days]) => (
+              <Fragment key={month}>
+                {wholeYear && (
+                  <tr>
+                    <td colSpan={span} className="ps-5 bg-brandOrange/10 border-b border-brandOrange/30 text-brandOrange font-extrabold text-[17px]">
+                      {monthLabel(month)}
+                      <span className="ms-3 text-gray-400 font-semibold text-[15px]">
+                        <Num value={days.reduce((s, d) => s + d.packets, 0)} className="text-gray-200" /> باكت ·{" "}
+                        <Money value={days.reduce((s, d) => s + d.amount, 0)} className="text-gray-200" />
+                      </span>
+                    </td>
+                  </tr>
+                )}
+                {days.map((day) => (
+                  <Fragment key={day.date}>
+                    <tr className="bg-brandOrange/5">
+                      <td className="ps-3 pe-2 border-b border-cardBorder/60 whitespace-nowrap text-gray-200 font-semibold">
+                        <span className="inline-flex items-center gap-1.5">
+                          <ChevronDown size={18} className="text-brandOrange" />
+                          {formatDayName(day.date)}
+                        </span>
+                      </td>
+                      {day.columns.map((v, i) => (
+                        <Cell key={i} value={v} />
+                      ))}
+                      <Cell value={day.packets} strong />
+                      <Cell value={day.amount} money />
+                      <Cell value={day.customers} />
+                      <td colSpan={2} className="px-2 border-b border-cardBorder/60 text-[13px] leading-[1.5] text-gray-400 max-w-0">
+                        <DayEntered invoices={day.invoices} date={day.date} />
+                      </td>
+                    </tr>
+                    {day.invoices.map((inv) => (
+                      <tr key={inv.id} onClick={() => onOpenInvoice(inv)} className="bg-background/60 text-[15px] leading-[1.9] cursor-pointer hover:bg-white/5">
+                        <td className="ps-10 pe-2 border-b border-cardBorder/40 max-w-[300px] truncate text-gray-300" title={`${toEnglishDigits(inv.customer)} — ${inv.id}`}>
+                          <span dir="ltr" className="font-numbers">{inv.id}</span>
+                          {showCustomer && <span className="ms-2 text-gray-400">{toEnglishDigits(inv.customer)}</span>}
+                        </td>
+                        {inv.columns.map((v, i) => (
+                          <Cell key={i} value={v} />
+                        ))}
+                        <Cell value={inv.packets} strong />
+                        <Cell value={inv.amount} money />
+                        <td className="px-2 text-center text-statusRed text-sm">{inv.isReturn ? "مرتجع" : ""}</td>
+                        <EnteredCell invoice={inv} />
+                        <OwnerCell names={[inv.owner]} />
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+          {/* إجمالي العميل - the customer's totals */}
+          <tfoot className="sticky bottom-0 z-10 bg-card">
+            <tr className="font-bold">
+              <td className="ps-5 pe-2 border-t-2 border-brandOrange/50 text-white whitespace-nowrap">{wholeYear ? "إجمالي السنة" : "إجمالي الشهر"}</td>
+              {f.total.columns.map((v, i) => (
+                <td key={i} className={foot}>
+                  {v ? <Num value={v} className="text-white" /> : <span className="text-gray-600">—</span>}
+                </td>
+              ))}
+              <td className={foot}>
+                <Num value={f.total.packets} className="text-brandYellow text-[18px] font-extrabold" />
+              </td>
+              <td className={foot}>
+                <Num value={Math.round(f.total.amount)} className="text-white" />
+              </td>
+              <td className={foot}>
+                <Num value={f.total.customers} className="text-gray-300" />
+              </td>
+              <td colSpan={2} className="border-t-2 border-brandOrange/50" />
+            </tr>
+          </tfoot>
+        </table>
+      )}
     </>
   );
 }
