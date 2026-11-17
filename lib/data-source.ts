@@ -197,6 +197,20 @@ function markedStatuses(rows: TodayAttendanceRows): Map<string, PersonStatus> {
   return employeeStatuses({ ...rows, checkins: [] });
 }
 
+// موظف من غير اسم أو مش في قايمة الـ Active: بيتشال من كل الكروت واللوحات ويتكتب في الكونسول مرة واحدة
+// An employee without a name, or not in the Active list: skipped everywhere, logged once to the console
+const warned = new Set<string>();
+function warnSkipped(id: string, why: "noName" | "notActive") {
+  if (warned.has(`${why}|${id}`)) return;
+  warned.add(`${why}|${id}`);
+  console.warn(
+    why === "noName"
+      ? `[attendance] ${id}: موظف من غير اسم — راجعه في ERPNext`
+      : `[attendance] ${id}: عليه حضور النهارده بس مش موظف Active في ERPNext — راجعه في ERPNext`,
+  );
+}
+const hasName = (name: string | null | undefined) => !!String(name ?? "").replace(/s+/g, "").trim();
+
 // كل موظف في قسمه بالكود، والحاضر اللي مالوش قسم بيروح اليومية
 // Each employee into its section by code; anyone present without a section goes to daily
 export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSectionKey, SectionPerson[]> {
@@ -210,6 +224,12 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
   const marks = markedStatuses(rows);
   // المستبعدين مش بيظهروا في أي حتة - excluded employees never show anywhere
   const placed = new Set<string>(dashboardConfig.attendance.excludedEmployees);
+  // من غير اسم: مش بيظهر خالص - no name: never shown
+  for (const employee of rows.employees) {
+    if (placed.has(employee.name) || hasName(employee.employee_name)) continue;
+    placed.add(employee.name);
+    warnSkipped(employee.name, "noName");
+  }
   // خارج البصمة الأول (ومش بيدخلوا أي قسم تاني) - outside the biometric first (never in another section)
   for (const employee of rows.employees) {
     const configMode = dashboardConfig.attendance.outsideBiometric[employee.name];
@@ -240,20 +260,25 @@ export function splitBySection(rows: TodayAttendanceRows): Record<AttendanceSect
     const branchKey = branchSection(employee.branch);
     const byBranch = code !== null || status === "present" ? branchKey : undefined;
     const key = byCode ?? byBranch;
-    // 4) مالوش قسم (لا بالكود ولا بالفرع) والـ ctc <= dailyRateMaxCtc → اليومية حتى قبل أول بصمة
-    // 4) no section (by code or branch) and ctc <= dailyRateMaxCtc -> daily, even before his first punch
+    // 3+4) مالوش قسم (لا بالكود ولا بالفرع): بيروح اليومية بس لو ليه كود بصمة (حاضر، أو ctc <= dailyRateMaxCtc).
+    //      الـ ctc لوحده عمره ما يكفي، واللي مالوش كود يروح اليومية بالبايو بس ("يومية")
+    // 3+4) no section by code or branch: daily ONLY with a device ID (present, or ctc <= dailyRateMaxCtc);
+    //      ctc alone is never enough, and without a device ID only a bio saying "يومية" puts him there
+    const hasDeviceId = String(employee.attendance_device_id ?? "").trim() !== "";
     const autoDaily = !byCode && !branchKey && (Number(employee.ctc) || 0) <= dashboardConfig.salaries.dailyRateMaxCtc;
-    const target = key ?? (status === "present" || autoDaily ? "daily" : undefined);
+    const target = key ?? (hasDeviceId && (status === "present" || autoDaily) ? "daily" : undefined);
     if (!target) continue;
     placed.add(employee.name);
     const source: SectionSource = byCode ? "code" : key ? "branch" : "daily";
     result[target].push({ id: employee.name, name: cardName(employee.name, employee.employee_name), status, source });
   }
-  // حاضر النهارده بس مش في قايمة الـ Active - present today but not in the Active list
+  // حاضر النهارده بس مش في قايمة الـ Active: مالوش كود بصمة ولا بايو نعرفهم، فمش بيظهر (بيتكتب في الكونسول بس)
+  // Present today but not in the Active list: no known device ID or bio, so never shown (console only)
+  const active = new Set(rows.employees.map((e) => e.name));
   const attendanceNames = new Map(rows.attendance.map((record) => [record.employee, record.employee_name]));
   for (const [id, status] of Array.from(statuses)) {
-    if (status !== "present" || placed.has(id)) continue;
-    result.daily.push({ id, name: cardName(id, attendanceNames.get(id)), status, source: "daily" });
+    if (status !== "present" || placed.has(id) || active.has(id)) continue;
+    warnSkipped(id, hasName(attendanceNames.get(id)) ? "notActive" : "noName");
   }
   return result;
 }
