@@ -15,6 +15,8 @@ import {
   RepDetails,
   RepInvoice,
   RepSales,
+  RepYear,
+  RepYearMonth,
   SalesReps,
 } from "./types";
 
@@ -70,6 +72,12 @@ export const packetsOf = (itemCode: string, stockQty: number) => stockQty * (sal
 const emptyProducts = (): ProductPackets[] => sales.products.map((p) => ({ label: p.label, packets: 0 }));
 
 const round = (value: number) => Math.round(value);
+
+// تارجت المندوب لشهر: monthTargets["YYYY-MM"] لو موجود، وإلا target بتاعه، وإلا التارجت العام
+// A rep's target for a month: monthTargets["YYYY-MM"] if set, else the rep's target, else the global one
+export function repTarget(rep: (typeof sales.reps)[number], month: string): number {
+  return rep.monthTargets?.[month] ?? rep.target ?? sales.monthlyTarget;
+}
 const money = (value: number) => Math.round(value * 100) / 100;
 
 // get_list بـ POST (القوايم أطول من الـ URL) - get_list over POST (the lists are too long for a URL)
@@ -142,7 +150,7 @@ export function repsFrom(rows: RepRow[], today: string, debts: Map<string, RepDe
     return {
       name: rep.name,
       van: rep.van,
-      target: rep.target ?? sales.monthlyTarget,
+      target: repTarget(rep, month),
       monthPackets,
       products: regular.map((p) => ({ ...p, packets: round(p.packets) })),
       cartons: cartons.map((c) => ({ ...c, packets: round(c.packets) })),
@@ -544,15 +552,14 @@ type DetailRow = {
   creation: string | null;
 };
 
-// سطور فواتير عربية المندوب من أول الشهر لحد النهارده (طلب واحد) - the van's invoice lines this month, one request
-async function loadDetailRows(warehouse: string, today: string): Promise<DetailRow[]> {
-  const { monthStart } = monthBounds(today);
+// سطور فواتير عربية المندوب في فترة (طلب واحد) - the van's invoice lines in a date range, one request
+async function loadDetailRows(warehouse: string, from: string, to: string): Promise<DetailRow[]> {
   const child = "`tabSales Invoice Item`";
   return getList<DetailRow>({
     filters: [
       ["docstatus", "=", 1],
-      ["posting_date", ">=", monthStart],
-      ["posting_date", "<=", today],
+      ["posting_date", ">=", from],
+      ["posting_date", "<=", to],
       ["Sales Invoice Item", "warehouse", "=", warehouse],
     ],
     fields: [
@@ -577,9 +584,11 @@ export const detailColumns = (): string[] => [...sales.products.map((p) => p.lab
 function detailsFrom(
   rep: (typeof sales.reps)[number],
   rows: DetailRow[],
+  month: string,
   today: string,
   debt: RepDebt | null,
-  names: Map<string, string>
+  names: Map<string, string>,
+  months: string[]
 ): RepDetails {
   // اتسجلت إمتى ومين سجّلها (من غير أي تغيير في الأرقام) - when and by whom (numbers unchanged)
   const dayDiff = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
@@ -591,7 +600,6 @@ function detailsFrom(
       lateDays: creation ? Math.max(0, dayDiff(date, creation.slice(0, 10))) : 0,
     };
   };
-  const { month } = monthBounds(today);
   const products = productOfItem();
   const cartonIndex = cartonOfItem();
   const width = sales.products.length + sales.cartons.length;
@@ -668,9 +676,11 @@ function detailsFrom(
   for (const day of list) day.columns.forEach((value, i) => (totals[i] += value));
   return {
     month,
+    currentMonth: today.slice(0, 7),
+    months,
     name: rep.name,
     van: rep.van,
-    target: rep.target ?? sales.monthlyTarget,
+    target: repTarget(rep, month),
     columns: detailColumns(),
     days: list,
     total: {
@@ -683,29 +693,140 @@ function detailsFrom(
   };
 }
 
-// كاش 60 ثانية لكل مندوب (بيتسأل بس لما حد يفتح اللوحة) - 60 s cache per rep (asked only when someone opens the panel)
-const detailCache = new Map<string, { at: number; value: RepDetails }>();
-const detailInFlight = new Map<string, Promise<RepDetails>>();
+// ===== الشهور اللي فيها بيع + اختيار شهر / سنة - months with sales + picking a month / a year =====
 
-export async function repDetails(warehouseOrName: string): Promise<RepDetails | null> {
-  const rep = sales.reps.find((r) => r.warehouse === warehouseOrName || r.name === warehouseOrName || r.van === warehouseOrName);
+const lastDay = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return `${month}-${pad(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+};
+
+// كاش بسيط 60 ثانية + طلب واحد في نفس الوقت لكل مفتاح - a simple 60 s cache + one in-flight request per key
+function cached<T>() {
+  const store = new Map<string, { at: number; value: T }>();
+  const inFlight = new Map<string, Promise<T>>();
+  return (key: string, load: () => Promise<T>): Promise<T> => {
+    const hit = store.get(key);
+    if (hit && Date.now() - hit.at < sales.cacheSeconds * 1000) return Promise.resolve(hit.value);
+    let pending = inFlight.get(key);
+    if (!pending) {
+      pending = load()
+        .then((value) => {
+          store.set(key, { at: Date.now(), value });
+          return value;
+        })
+        .finally(() => inFlight.delete(key));
+      inFlight.set(key, pending);
+    }
+    return pending;
+  };
+}
+
+// الشهور (السنة دي واللي فاتت) اللي فيها بيع للمندوب، الأحدث الأول، والشهر الحالي دايماً موجود
+// The months (this year and last year) with sales for the rep, newest first; the current month is always listed
+const monthsCache = cached<string[]>();
+function repMonths(warehouse: string, today: string): Promise<string[]> {
+  const from = `${Number(today.slice(0, 4)) - 1}-01-01`;
+  return monthsCache(`${warehouse}|${today}`, async () => {
+    const child = "`tabSales Invoice Item`";
+    const rows = await getList<{ posting_date: string; item_code: string; qty: number }>({
+      filters: [
+        ["docstatus", "=", 1],
+        ["posting_date", ">=", from],
+        ["posting_date", "<=", today],
+        ["Sales Invoice Item", "warehouse", "=", warehouse],
+        ["Sales Invoice Item", "item_code", "in", Array.from(productOfItem().keys())],
+      ],
+      fields: ["posting_date", `${child}.item_code as item_code`, `sum(${child}.stock_qty) as qty`],
+      group_by: `posting_date, ${child}.item_code`,
+    });
+    const perDay = new Map<string, number>();
+    for (const row of rows) {
+      const date = String(row.posting_date).slice(0, 10);
+      perDay.set(date, (perDay.get(date) ?? 0) + packetsOf(row.item_code, row.qty ?? 0));
+    }
+    const months = new Set<string>([today.slice(0, 7)]);
+    perDay.forEach((packets, date) => {
+      if (round(packets) !== 0) months.add(date.slice(0, 7));
+    });
+    return Array.from(months).sort().reverse();
+  });
+}
+
+const findRep = (warehouseOrName: string) =>
+  sales.reps.find((r) => r.warehouse === warehouseOrName || r.name === warehouseOrName || r.van === warehouseOrName);
+
+// الشهر المسموح: من يناير السنة اللي فاتت لحد الشهر الحالي - allowed: January last year .. the current month
+function validMonth(month: string, today: string): boolean {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return false;
+  return month >= `${Number(today.slice(0, 4)) - 1}-01` && month <= today.slice(0, 7);
+}
+
+// كاش 60 ثانية لكل مندوب × شهر (بيتسأل بس لما حد يفتح اللوحة / يختار الشهر)
+// 60 s cache per rep × month (asked only when someone opens the panel / picks the month)
+const detailCache = cached<RepDetails>();
+
+export async function repDetails(warehouseOrName: string, month?: string | null): Promise<RepDetails | null> {
+  const rep = findRep(warehouseOrName);
   if (!rep) return null;
   const today = erpToday();
-  const key = `${rep.warehouse}|${today}`;
-  const hit = detailCache.get(key);
-  if (hit && Date.now() - hit.at < sales.cacheSeconds * 1000) return hit.value;
-  let pending = detailInFlight.get(key);
-  if (!pending) {
-    pending = Promise.all([loadDetailRows(rep.warehouse, today), repDebtsOrNull(today)])
-      .then(async ([rows, debts]) => {
-        // الأسامي الكاملة لمين سجّل الفواتير - full names of whoever entered the invoices
-        const names = await fullNames(Array.from(new Set(rows.map((r) => r.owner ?? "").filter(Boolean))));
-        const value = detailsFrom(rep, rows, today, debts?.get(rep.warehouse) ?? null, names);
-        detailCache.set(key, { at: Date.now(), value });
-        return value;
-      })
-      .finally(() => detailInFlight.delete(key));
-    detailInFlight.set(key, pending);
-  }
-  return pending;
+  const selected = month && validMonth(month, today) ? month : today.slice(0, 7);
+  const to = selected === today.slice(0, 7) ? today : lastDay(selected);
+  return detailCache(`${rep.warehouse}|${selected}|${today}`, async () => {
+    // المديونية دايماً لحد النهارده (مش مرتبطة بالشهر) - debt is always as of today (not tied to the month)
+    const [rows, debts, months] = await Promise.all([
+      loadDetailRows(rep.warehouse, `${selected}-01`, to),
+      repDebtsOrNull(today),
+      repMonths(rep.warehouse, today).catch(() => [today.slice(0, 7)]),
+    ]);
+    // الأسامي الكاملة لمين سجّل الفواتير - full names of whoever entered the invoices
+    const names = await fullNames(Array.from(new Set(rows.map((r) => r.owner ?? "").filter(Boolean))));
+    return detailsFrom(rep, rows, selected, today, debts?.get(rep.warehouse) ?? null, names, months);
+  });
+}
+
+// ملخص السنة: صف لكل شهر فيه بيع + إجمالي السنة (نفس حساب جدول الشهر بالظبط)
+// The year summary: a row per month with sales + the year total (exactly the month table's math)
+const yearCache = cached<RepYear>();
+
+export async function repYear(warehouseOrName: string, year: number): Promise<RepYear | null> {
+  const rep = findRep(warehouseOrName);
+  if (!rep) return null;
+  const today = erpToday();
+  const thisYear = Number(today.slice(0, 4));
+  if (year !== thisYear && year !== thisYear - 1) return null;
+  const to = year === thisYear ? today : `${year}-12-31`;
+  return yearCache(`${rep.warehouse}|${year}|${today}`, async () => {
+    const [rows, months] = await Promise.all([
+      loadDetailRows(rep.warehouse, `${year}-01-01`, to),
+      repMonths(rep.warehouse, today).catch(() => [today.slice(0, 7)]),
+    ]);
+    const width = sales.products.length + sales.cartons.length;
+    const list: RepYearMonth[] = [];
+    for (let m = 12; m >= 1; m--) {
+      const month = `${year}-${pad(m)}`;
+      const own = rows.filter((r) => String(r.posting_date).startsWith(month));
+      if (own.length === 0) continue;
+      const details = detailsFrom(rep, own, month, today, null, new Map(), []);
+      if (details.days.length === 0) continue;
+      list.push({ month, ...details.total, target: details.target });
+    }
+    const totals = new Array<number>(width).fill(0);
+    for (const row of list) row.columns.forEach((v, i) => (totals[i] += v));
+    return {
+      year,
+      currentMonth: today.slice(0, 7),
+      months,
+      name: rep.name,
+      van: rep.van,
+      columns: detailColumns(),
+      list,
+      total: {
+        columns: totals,
+        packets: list.reduce((s, r) => s + r.packets, 0),
+        amount: money(list.reduce((s, r) => s + r.amount, 0)),
+        customers: list.reduce((s, r) => s + r.customers, 0),
+        target: list.reduce((s, r) => s + r.target, 0),
+      },
+    };
+  });
 }

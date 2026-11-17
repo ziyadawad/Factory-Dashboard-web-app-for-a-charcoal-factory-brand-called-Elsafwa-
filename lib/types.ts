@@ -522,7 +522,9 @@ export interface RepDay {
 }
 
 export interface RepDetails {
-  month: string;
+  month: string; // الشهر المختار - the selected month
+  currentMonth: string; // الشهر الحالي (المديونية لحد النهارده) - the current month (debt is as of today)
+  months: string[]; // الشهور اللي فيها بيع (السنة دي واللي فاتت)، الأحدث الأول - months with sales, newest first
   name: string;
   van: string;
   target: number;
@@ -530,6 +532,27 @@ export interface RepDetails {
   days: RepDay[]; // الأحدث فوق - newest first
   total: { columns: number[]; packets: number; amount: number; customers: number };
   debt: RepDebt | null; // null = طلب المديونية فشل - the debt request failed
+}
+
+// ملخص سنة المندوب: صف لكل شهر - a rep's year summary: one row per month
+export interface RepYearMonth {
+  month: string;
+  columns: number[];
+  packets: number;
+  amount: number;
+  customers: number;
+  target: number;
+}
+
+export interface RepYear {
+  year: number;
+  currentMonth: string;
+  months: string[];
+  name: string;
+  van: string;
+  columns: string[];
+  list: RepYearMonth[]; // الأحدث فوق - newest first
+  total: Omit<RepYearMonth, "month">;
 }
 
 // فاتورة مفتوحة (أو مرتجع لسه مخصومش) - an unpaid invoice (or an unallocated credit note)

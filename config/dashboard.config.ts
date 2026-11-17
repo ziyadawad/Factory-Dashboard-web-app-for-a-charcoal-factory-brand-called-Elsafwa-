@@ -584,7 +584,8 @@ export const dashboardConfig = {
       { name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC" },
       { name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC" },
       { name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC" },
-    ] as { name: string; van: string; warehouse: string; target?: number }[],
+      // تارجت شهر معين لمندوب: monthTargets: { "2026-10": 1200 } - a month-specific target for a rep
+    ] as { name: string; van: string; warehouse: string; target?: number; monthTargets?: Record<string, number> }[],
 
     // الموزعين: سحب كل موزع = فواتير البيع بتاعته (Customer). customer = الـ ID بتاع العميل في ERPNext بالظبط
     // الترتيب من اليمين: featured = العمود الأول (الكارت الكبير بطول الصفحة)، fullHeight = عمود لوحده بطول الصفحة،

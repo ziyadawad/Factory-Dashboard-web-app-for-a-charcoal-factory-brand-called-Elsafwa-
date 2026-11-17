@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useIdleClose } from "@/lib/useIdleClose";
 import useSWR from "swr";
-import { ChevronDown, ChevronLeft, ExternalLink, Truck, X } from "lucide-react";
-import { RepDebt, RepDetails, RepInvoice, RepSales } from "@/lib/types";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Truck, X } from "lucide-react";
+import { RepDebt, RepDetails, RepInvoice, RepSales, RepYear } from "@/lib/types";
 import ActivityDetailsPanel from "./ActivityDetailsPanel";
 import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { daysAgoText, monthName, Num, Percent } from "./SalesCommon";
@@ -265,13 +265,34 @@ function DebtTab({ debt, month }: { debt: RepDebt; month: string }) {
 // لوحة تفاصيل المندوب: جدول يوم بيوم، والضغط على اليوم يفتح فواتيره
 // The rep details panel: a day-by-day table; clicking a day shows its invoices
 export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClose: () => void }) {
-  const { data, error } = useSWR<RepDetails>(`/api/sales/rep?rep=${encodeURIComponent(rep.name)}`, fetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-    shouldRetryOnError: false,
-  });
+  // الشهر المختار: "" = الشهر الحالي (الافتراضي)، "YYYY-MM" = شهر قديم، "year:YYYY" = ملخص السنة
+  // The selected view: "" = the current month (default), "YYYY-MM" = a past month, "year:YYYY" = the year summary
+  const [view, setView] = useState("");
+  const base = `/api/sales/rep?rep=${encodeURIComponent(rep.name)}`;
+  const swrOptions = { revalidateOnFocus: false, revalidateOnReconnect: false, shouldRetryOnError: false };
+  // الشهر الحالي دايماً (المديونية لحد النهارده + قايمة الشهور) - always the current month (today's debt + the months list)
+  const current = useSWR<RepDetails>(base, fetcher, swrOptions);
+  const yearView = view.startsWith("year:");
+  // بيتجاب بس الشهر / السنة المختارة - only the selected month / year is fetched
+  const selected = useSWR<RepDetails | RepYear>(
+    view === "" ? null : yearView ? `${base}&year=${view.slice(5)}` : `${base}&month=${view}`,
+    fetcher,
+    swrOptions
+  );
+  const data = view === "" ? current.data : yearView ? undefined : (selected.data as RepDetails | undefined);
+  const year = yearView ? (selected.data as RepYear | undefined) : undefined;
+  const error = view === "" ? current.error : selected.error;
+  const currentMonth = current.data?.currentMonth ?? data?.currentMonth ?? year?.currentMonth ?? "";
+  const months = current.data?.months ?? data?.months ?? year?.months ?? [];
+  const shownMonth = view === "" ? currentMonth : yearView ? "" : view;
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [tab, setTab] = useState<"days" | "debt">("days");
+  const pick = useCallback((next: string) => {
+    setView(next);
+    setOpenDay(null);
+    setTab("days");
+  }, []);
+  const pickMonth = useCallback((month: string) => pick(month === currentMonth ? "" : month), [pick, currentMonth]);
   // الفاتورة المفتوحة (نفس لوحة تفاصيل "اللي بيحصل دلوقتي") - the open invoice (same panel as the activity feed)
   const [invoice, setInvoice] = useState<RepInvoice | null>(null);
   const invoiceOpen = useRef(false);
@@ -289,9 +310,39 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
     onClose();
   }, IDLE_CLOSE_MS);
 
-  const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
-  const reached = rep.target > 0 && rep.monthPackets >= rep.target;
+  // ◀ ▶ و ← → : الشهر اللي قبله / بعده من الشهور اللي فيها بيع (اليمين = الأقدم، زي اتجاه القراية)
+  // ◀ ▶ and ← →: the previous / next month with sales (right = older, following the RTL reading direction)
+  const monthIndex = shownMonth ? months.indexOf(shownMonth) : -1;
+  const older = monthIndex >= 0 && monthIndex < months.length - 1 ? months[monthIndex + 1] : null;
+  const newer = monthIndex > 0 ? months[monthIndex - 1] : null;
+  const step = useRef({ older, newer, pickMonth });
+  step.current = { older, newer, pickMonth };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (invoiceOpen.current || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && ["SELECT", "INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      const { older: o, newer: n, pickMonth: go } = step.current;
+      if (e.key === "ArrowRight" && o) go(o);
+      else if (e.key === "ArrowLeft" && n) go(n);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // أرقام العنوان: الشهر الحالي من الكارت بالظبط، وأي شهر تاني من تفاصيله، والسنة = مجموع الشهور
+  // Header numbers: the current month exactly as the card, other months from their details, the year = sum of months
+  const isCurrent = view === "";
+  const headPackets = isCurrent ? rep.monthPackets : year ? year.total.packets : data?.total.packets ?? 0;
+  const headTarget = isCurrent ? rep.target : year ? year.total.target : data?.target ?? rep.target;
+  const percent = headTarget > 0 ? Math.round((headPackets / headTarget) * 100) : 0;
+  const reached = headTarget > 0 && headPackets >= headTarget;
   const columns = data?.columns ?? [];
+  const years = Array.from(new Set(months.map((m) => m.slice(0, 4))));
+  const debt = current.data?.debt ?? data?.debt ?? null;
+  const arrow = "p-1 rounded-lg border border-cardBorder bg-background/70 text-gray-300 hover:text-white disabled:opacity-30 disabled:hover:text-gray-300";
   const th = "px-2 py-2 text-center font-semibold text-gray-400 whitespace-nowrap";
 
   return (
@@ -312,14 +363,41 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
             <Truck size={20} />
             {toEnglishDigits(rep.van)}
           </span>
-          <span className="text-gray-400 text-lg whitespace-nowrap">شهر {monthName(data?.month ?? "")}</span>
+          {/* اختيار الشهر - the month picker */}
+          <div className="shrink-0 flex items-center gap-1.5 whitespace-nowrap">
+            <button type="button" className={arrow} disabled={!older} onClick={() => older && pickMonth(older)} aria-label="الشهر اللي قبله" title="الشهر اللي قبله (→)">
+              <ChevronRight size={22} />
+            </button>
+            <select
+              value={view === "" ? currentMonth : view}
+              onChange={(e) => (e.target.value.startsWith("year:") ? pick(e.target.value) : pickMonth(e.target.value))}
+              className="rounded-lg border border-cardBorder bg-background text-gray-200 text-lg leading-[1.6] px-2 cursor-pointer"
+            >
+              {(months.length ? months : [currentMonth]).filter(Boolean).map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m)}
+                  {m === currentMonth ? " (الحالي)" : ""}
+                </option>
+              ))}
+              {years.map((y) => (
+                <option key={y} value={`year:${y}`}>
+                  السنة {y}
+                </option>
+              ))}
+              {/* لو الشهر المختار مش في القايمة لسه - keep the selected value valid before the list loads */}
+              {view && !yearView && !months.includes(view) && <option value={view}>{monthLabel(view)}</option>}
+            </select>
+            <button type="button" className={arrow} disabled={!newer} onClick={() => newer && pickMonth(newer)} aria-label="الشهر اللي بعده" title="الشهر اللي بعده (←)">
+              <ChevronLeft size={22} />
+            </button>
+          </div>
           <div className="ms-auto flex items-center gap-5 whitespace-nowrap">
             <p className="text-lg text-gray-400">
               الإجمالي{" "}
-              <Num value={rep.monthPackets} className={`text-[28px] font-extrabold ${reached ? "text-statusGreen" : "text-white"}`} /> باكت
+              <Num value={headPackets} className={`text-[28px] font-extrabold ${reached ? "text-statusGreen" : "text-white"}`} /> باكت
             </p>
             <p className="text-lg text-gray-400">
-              التارجت <Num value={rep.target} className="text-gray-200 font-bold" />{" "}
+              التارجت <Num value={headTarget} className="text-gray-200 font-bold" />{" "}
               <Percent value={percent} className={`text-[26px] font-extrabold ${reached ? "text-statusGreen" : "text-brandOrange"}`} />
             </p>
             <button
@@ -337,7 +415,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
         <div className="shrink-0 flex items-center gap-2 px-5 pt-2 border-b border-cardBorder">
           {(
             [
-              ["days", "المبيعات اليومية"],
+              ["days", yearView ? `ملخص السنة ${view.slice(5)}` : "المبيعات اليومية"],
               ["debt", "المديونية"],
             ] as const
           ).map(([key, label]) => (
@@ -361,18 +439,36 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
 
         {/* الجدول (بيعمل scroll جوه اللوحة) - the table (scrolls inside the panel) */}
         <div className={`flex-1 min-h-0 ${tab === "debt" ? "overflow-hidden" : "overflow-auto"}`}>
-          {!data ? (
+          {tab === "debt" ? (
+            // المديونية دايماً لحد النهارده مهما كان الشهر المختار - debt is always as of today, whatever month is picked
+            debt ? (
+              <div className="h-full min-h-0 flex flex-col">
+                <p className="shrink-0 px-5 pt-2 text-[15px] text-sky-400">المديونية الحالية — مش مرتبطة بالشهر</p>
+                <div className="flex-1 min-h-0">
+                  <DebtTab debt={debt} month={currentMonth} />
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xl text-gray-400">
+                {current.data || current.error ? "المديونية مش متاحة دلوقتي — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
+              </div>
+            )
+          ) : yearView ? (
+            year ? (
+              <YearTable year={year} onOpenMonth={pickMonth} />
+            ) : (
+              <div className="h-full flex items-center justify-center text-xl text-gray-400">
+                {error ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل ملخص السنة..."}
+              </div>
+            )
+          ) : !data ? (
             <div className="h-full flex items-center justify-center text-xl text-gray-400">
               {error ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
             </div>
-          ) : tab === "debt" ? (
-            data.debt ? (
-              <DebtTab debt={data.debt} month={data.month} />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xl text-gray-400">المديونية مش متاحة دلوقتي — جرب تاني بعد شوية</div>
-            )
           ) : data.days.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xl text-gray-400">لسه مفيش بيع الشهر ده</div>
+            <div className="h-full flex items-center justify-center text-xl text-gray-400">
+              {isCurrent ? "لسه مفيش بيع الشهر ده" : `مفيش بيع في ${monthLabel(data.month)}`}
+            </div>
           ) : (
             <table className="w-full border-separate border-spacing-0 text-[16px] leading-[2.1]">
               <thead className="sticky top-0 z-10 bg-card">
@@ -465,6 +561,86 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
         )}
       </div>
     </div>
+  );
+}
+
+// "2026-11" -> "نوفمبر 2026"
+const monthLabel = (month: string) => (month ? `${monthName(month)} ${month.slice(0, 4)}` : "");
+
+// ملخص السنة: صف لكل شهر + إجمالي السنة؛ الضغط على الشهر يفتحه
+// The year summary: a row per month + the year total; clicking a month opens it
+function YearTable({ year, onOpenMonth }: { year: RepYear; onOpenMonth: (month: string) => void }) {
+  const th = "px-2 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+  const foot = "px-2 text-center border-t-2 border-brandOrange/50";
+  const pct = (packets: number, target: number) => (target > 0 ? Math.round((packets / target) * 100) : 0);
+  if (year.list.length === 0) return <div className="h-full flex items-center justify-center text-xl text-gray-400">مفيش بيع في سنة {year.year}</div>;
+  const totalPct = pct(year.total.packets, year.total.target);
+  return (
+    <table className="w-full border-separate border-spacing-0 text-[16px] leading-[2.1]">
+      <thead className="sticky top-0 z-10 bg-card">
+        <tr>
+          <th className={`${th} text-start ps-5`}>الشهر</th>
+          {year.columns.map((label) => (
+            <th key={label} className={th}>
+              {label}
+            </th>
+          ))}
+          <th className={`${th} text-gray-200`}>إجمالي الباكت</th>
+          <th className={th}>إجمالي المبلغ (ج.م)</th>
+          <th className={th}>عدد العملاء</th>
+          <th className={th}>التارجت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {year.list.map((row) => {
+          const p = pct(row.packets, row.target);
+          return (
+            <tr key={row.month} onClick={() => onOpenMonth(row.month)} className="cursor-pointer hover:bg-white/5">
+              <td className="ps-3 pe-2 border-b border-cardBorder/60 whitespace-nowrap text-gray-200 font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  <ChevronLeft size={18} className="text-gray-500" />
+                  {monthLabel(row.month)}
+                  {row.month === year.currentMonth && <span className="text-gray-500 font-normal text-[13px]">(الحالي)</span>}
+                </span>
+              </td>
+              {row.columns.map((value, i) => (
+                <Cell key={i} value={value} />
+              ))}
+              <Cell value={row.packets} strong />
+              <Cell value={row.amount} money />
+              <Cell value={row.customers} />
+              <td className="px-2 text-center whitespace-nowrap">
+                <Num value={row.target} className="text-gray-400" />{" "}
+                <Percent value={p} className={`font-bold ${row.target > 0 && row.packets >= row.target ? "text-statusGreen" : "text-brandOrange"}`} />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot className="sticky bottom-0 z-10 bg-card">
+        <tr className="font-bold">
+          <td className="ps-5 pe-2 border-t-2 border-brandOrange/50 text-white whitespace-nowrap">إجمالي السنة</td>
+          {year.total.columns.map((value, i) => (
+            <td key={i} className={foot}>
+              {value ? <Num value={value} className="text-white" /> : <span className="text-gray-600">—</span>}
+            </td>
+          ))}
+          <td className={foot}>
+            <Num value={year.total.packets} className="text-brandYellow text-[18px] font-extrabold" />
+          </td>
+          <td className={foot}>
+            <Num value={Math.round(year.total.amount)} className="text-white" />
+          </td>
+          <td className={foot}>
+            <Num value={year.total.customers} className="text-gray-300" />
+          </td>
+          <td className={`${foot} whitespace-nowrap`}>
+            <Num value={year.total.target} className="text-gray-400" />{" "}
+            <Percent value={totalPct} className={totalPct >= 100 ? "text-statusGreen" : "text-brandOrange"} />
+          </td>
+        </tr>
+      </tfoot>
+    </table>
   );
 }
 
