@@ -755,7 +755,10 @@ export const dashboardConfig = {
       clockFontSize: 30, // حجم الساعة - clock font size
       pageTitleFontSize: 28, // حجم اسم الصفحة الحالية في نص الهيدر - current page title (header center) font size
       pageTitleIconSize: 28, // حجم أيقونة اسم الصفحة - current page title icon size
-      pageCounterFontSize: 11, // حجم "صفحة 1 من 2" تحت اسم الصفحة - "page X of Y" font size under the title
+      // نقط الصفحات تحت اسم الصفحة (نقطة لكل صفحة شغالة، والحالية أعرض وبرتقاني) - page dots under the title
+      pageDotSize: 8, // النقط الرمادي - the gray dots
+      pageDotActiveWidth: 22, // عرض نقطة الصفحة الحالية - the current page pill width
+      pageNumberFontSize: 17, // حجم "1 / 6" جنب النقط - the "1 / 6" number next to the dots
     },
 
     // أزرار التنقل بين الصفحات (فوق على الشمال في الهيدر) - page navigation buttons (header top-left)

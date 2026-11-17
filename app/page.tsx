@@ -371,6 +371,8 @@ export default function Dashboard() {
         page={PAGES[pageIndex]}
         pageNumber={pageIndex + 1}
         pageCount={PAGES.length}
+        pageTitles={PAGES.map((p) => p.title)}
+        onPageChange={changePage}
         nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} pinned={pinned} onTogglePin={togglePin} />}
       />
 

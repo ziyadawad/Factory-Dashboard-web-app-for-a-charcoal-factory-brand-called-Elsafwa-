@@ -17,6 +17,52 @@ interface HeaderProps {
   pageCount?: number;
   // الصفحة متثبتة (التقليب واقف) - the page is pinned (rotation stopped)
   pinned?: boolean;
+  // الضغط على نقطة صفحة بيروح لها (index من 0) - clicking a page dot goes to that page (0-based index)
+  onPageChange?: (index: number, dir: 1 | -1) => void;
+  // أسامي الصفحات (للتلميح على النقط) - page titles (dot tooltips)
+  pageTitles?: string[];
+}
+
+// عرض خانة كل نقطة (مساحة الضغط) - each dot's slot width (click area)
+const DOT_SLOT = 18;
+
+// نقط الصفحات: نقطة لكل صفحة، والحالية حبة برتقاني بتتزحلق لمكانها - page dots; the current one is an orange pill that slides
+function PageDots({ current, count, titles, onPick }: { current: number; count: number; titles?: string[]; onPick?: (index: number) => void }) {
+  const { pageDotSize, pageDotActiveWidth } = dashboardConfig.sizes.header;
+  const inset = (DOT_SLOT - pageDotActiveWidth) / 2;
+  return (
+    <span className="relative flex items-center" style={{ height: DOT_SLOT }}>
+      {/* الحبة البرتقاني (بتتحرك بـ transform) - the orange pill (moves by transform) */}
+      <span
+        aria-hidden
+        className="page-dot-active absolute top-1/2 rounded-full bg-brandOrange shadow-[0_0_8px_rgba(255,122,0,0.75),0_0_16px_rgba(255,122,0,0.35)]"
+        style={{
+          right: inset,
+          width: pageDotActiveWidth,
+          height: pageDotSize,
+          marginTop: -pageDotSize / 2,
+          transform: `translateX(${-current * DOT_SLOT}px)`,
+        }}
+      />
+      {Array.from({ length: count }, (_, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onPick?.(i)}
+          title={titles?.[i] ? `${i + 1}. ${titles[i]}` : String(i + 1)}
+          aria-label={`صفحة ${i + 1}${titles?.[i] ? ` — ${titles[i]}` : ""}`}
+          aria-current={i === current ? "page" : undefined}
+          className="group relative z-[1] flex items-center justify-center pointer-events-auto cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brandOrange/60"
+          style={{ width: DOT_SLOT, height: DOT_SLOT }}
+        >
+          <span
+            className={`rounded-full transition-colors duration-300 ${i === current ? "bg-transparent" : "bg-gray-500 group-hover:bg-gray-300"}`}
+            style={{ width: pageDotSize, height: pageDotSize }}
+          />
+        </button>
+      ))}
+    </span>
+  );
 }
 
 // أيقونة كل صفحة حسب الـ id بتاعها - icon for each page id
@@ -38,7 +84,7 @@ function toggleFullscreen() {
   request?.catch((error) => console.log("Fullscreen error:", error));
 }
 
-export default function Header({ isConnected, nav, page, pageNumber, pageCount, pinned }: HeaderProps) {
+export default function Header({ isConnected, nav, page, pageNumber, pageCount, pinned, onPageChange, pageTitles }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -139,15 +185,27 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount, 
               {page.title}
             </span>
             {pageNumber && pageCount && (
-              // "متثبتة" على نفس سطر العداد عشان ارتفاع الهيدر ميتغيرش - the pinned chip shares the counter line so the header height stays the same
-              <span className="flex items-center gap-1.5 whitespace-nowrap leading-none" style={{ fontSize: `${sizes.pageCounterFontSize}px` }}>
-                <span className="text-gray-400">
-                  صفحة {pageNumber} من {pageCount}
+              // نقط الصفحات + "1 / 6" - page dots + "1 / 6"
+              <span className="flex items-center gap-2.5 whitespace-nowrap leading-none mt-0.5">
+                <PageDots
+                  current={pageNumber - 1}
+                  count={pageCount}
+                  titles={pageTitles}
+                  onPick={(i) => i !== pageNumber - 1 && onPageChange?.(i, i > pageNumber - 1 ? 1 : -1)}
+                />
+                <span dir="ltr" className="font-numbers tabular-nums font-extrabold" style={{ fontSize: `${sizes.pageNumberFontSize}px` }}>
+                  <span key={pageNumber} className="page-num-fade inline-block text-brandOrange">
+                    {pageNumber}
+                  </span>
+                  <span className="text-gray-500"> / {pageCount}</span>
                 </span>
-                {pinned && <span className="rounded-full bg-brandOrange/15 px-1.5 font-bold text-brandOrange">📌 متثبتة</span>}
               </span>
             )}
           </div>
+          {/* "متثبتة" على شمال الحبة عشان متزحمش الرقم - the pinned chip on the pill's left so it doesn't crowd the number */}
+          {pinned && (
+            <span className="rounded-full bg-brandOrange/15 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap">📌 متثبتة</span>
+          )}
         </div>
       )}
 

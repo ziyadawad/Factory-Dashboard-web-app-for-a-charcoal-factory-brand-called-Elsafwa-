@@ -393,3 +393,19 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     animation: none !important;
   }
 }
+
+/* نقط الصفحات في الهيدر: الحبة بتتزحلق والرقم بيظهر بالراحة - header page dots: the pill slides, the number fades in */
+.page-dot-active {
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.page-num-fade {
+  animation: page-num-fade 320ms ease-out;
+}
+@keyframes page-num-fade {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-dot-active { transition: none; }
+  .page-num-fade { animation: none; }
+}
