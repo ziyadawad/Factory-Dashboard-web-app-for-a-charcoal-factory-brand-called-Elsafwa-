@@ -28,7 +28,8 @@ export type ProductionTarget = { kind: "kiln" | "type"; name: string };
 
 const STATUS: Record<string, { label: string; text: string; border: string; dot: string; chip: string }> = {
   working: { label: "شغالة", text: "text-statusGreen", border: "border-statusGreen/60", dot: "bg-statusGreen", chip: "bg-statusGreen/15" },
-  maintenance: { label: "صيانة", text: "text-statusAmber", border: "border-statusAmber/60", dot: "bg-statusAmber", chip: "bg-statusAmber/15" },
+  // صيانة: إطار كهرماني قوي، والشارة أصفر فاقع بكلام غامق - maintenance: a strong amber border, a bright yellow chip with dark text
+  maintenance: { label: "صيانة", text: "text-[#1A1300]", border: "border-[#F5A623]", dot: "bg-[#1A1300]", chip: "bg-[#FFC400]" },
   stopped: { label: "متوقفة", text: "text-statusRed", border: "border-statusRed/50", dot: "bg-statusRed", chip: "bg-statusRed/15" },
 };
 
@@ -258,7 +259,7 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
         {st.label}
       </span>
       {state === "maintenance" && (
-        <Wrench className="kiln-wrench absolute top-2 end-2.5 z-10 text-statusAmber" size={sizes.kilnChipFontSize * 1.6} />
+        <Wrench className="kiln-wrench absolute top-2 end-2.5 z-10 text-[#FFC400]" size={sizes.kilnChipFontSize * 1.6} />
       )}
       {/* الرسمة - the drawing */}
       <div className={`flex-1 min-h-0 flex items-center justify-center pt-3 pb-1 ${state === "stopped" ? "opacity-50" : ""}`}>
