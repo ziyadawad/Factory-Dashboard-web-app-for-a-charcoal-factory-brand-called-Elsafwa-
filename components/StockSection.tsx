@@ -85,6 +85,7 @@ function QuantityNumber({
   fitColumn = false,
   scale = 1,
   cap,
+  color,
 }: {
   value: number;
   unit?: string;
@@ -96,6 +97,7 @@ function QuantityNumber({
   fitColumn?: boolean;
   scale?: number; // تعويض تضييق الكارت (packagedNumberBoost / sackNumberBoost) - narrower-card boost
   cap?: number; // أكبر حجم بعد ما الرقم ماخدش مكانه - the size cap after the number overflowed
+  color?: string; // لون الرقم بدل الأبيض (كارت القطاعي) - number color instead of white (the retail card)
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const { variantNumberMaxSize, variantNumberScale } = dashboardConfig.sizes.page2;
@@ -105,8 +107,8 @@ function QuantityNumber({
   return (
     <div
       ref={numberRef}
-      className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : "text-white"}`}
-      style={{ fontSize: fitColumn ? `min(${maxSize}px, ${Math.round(variantNumberScale * scale * 10) / 10}cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
+      className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : color ? "" : "text-white"}`}
+      style={{ ...(color && !low ? { color } : {}), fontSize: fitColumn ? `min(${maxSize}px, ${Math.round(variantNumberScale * scale * 10) / 10}cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
     >
       {formatNumber(count)}
       {unit && (
@@ -486,37 +488,6 @@ function CardsGrid({ columns, widths, children }: { columns: number; widths?: nu
   );
 }
 
-// مكان إطار القسم لما فيه كارت برّه الإطار: الإطار بيبدأ بعد الكارت بـ 7px، والخط في نص الفاصل بينهم (3px)
-// Where the section frame starts when a card sits outside it: 7px right of that card; the divider 3px right of it
-function useDetachedFrame(detached?: RefObject<HTMLDivElement>) {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const [frame, setFrame] = useState<{ left: number; divider: { x: number; top: number; height: number } } | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    const section = sectionRef.current;
-    const card = detached?.current;
-    if (!section || !card) return;
-    const measure = () => {
-      const s = section.getBoundingClientRect();
-      const c = card.getBoundingClientRect();
-      // الإحداثيات جوه الصندوق (من جوه الـ border) - coordinates inside the box (inside its 1px border)
-      const right = c.right - s.left - 1;
-      const next = { left: Math.round(right + 7), divider: { x: Math.round(right + 3), top: Math.round(c.top - s.top - 1), height: Math.round(c.height) } };
-      setFrame((old) =>
-        old && old.left === next.left && old.divider.x === next.divider.x && old.divider.top === next.divider.top && old.divider.height === next.divider.height
-          ? old
-          : next
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(section);
-    observer.observe(card);
-    return () => observer.disconnect();
-  }, [detached]);
-  return { sectionRef, left: frame?.left, divider: frame?.divider };
-}
-
 // قسم كبير بعنوان وكروت جنب بعض - big titled section with cards side by side
 // كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
 // من غير columns المحتوى بيترص فوق بعض (زي المواد الخام) - without columns, children are stacked (raw materials)
@@ -528,7 +499,7 @@ function SectionCard({
   extra,
   columns,
   widths,
-  detached,
+  fitTitle = false,
   children,
 }: {
   title: string;
@@ -537,45 +508,36 @@ function SectionCard({
   extra?: ReactNode;
   columns?: number;
   widths?: number[];
-  // كارت على الشمال برّه إطار القسم (مخزن القطاعي): الإطار بيقف قبله وبينهم خط رفيع، والمقاسات والأماكن زي ما هي
-  // A card on the left kept outside the section frame (the retail card): the frame stops before it with a thin
-  // divider between them; sizes and positions stay exactly the same
-  detached?: RefObject<HTMLDivElement>;
+  // العنوان بيصغر لو القسم أضيق منه (مخزن القطاعي على 1366)، غير كده نفس حجم باقي العناوين
+  // The title shrinks only when the section is narrower than it (the retail section at 1366); otherwise the usual size
+  fitTitle?: boolean;
   children: ReactNode;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
-  const frame = useDetachedFrame(detached);
+  const [titleRef, fittedTitleSize] = useFitFontSize<HTMLHeadingElement>(sizes.sectionTitleFontSize, MIN_NAME_FONT_SIZE, title);
+  const titleSize = fitTitle ? fittedTitleSize : sizes.sectionTitleFontSize;
 
   return (
-    // الصندوق نفسه (المقاس والـ padding) زي ما هو، والإطار المرسوم بقى طبقة ورا المحتوى
-    // The box itself (size and padding) is unchanged; the drawn frame is a layer behind the content
-    <div ref={frame.sectionRef} className="relative isolate border border-transparent rounded-2xl p-3 flex flex-col">
-      <div
-        className="absolute -z-10 rounded-2xl bg-card border border-cardBorder pointer-events-none"
-        style={{
-          top: -1,
-          bottom: -1,
-          right: -1,
-          left: frame.left ?? -1,
-          backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)`,
-        }}
-      />
-      {frame.divider && (
-        <div
-          className="absolute w-px bg-gray-600/60 pointer-events-none"
-          style={{ left: frame.divider.x, top: frame.divider.top, height: frame.divider.height }}
-        />
-      )}
+    <div
+      className="relative bg-card border border-cardBorder rounded-2xl p-3 flex flex-col min-w-0"
+      style={{ backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)` }}
+    >
       <div
         className="absolute top-0 bottom-0 right-0 w-1"
         style={{ backgroundColor: accent, borderTopRightRadius: 15, borderBottomRightRadius: 15 }}
       />
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="flex items-center gap-2">
-          <Icon className="shrink-0" style={{ color: accent }} size={sizes.sectionTitleFontSize + 2} />
+      {/* ارتفاع صف العنوان ثابت (من الحجم الأصلي) حتى لو العنوان صغر، عشان الكروت تفضل على نفس الخط
+          The title row keeps the full-size height even when the title shrinks, so the cards stay aligned */}
+      <div
+        className="flex items-center justify-between gap-2 mb-1.5 min-w-0"
+        style={{ minHeight: sizes.sectionTitleFontSize * BOLD_LINE_HEIGHT }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className="shrink-0" style={{ color: accent }} size={Math.round(titleSize) + 2} />
           <h2
-            className="font-bold text-white whitespace-nowrap"
-            style={{ fontSize: `${sizes.sectionTitleFontSize}px`, lineHeight: BOLD_LINE_HEIGHT }}
+            ref={titleRef}
+            className="font-bold text-white whitespace-nowrap min-w-0"
+            style={{ fontSize: `${titleSize}px`, lineHeight: BOLD_LINE_HEIGHT }}
           >
             {title}
           </h2>
@@ -591,46 +553,74 @@ function SectionCard({
   );
 }
 
-// سطر مجموعة في كارت القطاعي ("باكتات 120" / "شكاير 32") - one group line on the retail card
-function RetailGroupLine({ label, value, accent, available }: { label: string; value: number; accent: string; available: boolean }) {
-  const card = dashboardConfig.sizes.stockPage.retailCard;
-  const { count } = useCountUp(value, 500);
+// عمود في كارت القطاعي ("باكتات" / "شكاير") بنفس شكل عمود ناعم / خشن: اسم / رقم / شريط بنفسجي
+// A retail card column ("باكتات" / "شكاير") shaped like ناعم / خشن: label / number / violet bar
+function RetailColumn({ label, value, available, color, accent }: { label: string; value: number; available: boolean; color: string; accent: string }) {
+  const sizes = dashboardConfig.sizes.stockPage;
+  const numberRef = useRef<HTMLDivElement>(null);
+  const [labelRef, labelFontSize] = useFitFontSize<HTMLSpanElement>(sizes.variantLabelFontSize, sizes.minVariantLabelFontSize, label);
+  // الرقم لو أعرض من العمود بيصغر 1px لحد ما يدخل - a number wider than its column steps down 1px until it fits
+  const [cap, setCap] = useState<number | undefined>(undefined);
+  useIsomorphicLayoutEffect(() => setCap(undefined), [value]);
+  useIsomorphicLayoutEffect(() => {
+    const el = numberRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const current = parseFloat(getComputedStyle(el).fontSize);
+    if (current > sizes.minNumberFontSize) setCap(Math.max(sizes.minNumberFontSize, Math.floor(current) - 1));
+  });
+
   return (
-    <div className="flex items-baseline justify-between gap-2 min-w-0 whitespace-nowrap">
-      <span className="shrink-0" style={{ fontSize: `${card.groupLabelFontSize}px`, color: withAlpha(accent, 0.8) }}>
+    <div className="min-w-0 overflow-hidden grid gap-1 px-1 first:pr-0 last:pl-0" style={{ gridTemplateRows: "auto auto auto", containerType: "inline-size" }}>
+      <span ref={labelRef} className="text-gray-400 min-w-0 whitespace-nowrap" style={{ fontSize: `${labelFontSize}px` }}>
         {label}
       </span>
-      <span
-        className="font-numbers font-bold tabular-nums"
-        style={{ fontSize: `${card.groupNumberFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: available ? accent : "#6B7280" }}
-      >
-        {available ? formatNumber(count) : "—"}
-      </span>
+      {available ? (
+        <QuantityNumber value={value} fontSize={sizes.numberFontSize} low={false} numberRef={numberRef} fitColumn cap={cap} color={color} />
+      ) : (
+        <div ref={numberRef} className="font-numbers font-bold text-gray-500" style={{ fontSize: `${sizes.minNumberFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}>
+          —
+        </div>
+      )}
+      <div className="h-1.5 rounded-full" style={{ backgroundImage: `linear-gradient(to right, ${withAlpha(accent, 0.55)}, ${accent})` }} />
     </div>
   );
 }
 
-// كارت "مخزن القطاعي": المخزن بيشيل أي صنف، فمفيش إجمالي واحد - سطرين "باكتات" و"شكاير" وتحتهم أكبر الأصناف
-// عدد الأصناف بيتحسب من المكان الفاضي (لحد maxItems) فالكارت عمره ما بيطوّل الصف
-// The "مخزن القطاعي" card: the warehouse holds any item, so no single total - "باكتات" and "شكاير" lines, then the
-// largest items. The item count follows the free space (up to maxItems), so the card never makes the row taller
+// كارت "مخزن القطاعي" بنفس شكل كروت الشكاير: عنوان صغير، عمودين "باكتات" و"شكاير"، أكبر صنفين، و"الإجمالي"
+// المخزن بيشيل أي صنف فالإجمالي بوحدتين ("X باكت · Y شكارة") ومن غير الجزء اللي صفر
+// السطور بتاخد المكان الفاضي بس (لحد maxItems) فالكارت عمره ما بيطوّل الصف
+// The retail card in the sack-card layout: small header, "باكتات" / "شكاير" columns, the top items and "الإجمالي".
+// It holds any item, so the total has two units ("X باكت · Y شكارة"), zero parts left out. The item rows only use
+// free space (up to maxItems), so the card never makes the row taller
 function RetailCard({
   retail,
   accent,
   textColor,
-  cardRef,
   onOpen,
 }: {
   retail: RetailStock | null;
-  accent: string; // البرواز والتوهج - border and glow
-  textColor: string; // الأرقام والكلام - numbers and labels
-  cardRef?: RefObject<HTMLDivElement>;
+  accent: string; // البرواز والتوهج والشرايط - border, glow and bars
+  textColor: string; // الأرقام - numbers
   onOpen?: () => void;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
+  const totalSizes = dashboardConfig.sizes.page2;
   const card = sizes.retailCard;
   const items = retail?.items ?? [];
-  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, "مخزن القطاعي");
+  const packets = retail?.packets ?? 0;
+  const sacks = retail?.sacks ?? 0;
+  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, "القطاعي");
+
+  // الإجمالي: كل وحدة لوحدها والجزء اللي صفر مش بيظهر - the total: one part per unit, zero parts left out
+  const parts = [
+    { value: packets, unit: "باكت" },
+    { value: sacks, unit: "شكارة" },
+  ].filter((part) => part.value !== 0);
+  const [totalRef, totalFontSize] = useFitFontSize<HTMLParagraphElement>(
+    totalSizes.totalFontSize,
+    card.minTotalFontSize,
+    `${packets}|${sacks}`
+  );
 
   // كام سطر يدخل في المكان الفاضي - how many rows fit in the free space
   const rowHeight = Math.ceil(card.itemFontSize * 1.5);
@@ -639,90 +629,98 @@ function RetailCard({
   useIsomorphicLayoutEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    // pt-1 = 4px فوق السطور - 4px top padding above the rows
-    const measure = () => setFit(Math.max(1, Math.floor((el.clientHeight - 4) / rowHeight)));
+    const measure = () => setFit(Math.max(0, Math.floor(el.clientHeight / rowHeight)));
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
   }, [rowHeight]);
-  const cap = Math.min(card.maxItems, fit);
-  // لو الأصناف أكتر من المكان، آخر سطر بيبقى "+N أصناف" - when there are more items, the last row is "+N أصناف"
-  const shown = items.length <= cap ? items : items.slice(0, Math.max(cap - 1, 0));
-  const more = items.length - shown.length;
+  const shown = items.slice(0, Math.min(card.maxItems, fit));
 
   return (
     <div
-      ref={cardRef}
       onClick={onOpen}
       className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${
         onOpen ? "cursor-pointer transition-colors hover:bg-white/[0.03]" : ""
       }`}
       style={{
-        gridTemplateRows: "auto auto minmax(0,1fr)",
-        // برواز بنفسجي وتوهج خفيف وخلفية مايلة للبنفسجي - violet border, soft glow, violet-tinted background
-        borderColor: withAlpha(accent, 0.85),
-        boxShadow: `0 0 14px 1px ${withAlpha(accent, 0.28)}`,
-        backgroundImage: `linear-gradient(160deg, ${withAlpha(accent, 0.12)}, ${withAlpha(accent, 0.03)} 70%)`,
+        gridTemplateRows: "auto auto minmax(0,1fr) auto",
+        borderColor: withAlpha(accent, 0.4),
+        boxShadow: `0 0 12px ${withAlpha(accent, 0.18)}`,
         paddingLeft: sizes.topCardPaddingX,
         paddingRight: sizes.topCardPaddingX,
       }}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        {/* الإيموجي مخفي بس بيحجز نفس المقاس بالظبط، والأيقونة البنفسجي فوقه - the hidden emoji keeps the exact size; the violet icon sits on it */}
-        <span className="relative text-3xl shrink-0" style={{ lineHeight: 2 }}>
-          <span className="invisible">🏪</span>
-          <Store className="absolute inset-0 m-auto w-[0.9em] h-[0.9em]" style={{ color: textColor }} strokeWidth={2.2} />
-        </span>
-        <h3
-          ref={nameRef}
-          className="font-bold text-white whitespace-nowrap min-w-0"
-          style={{ fontSize: `${nameFontSize}px`, lineHeight: BOLD_LINE_HEIGHT }}
-        >
-          مخزن القطاعي
+      {/* عنوان صغير: أيقونة + "القطاعي" - small header: icon + "القطاعي" */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Store className="shrink-0" size={card.iconSize} style={{ color: textColor }} strokeWidth={2.2} />
+        <h3 ref={nameRef} className="font-bold text-white whitespace-nowrap min-w-0" style={{ fontSize: `${nameFontSize}px`, lineHeight: BOLD_LINE_HEIGHT }}>
+          القطاعي
         </h3>
       </div>
 
-      <div className="grid gap-0.5 min-w-0">
-        <RetailGroupLine label="باكتات" value={retail?.packets ?? 0} accent={textColor} available={!!retail} />
-        <RetailGroupLine label="شكاير" value={retail?.sacks ?? 0} accent={textColor} available={!!retail} />
+      <div className="min-w-0 grid divide-x divide-x-reverse divide-cardBorder" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+        <RetailColumn label="باكتات" value={packets} available={!!retail} color={textColor} accent={accent} />
+        <RetailColumn label="شكاير" value={sacks} available={!!retail} color={textColor} accent={accent} />
       </div>
 
-      <div
-        ref={listRef}
-        className="min-h-0 overflow-hidden border-t border-cardBorder pt-1 flex flex-col"
-        style={{ fontSize: `${card.itemFontSize}px`, containerType: "inline-size", containerName: "retail-list" }}
-      >
-        {/* الكارت ضيق (1366): الوحدة بتستخبى عشان اسم الصنف يبان كامل - narrow card: hide the unit so the name shows in full */}
-        <style>{`@container retail-list (max-width: ${card.hideUnitBelow}px) { .retail-unit { display: none; } }`}</style>
+      {/* أكبر الأصناف بلون هادي - the largest items, muted */}
+      {/* contain: size = السطور مش بتطوّل الكارت أبداً، بتاخد المكان الفاضي بس - the rows never make the card taller, they only fill free space */}
+      <div ref={listRef} className="min-h-0 overflow-hidden flex flex-col justify-center" style={{ fontSize: `${card.itemFontSize}px`, contain: "size" }}>
         {retail && items.length === 0 ? (
-          <span className="text-gray-500 whitespace-nowrap" style={{ lineHeight: `${rowHeight}px` }}>
-            مفيش رصيد قطاعي
-          </span>
+          fit > 0 && (
+            <span className="text-gray-500 whitespace-nowrap" style={{ lineHeight: `${rowHeight}px` }}>
+              مفيش رصيد قطاعي
+            </span>
+          )
         ) : (
-          <>
-            {shown.map((item) => (
-              <div key={item.itemCode} className="flex items-center justify-between gap-2 min-w-0 shrink-0" style={{ height: rowHeight }}>
-                <span className="text-gray-300 truncate min-w-0">{toEnglishDigits(item.name)}</span>
-                <span className="shrink-0 whitespace-nowrap">
-                  <span
-                    className={`font-numbers font-bold tabular-nums ${item.qty < 0 ? "text-statusRed" : ""}`}
-                    style={item.qty < 0 ? undefined : { color: textColor }}
-                  >
-                    {formatNumber(item.qty)}
-                  </span>
-                  {item.unit && <span className="retail-unit text-gray-500"> {toEnglishDigits(item.unit)}</span>}
-                </span>
-              </div>
-            ))}
-            {more > 0 && (
-              <span className="text-gray-500 whitespace-nowrap shrink-0" style={{ lineHeight: `${rowHeight}px` }}>
-                +{formatNumber(more)} أصناف
+          shown.map((item) => (
+            <div key={item.itemCode} className="flex items-center justify-between gap-1.5 min-w-0 shrink-0" style={{ height: rowHeight }}>
+              <span className="text-gray-500 truncate min-w-0">{toEnglishDigits(item.name)}</span>
+              <span className={`font-numbers tabular-nums shrink-0 ${item.qty < 0 ? "text-statusRed" : "text-gray-400"}`}>
+                {formatNumber(item.qty)}
               </span>
-            )}
-          </>
+            </div>
+          ))
         )}
+      </div>
+
+      {/* "الإجمالي" زي باقي الكروت - "الإجمالي" like the other cards */}
+      <div
+        className="flex items-center justify-between gap-2 border-t border-cardBorder pt-1 min-w-0"
+        style={{ columnGap: sizes.topCardTotalGap, containerType: "inline-size", containerName: "retail-total" }}
+      >
+        {/* الصف ضيق (1366): كلمة "باكت" / "شكارة" بتستخبى والأرقام تفضل - العمودين اللي فوق بيقولوا مين مين
+            A narrow row (1366) hides the unit words and keeps the numbers; the columns above already name them */}
+        <style>{`@container retail-total (max-width: ${card.hideTotalUnitBelow}px) { .retail-total-unit { display: none; } }`}</style>
+        <span className="font-semibold text-gray-300 shrink-0 whitespace-nowrap" style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}>
+          الإجمالي
+        </span>
+        <p ref={totalRef} className="min-w-0 whitespace-nowrap text-left">
+          {!retail ? (
+            <span className="font-numbers font-extrabold text-gray-500" style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}>
+              —
+            </span>
+          ) : parts.length === 0 ? (
+            <span className="font-numbers font-extrabold" style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: textColor }}>
+              0
+            </span>
+          ) : (
+            parts.map((part, index) => (
+              <span key={part.unit}>
+                {index > 0 && <span className="text-gray-500" style={{ fontSize: `${totalSizes.totalUnitFontSize}px` }}> · </span>}
+                <span className="font-numbers font-extrabold tabular-nums" style={{ fontSize: `${totalFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: textColor }}>
+                  {formatNumber(part.value)}
+                </span>
+                <span className="retail-total-unit text-gray-400" style={{ fontSize: `${totalSizes.totalUnitFontSize}px` }}>
+                  {" "}
+                  {part.unit}
+                </span>
+              </span>
+            ))
+          )}
+        </p>
       </div>
     </div>
   );
@@ -797,7 +795,14 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
   // كارت مخزن القطاعي بيظهر لو فيه مخزن قطاعي في الكونفج - the retail card shows when retail warehouses are configured
   const hasRetailCard = dashboardConfig.erp.stock.retailWarehouses.length > 0;
-  const retailCardRef = useRef<HTMLDivElement>(null);
+  // عرض قسم الشكاير لما القطاعي في قسم لوحده: نفس عرض كل كارت شكاير بالظبط زي ما كان والقطاعي في 4 خانات جوه قسم واحد
+  // (sackColumns = نسب الكروت، 10px بين الكروت، 26px إطار القسم وال padding بتاعه، 12px بين الأقسام)
+  // The sacks section width when retail has its own section: every sack card keeps exactly the width it had when the
+  // retail card was the 4th card in the same section (card ratios, 10px card gap, 26px section frame + padding)
+  const sackCount = data.sacks.length;
+  const sackWeights = sizes.sackColumns.slice(0, sackCount).reduce((sum, w) => sum + w, 0);
+  const allWeights = sackWeights + (sizes.sackColumns[sackCount] ?? 1);
+  const sacksSectionWidth = `calc((100% - ${26 + 10 * sackCount}px) * ${sackWeights / allWeights} + ${10 * (sackCount - 1) + 26}px)`;
 
   return (
     // الصفوف عمرها ما تصغر عن محتواها (min-content) والمساحة الزيادة بتتوزع بالنسب
@@ -840,15 +845,11 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
           ))}
         </SectionCard>
 
-        <SectionCard
-          title="الشكاير"
-          icon={ShoppingBag}
-          accent={colors.sacks}
-          columns={data.sacks.length + (hasRetailCard ? 1 : 0)}
-          widths={sizes.sackColumns}
-          detached={hasRetailCard ? retailCardRef : undefined}
-        >
-          {data.sacks.map((sack, index) => (
+        {hasRetailCard ? (
+          // الشكاير ومخزن القطاعي: كل واحد في قسم لوحده - sacks and the retail warehouse, each in its own section
+          <div className="grid gap-3 min-w-0" style={{ gridTemplateColumns: `${sacksSectionWidth} minmax(0,1fr)` }}>
+            <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={sackCount} widths={sizes.sackColumns}>
+              {data.sacks.map((sack, index) => (
             <VariantsCard
               key={sack.id}
               name={sack.name}
@@ -871,12 +872,12 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
               }
             />
           ))}
-          {hasRetailCard && (
-            <RetailCard
+            </SectionCard>
+            <SectionCard title="مخزن القطاعي" icon={Store} accent={colors.retail} columns={1} fitTitle>
+              <RetailCard
               retail={data.retail}
               accent={colors.retail}
               textColor={colors.retailText}
-              cardRef={retailCardRef}
               onOpen={
                 onOpenItem &&
                 (() =>
@@ -890,8 +891,35 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
                   }))
               }
             />
-          )}
-        </SectionCard>
+            </SectionCard>
+          </div>
+        ) : (
+          <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={sackCount}>
+            {data.sacks.map((sack, index) => (
+            <VariantsCard
+              key={sack.id}
+              name={sack.name}
+              unit={sack.unit}
+              icon={sack.icon}
+              variants={sack.variants}
+              accent={colors.sacks}
+              totalMinimum={sack.minimumThreshold}
+              showRetail={dashboardConfig.erp.stock.showRetailOnCard}
+              numberScale={hasRetailCard ? sizes.sackNumberBoost[index] ?? 1 : 1}
+              tight={hasRetailCard}
+              onOpen={
+                onOpenItem &&
+                ((variant) =>
+                  onOpenItem({
+                    ...panelTarget("sacks", sack.name, sack.unit, sack.variants, true,
+                      isBelow(sumQuantities(sack.variants), sack.minimumThreshold)),
+                    variant,
+                  }))
+              }
+            />
+          ))}
+          </SectionCard>
+        )}
       </div>
 
       {/* تحت: المواد الخام كلها في قسم واحد - bottom: all raw materials in one section */}

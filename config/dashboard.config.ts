@@ -1013,11 +1013,11 @@ export const dashboardConfig = {
       // Sack cards while retail is shown on them - frees room for the small line without making the card taller
       // كارت "مخزن القطاعي" في قسم الشكاير - the "مخزن القطاعي" card in the sacks section
       retailCard: {
-        groupNumberFontSize: 22, // رقم سطر "باكتات" و"شكاير" - the "باكتات" / "شكاير" line numbers
-        groupLabelFontSize: 14, // كلمة "باكتات" و"شكاير" - the "باكتات" / "شكاير" labels
-        hideUnitBelow: 150, // لو عرض السطور أقل من كده الوحدة بتستخبى (اسم الصنف أهم) - hide the unit when rows are narrower (the name matters more)
-        maxItems: 3, // أكتر عدد أصناف تحت السطرين (بيقل لوحده لو المكان مش كفاية، 2 على 1366) - most item rows (fewer when tight)
-        itemFontSize: 13, // حجم سطر الصنف ("برتقال خشن 15") - item row font size
+        iconSize: 20, // أيقونة العنوان الصغير ("القطاعي") - the small header icon
+        maxItems: 2, // أكتر عدد أصناف تحت العمودين (بيقل لوحده لو المكان مش كفاية) - most item rows (fewer when tight)
+        itemFontSize: 12, // سطر الصنف ("برتقال خشن 15") - item row font size
+        minTotalFontSize: 12, // أصغر حجم لرقم الإجمالي لو الوحدتين مش واخدين مكانهم - smallest total size when both units don't fit
+        hideTotalUnitBelow: 130, // لو صف الإجمالي أضيق من كده كلمة "باكت" / "شكارة" بتستخبى - hide the unit words in a narrower total row
       },
       sackRetail: {
         nameFontSize: 16, // اسم الكارت (العادي nameFontSize فوق) - card name (normally nameFontSize)
