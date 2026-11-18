@@ -3,7 +3,7 @@
 import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PackagingItem, RetailStock, Stock, StockGroup, StockVariant, WoodType } from "@/lib/types";
 import type { StockPanelTarget } from "./StockDetailsPanel";
-import { AlertTriangle, Box, Cylinder, Disc3, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
+import { AlertTriangle, Box, Cylinder, Disc3, Layers, LucideIcon, Package, ShoppingBag, Store, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
 import { useFitFontSize } from "@/lib/useFitFontSize";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
@@ -486,6 +486,37 @@ function CardsGrid({ columns, widths, children }: { columns: number; widths?: nu
   );
 }
 
+// مكان إطار القسم لما فيه كارت برّه الإطار: الإطار بيبدأ بعد الكارت بـ 7px، والخط في نص الفاصل بينهم (3px)
+// Where the section frame starts when a card sits outside it: 7px right of that card; the divider 3px right of it
+function useDetachedFrame(detached?: RefObject<HTMLDivElement>) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [frame, setFrame] = useState<{ left: number; divider: { x: number; top: number; height: number } } | null>(null);
+  useIsomorphicLayoutEffect(() => {
+    const section = sectionRef.current;
+    const card = detached?.current;
+    if (!section || !card) return;
+    const measure = () => {
+      const s = section.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      // الإحداثيات جوه الصندوق (من جوه الـ border) - coordinates inside the box (inside its 1px border)
+      const right = c.right - s.left - 1;
+      const next = { left: Math.round(right + 7), divider: { x: Math.round(right + 3), top: Math.round(c.top - s.top - 1), height: Math.round(c.height) } };
+      setFrame((old) =>
+        old && old.left === next.left && old.divider.x === next.divider.x && old.divider.top === next.divider.top && old.divider.height === next.divider.height
+          ? old
+          : next
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(section);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [detached]);
+  return { sectionRef, left: frame?.left, divider: frame?.divider };
+}
+
 // قسم كبير بعنوان وكروت جنب بعض - big titled section with cards side by side
 // كل قسم ليه لون: خط على اليمين وأيقونة وخلفية خفيفة - each section has an accent: right bar, icon, faint tint
 // من غير columns المحتوى بيترص فوق بعض (زي المواد الخام) - without columns, children are stacked (raw materials)
@@ -497,6 +528,7 @@ function SectionCard({
   extra,
   columns,
   widths,
+  detached,
   children,
 }: {
   title: string;
@@ -505,15 +537,35 @@ function SectionCard({
   extra?: ReactNode;
   columns?: number;
   widths?: number[];
+  // كارت على الشمال برّه إطار القسم (مخزن القطاعي): الإطار بيقف قبله وبينهم خط رفيع، والمقاسات والأماكن زي ما هي
+  // A card on the left kept outside the section frame (the retail card): the frame stops before it with a thin
+  // divider between them; sizes and positions stay exactly the same
+  detached?: RefObject<HTMLDivElement>;
   children: ReactNode;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
+  const frame = useDetachedFrame(detached);
 
   return (
-    <div
-      className="relative bg-card border border-cardBorder rounded-2xl p-3 flex flex-col"
-      style={{ backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)` }}
-    >
+    // الصندوق نفسه (المقاس والـ padding) زي ما هو، والإطار المرسوم بقى طبقة ورا المحتوى
+    // The box itself (size and padding) is unchanged; the drawn frame is a layer behind the content
+    <div ref={frame.sectionRef} className="relative isolate border border-transparent rounded-2xl p-3 flex flex-col">
+      <div
+        className="absolute -z-10 rounded-2xl bg-card border border-cardBorder pointer-events-none"
+        style={{
+          top: -1,
+          bottom: -1,
+          right: -1,
+          left: frame.left ?? -1,
+          backgroundImage: `linear-gradient(to left, ${withAlpha(accent, 0.06)}, transparent 60%)`,
+        }}
+      />
+      {frame.divider && (
+        <div
+          className="absolute w-px bg-gray-600/60 pointer-events-none"
+          style={{ left: frame.divider.x, top: frame.divider.top, height: frame.divider.height }}
+        />
+      )}
       <div
         className="absolute top-0 bottom-0 right-0 w-1"
         style={{ backgroundColor: accent, borderTopRightRadius: 15, borderBottomRightRadius: 15 }}
@@ -545,7 +597,7 @@ function RetailGroupLine({ label, value, accent, available }: { label: string; v
   const { count } = useCountUp(value, 500);
   return (
     <div className="flex items-baseline justify-between gap-2 min-w-0 whitespace-nowrap">
-      <span className="text-gray-400 shrink-0" style={{ fontSize: `${card.groupLabelFontSize}px` }}>
+      <span className="shrink-0" style={{ fontSize: `${card.groupLabelFontSize}px`, color: withAlpha(accent, 0.8) }}>
         {label}
       </span>
       <span
@@ -562,7 +614,19 @@ function RetailGroupLine({ label, value, accent, available }: { label: string; v
 // عدد الأصناف بيتحسب من المكان الفاضي (لحد maxItems) فالكارت عمره ما بيطوّل الصف
 // The "مخزن القطاعي" card: the warehouse holds any item, so no single total - "باكتات" and "شكاير" lines, then the
 // largest items. The item count follows the free space (up to maxItems), so the card never makes the row taller
-function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; accent: string; onOpen?: () => void }) {
+function RetailCard({
+  retail,
+  accent,
+  textColor,
+  cardRef,
+  onOpen,
+}: {
+  retail: RetailStock | null;
+  accent: string; // البرواز والتوهج - border and glow
+  textColor: string; // الأرقام والكلام - numbers and labels
+  cardRef?: RefObject<HTMLDivElement>;
+  onOpen?: () => void;
+}) {
   const sizes = dashboardConfig.sizes.stockPage;
   const card = sizes.retailCard;
   const items = retail?.items ?? [];
@@ -590,20 +654,26 @@ function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; ac
 
   return (
     <div
+      ref={cardRef}
       onClick={onOpen}
       className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${
         onOpen ? "cursor-pointer transition-colors hover:bg-white/[0.03]" : ""
       }`}
       style={{
         gridTemplateRows: "auto auto minmax(0,1fr)",
-        borderColor: withAlpha(accent, 0.35),
+        // برواز بنفسجي وتوهج خفيف وخلفية مايلة للبنفسجي - violet border, soft glow, violet-tinted background
+        borderColor: withAlpha(accent, 0.85),
+        boxShadow: `0 0 14px 1px ${withAlpha(accent, 0.28)}`,
+        backgroundImage: `linear-gradient(160deg, ${withAlpha(accent, 0.12)}, ${withAlpha(accent, 0.03)} 70%)`,
         paddingLeft: sizes.topCardPaddingX,
         paddingRight: sizes.topCardPaddingX,
       }}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-3xl shrink-0" style={{ lineHeight: 2 }}>
-          🏪
+        {/* الإيموجي مخفي بس بيحجز نفس المقاس بالظبط، والأيقونة البنفسجي فوقه - the hidden emoji keeps the exact size; the violet icon sits on it */}
+        <span className="relative text-3xl shrink-0" style={{ lineHeight: 2 }}>
+          <span className="invisible">🏪</span>
+          <Store className="absolute inset-0 m-auto w-[0.9em] h-[0.9em]" style={{ color: textColor }} strokeWidth={2.2} />
         </span>
         <h3
           ref={nameRef}
@@ -615,8 +685,8 @@ function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; ac
       </div>
 
       <div className="grid gap-0.5 min-w-0">
-        <RetailGroupLine label="باكتات" value={retail?.packets ?? 0} accent={accent} available={!!retail} />
-        <RetailGroupLine label="شكاير" value={retail?.sacks ?? 0} accent={accent} available={!!retail} />
+        <RetailGroupLine label="باكتات" value={retail?.packets ?? 0} accent={textColor} available={!!retail} />
+        <RetailGroupLine label="شكاير" value={retail?.sacks ?? 0} accent={textColor} available={!!retail} />
       </div>
 
       <div
@@ -636,7 +706,10 @@ function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; ac
               <div key={item.itemCode} className="flex items-center justify-between gap-2 min-w-0 shrink-0" style={{ height: rowHeight }}>
                 <span className="text-gray-300 truncate min-w-0">{toEnglishDigits(item.name)}</span>
                 <span className="shrink-0 whitespace-nowrap">
-                  <span className={`font-numbers font-bold tabular-nums ${item.qty < 0 ? "text-statusRed" : "text-white"}`}>
+                  <span
+                    className={`font-numbers font-bold tabular-nums ${item.qty < 0 ? "text-statusRed" : ""}`}
+                    style={item.qty < 0 ? undefined : { color: textColor }}
+                  >
                     {formatNumber(item.qty)}
                   </span>
                   {item.unit && <span className="retail-unit text-gray-500"> {toEnglishDigits(item.unit)}</span>}
@@ -724,6 +797,7 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
   // كارت مخزن القطاعي بيظهر لو فيه مخزن قطاعي في الكونفج - the retail card shows when retail warehouses are configured
   const hasRetailCard = dashboardConfig.erp.stock.retailWarehouses.length > 0;
+  const retailCardRef = useRef<HTMLDivElement>(null);
 
   return (
     // الصفوف عمرها ما تصغر عن محتواها (min-content) والمساحة الزيادة بتتوزع بالنسب
@@ -772,6 +846,7 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
           accent={colors.sacks}
           columns={data.sacks.length + (hasRetailCard ? 1 : 0)}
           widths={sizes.sackColumns}
+          detached={hasRetailCard ? retailCardRef : undefined}
         >
           {data.sacks.map((sack, index) => (
             <VariantsCard
@@ -800,6 +875,8 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
             <RetailCard
               retail={data.retail}
               accent={colors.retail}
+              textColor={colors.retailText}
+              cardRef={retailCardRef}
               onOpen={
                 onOpenItem &&
                 (() =>

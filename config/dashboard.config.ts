@@ -1239,7 +1239,8 @@ export const dashboardConfig = {
     colors: {
       packaged: "#FF7A00", // المنتجات المعبأة (برتقالي) - packaged products (orange)
       sacks: "#10B981", // الشكاير (أخضر زمردي) - sacks (emerald green)
-      retail: "#14B8A6", // كارت مخزن القطاعي (تيل) - the retail warehouse card (teal)
+      retail: "#8B5CF6", // كارت مخزن القطاعي (بنفسجي، برّه إطار الشكاير) - the retail warehouse card (violet, outside the sacks frame)
+      retailText: "#C4B5FD", // أرقام وكلام كارت القطاعي (بنفسجي فاتح) - the retail card's numbers and labels (light violet)
       rawMaterials: "#C8873A", // المواد الخام: الأخشاب ومواد التعبئة (بني خشبي) - raw materials: wood + packaging (wood brown)
     },
   },
