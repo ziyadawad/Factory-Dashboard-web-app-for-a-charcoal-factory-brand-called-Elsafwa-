@@ -80,12 +80,20 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "duplicates", label: "⚠ عمليات مكررة" }, // كل المخازن، آخر 60 يوم - all stock, last 60 days
 ];
 
+// فلتر الحركات في الشكاير - the sacks' movements filter
+type Scope = "main" | "retail" | "all";
+const SCOPES: { id: Scope; label: string }[] = [
+  { id: "main", label: "الرئيسي" },
+  { id: "retail", label: "القطاعي" },
+  { id: "all", label: "الكل" },
+];
+
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
 
 // صف حركة (والضغط عليه يفتح التفاصيل) - one movement row (click opens its details)
 function MoveRow({ move, erpUrl, unit, open, onToggle }: { move: StockMove; erpUrl: string; unit: string; open: boolean; onToggle: () => void }) {
   const incoming = move.qty > 0;
-  const muted = !move.inScope;
+  const muted = !move.inScope && !move.retail;
   return (
     <>
       <tr onClick={onToggle} className={`cursor-pointer hover:bg-white/5 ${open ? "bg-white/5" : ""} ${muted ? "opacity-60" : ""}`}>
@@ -122,7 +130,12 @@ function MoveRow({ move, erpUrl, unit, open, onToggle }: { move: StockMove; erpU
             n(move.balanceAfter)
           )}
         </td>
-        <td className={`${td} text-gray-200 whitespace-nowrap`}>{shortWarehouse(move.warehouse)}</td>
+        <td className={`${td} text-gray-200 whitespace-nowrap`}>
+          {shortWarehouse(move.warehouse)}
+          {move.retail && (
+            <span className="ms-1.5 rounded-full border border-teal-500/40 bg-teal-500/10 text-teal-300 text-[0.8em] px-2 leading-[1.7]">قطاعي</span>
+          )}
+        </td>
         <td className={`${td} whitespace-nowrap leading-tight py-1`}>
           <span className="block text-gray-500 text-[0.8em]">
             {move.voucherType}
@@ -145,9 +158,9 @@ function MoveRow({ move, erpUrl, unit, open, onToggle }: { move: StockMove; erpU
             <div className="flex items-start gap-6">
               <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-8 gap-y-1 text-gray-200">
                 <p><span className="text-gray-500">الصنف: </span>{toEnglishDigits(move.itemCode)}</p>
-                <p><span className="text-gray-500">المخزن: </span>{move.warehouse}{!move.inScope && <span className="text-gray-500"> (برّه رصيد الكارت)</span>}</p>
+                <p><span className="text-gray-500">المخزن: </span>{move.warehouse}{move.retail ? <span className="text-teal-300"> (القطاعي)</span> : !move.inScope && <span className="text-gray-500"> (برّه رصيد الكارت)</span>}</p>
                 <p><span className="text-gray-500">الكمية: </span>{n(move.qty)} {unit}</p>
-                <p><span className="text-gray-500">الرصيد بعدها: </span>{move.balanceAfter === null ? "—" : n(move.balanceAfter)}</p>
+                <p><span className="text-gray-500">{move.retail ? "رصيد القطاعي بعدها: " : "الرصيد بعدها: "}</span>{move.balanceAfter === null ? "—" : n(move.balanceAfter)}</p>
                 <p><span className="text-gray-500">تاريخ الحركة: </span>{formatDayName(move.postingDate)} <span dir="ltr" className="font-numbers">{move.postingTime}</span></p>
                 <p><span className="text-gray-500">وقت التسجيل: </span><span dir="ltr" className="font-numbers">{move.creation}</span> — {move.owner}</p>
                 <p><span className="text-gray-500">المستند: </span>{move.voucherType} <span dir="ltr" className="font-numbers">{move.voucherNo}</span>{move.voucherLabel && ` (${move.voucherLabel})`}</p>
@@ -226,6 +239,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
   const [variant, setVariant] = useState<string | null>(target.variant);
   const [month, setMonth] = useState(cairoMonth);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>("all");
   useIdleClose(onClose);
 
   const params = new URLSearchParams({ group: target.group, name: target.name, month });
@@ -239,13 +253,34 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
   const loadingNew = !!data && (data.month !== month || data.variant !== variant);
 
   // الحركات متجمعة بالأيام (الأحدث الأول) - movements grouped by day, newest first
+  // الشكاير: فلتر الرئيسي / القطاعي / الكل، ووارد ومنصرف اليوم بصافي كل مستند جوه الفلتر
+  // sacks: main / retail / all filter; the day's in / out nets each voucher inside the filter
+  const hasSplit = !!data?.split;
   const days = useMemo(() => {
     if (!data) return [];
+    const shown = (move: StockMove) => (!hasSplit || scope === "all" ? true : scope === "main" ? move.inScope : move.retail);
     const byDay = new Map<string, StockMove[]>();
-    for (const move of data.moves) byDay.set(move.postingDate, [...(byDay.get(move.postingDate) ?? []), move]);
+    for (const move of data.moves) {
+      if (shown(move)) byDay.set(move.postingDate, [...(byDay.get(move.postingDate) ?? []), move]);
+    }
     const totals = new Map(data.daily.map((d) => [d.date, d]));
-    return Array.from(byDay, ([date, moves]) => ({ date, moves, in: totals.get(date)?.in ?? 0, out: totals.get(date)?.out ?? 0 }));
-  }, [data]);
+    return Array.from(byDay, ([date, moves]) => {
+      if (!hasSplit || scope === "main") return { date, moves, in: totals.get(date)?.in ?? 0, out: totals.get(date)?.out ?? 0 };
+      const net = new Map<string, number>();
+      for (const move of moves) {
+        if (!move.inScope && !move.retail) continue; // العربيات برّه - vehicles stay out
+        const key = `${move.voucherType}|${move.voucherNo}`;
+        net.set(key, (net.get(key) ?? 0) + move.qty);
+      }
+      let inQty = 0;
+      let outQty = 0;
+      for (const value of Array.from(net.values())) {
+        if (value > 0) inQty += value;
+        else outQty -= value;
+      }
+      return { date, moves, in: Math.round(inQty * 1000) / 1000, out: Math.round(outQty * 1000) / 1000 };
+    });
+  }, [data, hasSplit, scope]);
 
   // تابات الشهور: الشهور اللي فيها حركات + الشهر ده دايما - month tabs: months with movements + always this month
   const monthTabs = useMemo(() => {
@@ -258,7 +293,8 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
   const low = variant ? target.low.variants[variant] ?? false : target.low.total;
   const Icon = (target.icon && PACKAGING_ICONS[target.icon]) || GROUP_ICONS[target.group];
   const counted = data?.warehouses.filter((w) => !w.excluded) ?? [];
-  const excluded = data?.warehouses.filter((w) => w.excluded) ?? [];
+  const retailWarehouses = data?.warehouses.filter((w) => w.retail) ?? [];
+  const excluded = data?.warehouses.filter((w) => w.excluded && !w.retail) ?? [];
   const maxQty = Math.max(1, ...(data?.warehouses.map((w) => Math.abs(w.qty)) ?? [1]));
   const th = "px-2.5 py-2 font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
   const chip = (active: boolean) =>
@@ -267,12 +303,15 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
     }`;
   const isCurrentMonth = data ? data.to === data.today : true;
 
-  const warehouseRow = (w: { warehouse: string; qty: number; excluded: boolean }) => (
+  // القطاعي بلونه (مش رمادي زي العربيات) - retail keeps its own color (not gray like the vans)
+  const warehouseRow = (row: { warehouse: string; qty: number; excluded: boolean; retail: boolean }) => {
+    const w = { ...row, excluded: row.excluded && !row.retail };
+    return (
     <div key={w.warehouse} className={`grid items-center gap-4 py-1.5 ${w.excluded ? "text-gray-500" : ""}`} style={{ gridTemplateColumns: "minmax(0,1.2fr) minmax(0,2fr) auto" }}>
       <span className={`truncate font-semibold ${w.excluded ? "text-gray-500" : "text-gray-100"}`}>{shortWarehouse(w.warehouse)}</span>
       <div className="h-3 rounded-full bg-cardBorder overflow-hidden">
         <div
-          className={`h-full rounded-full ${w.excluded ? "bg-gray-500" : w.qty < 0 ? "bg-statusRed" : "bg-gradient-to-r from-brandYellow to-brandOrange"}`}
+          className={`h-full rounded-full ${w.excluded ? "bg-gray-500" : row.retail ? "bg-teal-400" : w.qty < 0 ? "bg-statusRed" : "bg-gradient-to-r from-brandYellow to-brandOrange"}`}
           style={{ width: `${(Math.abs(w.qty) / maxQty) * 100}%` }}
         />
       </div>
@@ -280,7 +319,8 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
         {n(w.qty)} <span className="text-gray-500 text-[0.75em] font-normal">{unit}</span>
       </span>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose} role="dialog" aria-modal="true">
@@ -312,6 +352,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
           </div>
           {data && (
             <p className={`flex items-baseline gap-2 whitespace-nowrap ${loadingNew ? "opacity-50" : ""}`}>
+              {data.split && <span className="text-gray-400 text-[0.9em]">المخزن الرئيسي</span>}
               <span
                 dir="ltr"
                 className={`font-numbers font-extrabold tabular-nums text-[32px] min-[1600px]:text-[38px] leading-tight ${
@@ -339,6 +380,51 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
           </button>
         </div>
 
+        {/* الشكاير: الرئيسي / القطاعي / الإجمالي لكل نوع (الضغط على نوع بيختاره) - sacks: main / retail / total per variant (click selects it) */}
+        {data?.split && (
+          <div className={`shrink-0 flex items-stretch gap-2 px-5 py-2.5 border-b border-cardBorder ${loadingNew ? "opacity-50" : ""}`}>
+            {(data.split.length > 1
+              ? [
+                  ...data.split,
+                  {
+                    label: "",
+                    main: data.split.reduce((sum, r) => sum + r.main, 0),
+                    retail: Math.round(data.split.reduce((sum, r) => sum + r.retail, 0) * 10) / 10,
+                    total: Math.round(data.split.reduce((sum, r) => sum + r.total, 0) * 10) / 10,
+                  },
+                ]
+              : data.split
+            ).map((row) => {
+              const active = row.label === "" ? variant === null : variant === row.label;
+              return (
+                <button
+                  key={row.label || "all"}
+                  type="button"
+                  onClick={() => {
+                    setVariant(row.label || null);
+                    setOpenId(null);
+                  }}
+                  className={`flex-1 min-w-0 rounded-xl border px-3 py-1.5 text-start ${
+                    active ? "border-brandOrange/70 bg-brandOrange/10" : "border-cardBorder bg-background/60 hover:border-gray-500"
+                  }`}
+                >
+                  <span className={`block font-bold ${active ? "text-brandOrange" : "text-white"}`}>
+                    {row.label ? toEnglishDigits(row.label) : "الكل"}
+                  </span>
+                  {/* كل جزء ما بيتكسرش، والسطر بيلف بين الأجزاء لو الخانة ضيقة - each part stays whole; the line wraps between parts */}
+                  <span className="flex flex-wrap gap-x-1.5 text-gray-300">
+                    <span className="whitespace-nowrap"><span className="text-gray-400">المخزن الرئيسي</span> <span className="font-extrabold text-white text-[1.1em]">{n(row.main)}</span></span>
+                    <span className="text-gray-600">·</span>
+                    <span className="whitespace-nowrap"><span className="text-teal-300/80">القطاعي</span> <span className="font-bold text-teal-300">{n(row.retail)}</span></span>
+                    <span className="text-gray-600">·</span>
+                    <span className="whitespace-nowrap"><span className="text-gray-400">الإجمالي</span> <span className="font-bold text-brandOrange">{n(row.total)}</span></span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* التابات، الأنواع، الشهور - tabs, variants, months */}
         <div className="shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-cardBorder">
           {TABS.map((t) => (
@@ -359,6 +445,23 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                   className={`${chip(variant === v)} !px-3 !py-1`}
                 >
                   {v === null ? "الكل" : toEnglishDigits(v)}
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === "moves" && hasSplit && (
+            <div className="flex items-center gap-1.5 ms-3 ps-3 border-s border-cardBorder">
+              {SCOPES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setScope(option.id);
+                    setOpenId(null);
+                  }}
+                  className={`${chip(scope === option.id)} !px-3 !py-1`}
+                >
+                  {option.label}
                 </button>
               ))}
             </div>
@@ -397,6 +500,12 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                 <h3 className="font-bold text-gray-300 mb-1">المخازن اللي داخلة في الرصيد</h3>
                 {counted.length === 0 ? <p className="text-gray-500">لا يوجد</p> : counted.map(warehouseRow)}
               </div>
+              {retailWarehouses.length > 0 && (
+                <div className="pt-3 border-t border-cardBorder">
+                  <h3 className="font-bold text-teal-300 mb-1">القطاعي (برّه الرقم الكبير، بيظهر لوحده)</h3>
+                  {retailWarehouses.map(warehouseRow)}
+                </div>
+              )}
               {excluded.length > 0 && (
                 <div className="pt-3 border-t border-cardBorder">
                   <h3 className="font-bold text-gray-500 mb-1">مش داخلة في رصيد الكارت (العربيات)</h3>
@@ -406,7 +515,11 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
             </div>
           ) : tab === "moves" ? (
             days.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xl text-gray-400">لا توجد حركات في الشهر ده</div>
+              <div className="h-full flex items-center justify-center text-xl text-gray-400">
+                {hasSplit && scope !== "all"
+                  ? `لا توجد حركات ${scope === "retail" ? "قطاعي" : "في المخزن الرئيسي"} في الشهر ده`
+                  : "لا توجد حركات في الشهر ده"}
+              </div>
             ) : (
               <table className="w-full border-separate border-spacing-0 leading-[2]">
                 <thead className="sticky top-0 z-10 bg-card">

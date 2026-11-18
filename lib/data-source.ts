@@ -625,6 +625,15 @@ async function loadStockBalances(): Promise<BalanceRow[]> {
   }));
 }
 
+// نفس أصناف الرقم بس في مخازن القطاعي (لو الرقم مربوط بمخازن معينة: اللي منهم قطاعي بس)
+// The same items limited to the retail warehouses (if the number names warehouses: only the retail ones among them)
+function retailField(field: ConfigErpStockItem | undefined, retail: string[]): ConfigErpStockItem {
+  if (field?.source !== "erp") return { source: "manual" };
+  const warehouses = field.warehouses.length === 0 ? retail : field.warehouses.filter((w) => retail.includes(w));
+  // [] معناها كل المخازن، فلو مفيش مخزن قطاعي يبقى 0 - [] means every warehouse, so no retail warehouse = 0
+  return warehouses.length === 0 ? { source: "manual" } : { ...field, warehouses };
+}
+
 // أرصدة المخازن: طلب واحد لكل الأصناف المربوطة في كل تحديث، وكل رقم بيجمع الصفوف بتاعته
 // Stock: one balance load for every mapped item per refresh, then each number sums its own rows
 function stockLoader(results: ErpStatus[]) {
@@ -719,8 +728,13 @@ export async function getDashboardData(): Promise<DashboardData> {
           sack.variants.map(async (variant: ConfigVariant) => ({
             label: variant.label,
             minimumThreshold: minimumOf(stockMinimums.sacks, sack.name, { variant: variant.label }),
+            // الرئيسي = من غير القطاعي ومن غير العربيات - MAIN = without retail and vehicle warehouses
             quantity: await stock.quantity(`sacks.${sack.name}.${variant.label}`,
-              erp.stock.sacks[sack.name]?.[variant.label], variant.quantity),
+              erp.stock.sacks[sack.name]?.[variant.label], variant.quantity, 0,
+              [...erp.stock.excludedWarehouses, ...erp.stock.retailWarehouses]),
+            // القطاعي = مخازن retailWarehouses بس (يدوي = 0) - retail = retailWarehouses only (manual = 0)
+            retail: await stock.quantity(`sacks.${sack.name}.${variant.label}.retail`,
+              retailField(erp.stock.sacks[sack.name]?.[variant.label], erp.stock.retailWarehouses), 0, 1),
           }))
         ),
         icon: ["🍊", "🥭", "🌲"][index],

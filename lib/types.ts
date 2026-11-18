@@ -51,8 +51,9 @@ export interface Attendance {
 // low when minimumThreshold > 0 and quantity <= minimumThreshold
 export interface StockVariant {
   label: string;
-  quantity: number;
+  quantity: number; // للشكاير = المخزن الرئيسي بس - for sacks: MAIN warehouses only
   minimumThreshold: number;
+  retail?: number; // الشكاير بس: رصيد مخازن القطاعي - sacks only: retail warehouses balance
 }
 
 // منتج معبأ - packaged product; its total = sum of variants (calculated in the UI)
@@ -950,6 +951,9 @@ export interface StockMove {
   qty: number; // + وارد / − منصرف (فرق الرصيد في المخزن ده) - + in / − out (the warehouse balance change)
   balanceAfter: number | null; // رصيد الكارت بعدها (null = مخزن مش داخل في الرصيد) - card balance after (null = excluded warehouse)
   inScope: boolean;
+  // الشكاير: الحركة في مخزن القطاعي (balanceAfter = رصيد القطاعي بعدها) - sacks: a retail-warehouse move
+  // (balanceAfter = the retail balance after it)
+  retail: boolean;
   category: StockCategory;
   voucherType: string;
   voucherNo: string;
@@ -974,7 +978,10 @@ export interface StockDetails {
   to: string;
   months: { month: string; count: number }[]; // الشهور اللي فيها حركات (الأحدث الأول) - months with movements
   balance: number; // الرصيد الحالي (نفس رقم الكارت) - current balance (same as the card)
-  warehouses: { warehouse: string; qty: number; excluded: boolean }[];
+  warehouses: { warehouse: string; qty: number; excluded: boolean; retail: boolean }[];
+  // الشكاير بس: الرئيسي / القطاعي / الإجمالي لكل نوع في الكارت (كل الأنواع حتى لو نوع واحد مختار)
+  // sacks only: MAIN / retail / total per variant of the card (every variant, even when one is selected)
+  split: { label: string; main: number; retail: number; total: number }[] | null;
   openingBalance: number;
   closingBalance: number;
   totalIn: number;

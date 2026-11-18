@@ -145,11 +145,15 @@ function VariantColumn({
   numberFontSize,
   onOverflow,
   onOpen,
+  showRetail = false,
 }: {
   variant: StockVariant;
   numberFontSize: number;
   onOverflow: (fontSize: number) => void;
   onOpen?: () => void; // الضغط على النوع ده بس - clicking this variant only
+  // سطر "قطاعي X" تحت الرقم (مكانه محجوز حتى لو 0 عشان الأعمدة تفضل على نفس الخط)
+  // the "قطاعي X" line under the number (its space is kept even at 0 so the columns stay aligned)
+  showRetail?: boolean;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const low = isLow(variant);
@@ -170,7 +174,7 @@ function VariantColumn({
   return (
     <div
       className={`min-w-0 overflow-hidden grid gap-1 px-1 first:pr-0 last:pl-0 ${onOpen ? "cursor-pointer rounded-md hover:bg-white/5" : ""}`}
-      style={{ gridTemplateRows: "auto auto auto", containerType: "inline-size" }}
+      style={{ gridTemplateRows: showRetail ? "auto auto auto auto" : "auto auto auto", containerType: "inline-size" }}
       onClick={
         onOpen
           ? (e) => {
@@ -190,13 +194,21 @@ function VariantColumn({
         </span>
       </div>
       <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} fitColumn />
+      {showRetail && (
+        <span
+          className={`text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis ${variant.retail ? "" : "invisible"}`}
+          style={{ fontSize: `${sizes.sackRetail.retailFontSize}px`, lineHeight: 1.35, marginTop: -2 }}
+        >
+          قطاعي <span className="font-numbers tabular-nums text-gray-400">{formatNumber(variant.retail ?? 0)}</span>
+        </span>
+      )}
       <ProgressBar variant={variant} />
     </div>
   );
 }
 
 // صورة المنتج أو أيقونة مكانها - product image, or a placeholder / icon in the same box
-function CardIcon({ image, icon, name }: { image?: string; icon?: ReactNode; name: string }) {
+function CardIcon({ image, icon, name, emojiSize }: { image?: string; icon?: ReactNode; name: string; emojiSize?: number }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const [imageFailed, setImageFailed] = useState(false);
   const box = { width: `${sizes.imageWidth}px`, height: `${sizes.imageHeight}px` };
@@ -221,7 +233,7 @@ function CardIcon({ image, icon, name }: { image?: string; icon?: ReactNode; nam
   }
   // الإيموجي محتاج سطر أطول عشان ميتقصش - emoji needs a taller line so it isn't clipped
   return (
-    <span className="text-3xl shrink-0" style={{ lineHeight: 2 }}>
+    <span className="text-3xl shrink-0" style={{ lineHeight: 2, ...(emojiSize ? { fontSize: emojiSize } : {}) }}>
       {icon}
     </span>
   );
@@ -243,8 +255,12 @@ function VariantsCard({
   showTotalUnit = false,
   totalMinimum = 0,
   onOpen,
+  showRetail = false,
 }: {
   onOpen?: (variant: string | null) => void; // null = الكارت كله - null = the whole card
+  // كروت الشكاير: رصيد القطاعي تحت كل نوع وجنب الإجمالي (الأرقام الكبيرة = الرئيسي بس)
+  // sack cards: retail under each variant and next to the total (the big numbers = MAIN only)
+  showRetail?: boolean;
   name: string;
   unit: string;
   variants: StockVariant[];
@@ -262,6 +278,8 @@ function VariantsCard({
   const single = variants.length === 1 && !showTotal;
   const baseNumberFontSize = maxNumberFontSize ?? (single ? sizes.singleNumberFontSize : sizes.numberFontSize);
   const total = sumQuantities(variants);
+  const retailTotal = Math.round(variants.reduce((sum, variant) => sum + (variant.retail ?? 0), 0) * 10) / 10;
+  const compact = dashboardConfig.sizes.stockPage.sackRetail;
   // الإجمالي ناقص (بس لو الكارت فيه إجمالي) - the total is low (only on cards that show a total)
   const totalLow = showTotal && isBelow(total, totalMinimum);
   const anyLow = variants.some(isLow) || totalLow;
@@ -272,7 +290,11 @@ function VariantsCard({
     totalSizes.minTotalFontSize,
     `${total}|${unit}`
   );
-  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, name);
+  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(
+    showRetail ? compact.nameFontSize : sizes.nameFontSize,
+    MIN_NAME_FONT_SIZE,
+    name
+  );
 
   // نفس حجم الرقم لكل الأنواع (الأصغر فيهم) - every type shares one number size (the smallest fit)
   const variantsRef = useRef<HTMLDivElement>(null);
@@ -324,6 +346,8 @@ function VariantsCard({
       style={{
         gridTemplateRows: showTotal ? "auto 1fr auto" : "auto 1fr",
         ...(anyLow ? {} : { borderColor: withAlpha(accent, 0.3) }),
+        // الشكاير مع القطاعي: مسافة فوق أقل ومسافة أقل قبل الإجمالي - sacks with retail: less top padding and row gap
+        ...(showRetail ? { paddingTop: compact.paddingTop, rowGap: compact.rowGap } : {}),
       }}
     >
       {/* "⚠ محتاج نزوّد" متعلّقة على الإطار اللي فوق، فمش بتاخد مكان ولا بتغطي الاسم
@@ -337,7 +361,7 @@ function VariantsCard({
 
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <CardIcon image={image} icon={icon} name={name} />
+          <CardIcon image={image} icon={icon} name={name} emojiSize={showRetail ? compact.iconFontSize : undefined} />
           <h3
             ref={nameRef}
             className="font-bold text-white whitespace-nowrap min-w-0"
@@ -372,6 +396,7 @@ function VariantsCard({
                 numberFontSize={numberFontSize}
                 onOverflow={shrinkNumber}
                 onOpen={onOpen ? () => onOpen(variant.label) : undefined}
+                showRetail={showRetail && retailTotal !== 0}
               />
             ))}
           </div>
@@ -380,11 +405,21 @@ function VariantsCard({
 
       {showTotal && (
         <div className="flex items-center justify-between gap-2 border-t border-cardBorder pt-1 min-w-0">
-          <span
-            className="font-semibold text-gray-300 shrink-0 whitespace-nowrap"
-            style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}
-          >
-            الإجمالي
+          <span className="flex items-center gap-1.5 shrink-0 min-w-0">
+            <span
+              className="font-semibold text-gray-300 shrink-0 whitespace-nowrap"
+              style={{ fontSize: `${totalSizes.totalLabelFontSize}px` }}
+            >
+              الإجمالي
+            </span>
+            {showRetail && retailTotal !== 0 && (
+              <span
+                className="rounded-full border border-teal-500/30 bg-teal-500/10 text-teal-300/80 px-1.5 whitespace-nowrap"
+                style={{ fontSize: `${compact.chipFontSize}px`, lineHeight: 1.5 }}
+              >
+                + قطاعي <span className="font-numbers tabular-nums">{formatNumber(retailTotal)}</span>
+              </span>
+            )}
           </span>
           <p ref={totalRef} className="min-w-0 whitespace-nowrap text-left">
             <span
@@ -586,6 +621,7 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
               variants={sack.variants}
               accent={colors.sacks}
               totalMinimum={sack.minimumThreshold}
+              showRetail={dashboardConfig.erp.stock.showRetailOnCard}
               onOpen={
                 onOpenItem &&
                 ((variant) =>

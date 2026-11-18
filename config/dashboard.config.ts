@@ -345,8 +345,8 @@ export const dashboardConfig = {
     // التفاصيل والأرصدة في docs/erp-mapping.md - details in docs/erp-mapping.md
     stock: {
       // المخازن دي حمولة عربيات ومش بتتحسب في رصيد المنتجات المعبأة (والكراتين بتاعتها)
-      // عربية جديدة؟ ضيف اسم المخزن بتاعها هنا بالظبط زي ERPNext. الشكاير والمواد الخام مش بيتأثروا
-      // Vehicle-load warehouses, excluded from packaged products only; add a new car by adding its warehouse name
+      // عربية جديدة؟ ضيف اسم المخزن بتاعها هنا بالظبط زي ERPNext. وبرّه رصيد الشكاير الرئيسي كمان، والمواد الخام مش بيتأثروا
+      // Vehicle-load warehouses, excluded from packaged products and from the sacks' MAIN stock; raw materials unaffected
       excludedWarehouses: [
         "مخزن سوزوكي 1 - AC",
         "مخزن سوزوكي 2 - AC",
@@ -354,6 +354,20 @@ export const dashboardConfig = {
         "مخزن سوزوكي 4 - AC",
         "مخزن الدبابة - AC",
       ] as string[],
+
+      // مخازن القطاعي (الشكاير بس): نفس أصناف الشكاير بالظبط، بس متخزنة في مخزن القطاعي
+      // رقم الشكارة الكبير والإجمالي = المخزن الرئيسي بس (من غير القطاعي ومن غير المخازن المستبعدة فوق)
+      // والقطاعي بيظهر لوحده: سطر صغير "قطاعي X" تحت كل نوع و"+ قطاعي Y" جنب الإجمالي
+      // اكتب اسم المخزن بالظبط زي ERPNext (لاحظ "قطاعى" بالألف المقصورة). الحد الأدنى بيتقارن بالرئيسي بس
+      // Retail warehouses (sacks only): same sack items, kept in the retail warehouse. The big sack numbers and the
+      // total = MAIN only (no retail, no excludedWarehouses); retail is shown on its own. Low stock compares MAIN only
+      retailWarehouses: ["مخزن قطاعى - انتاج - AC"] as string[],
+
+      // true = القطاعي بيظهر على كروت الشكاير (سطر "قطاعي X" + "+ قطاعي Y")
+      // false = الكارت زي الأول بالظبط (بأرقام الرئيسي بس) والقطاعي يظهر جوه لوحة التفاصيل بس
+      // true = retail shown on the sack cards; false = the card looks exactly as before (MAIN numbers), retail only in the panel
+      // متقفل: على شاشة 1366x768 كبسولة "+ قطاعي" بتزق رقم الإجمالي برّه الكارت - off: at 1366x768 the chip pushes the total out
+      showRetailOnCard: false,
 
       // المنتجات المعبأة: المنتج ← النوع - packaged: product -> variant
       packaged: {
@@ -379,6 +393,8 @@ export const dashboardConfig = {
       } as Record<string, ConfigErpStockMap>,
 
       // الشكاير: الشكارة ← النوع - sacks: sack -> variant
+      // warehouses فاضية = كل المخازن ما عدا retailWarehouses وexcludedWarehouses (القطاعي بيتحسب لوحده)
+      // empty warehouses = every warehouse except retailWarehouses and excludedWarehouses (retail is counted separately)
       sacks: {
         "شكاير برتقال": {
           ناعم: { source: "erp", itemCodes: ["شيكارة فحم برتقال ناعم"], warehouses: [] },
@@ -980,6 +996,16 @@ export const dashboardConfig = {
       subTypeNumberFontSize: 26, // حجم أرقام أنواع البلدي (كازوارينا/توت/زيتون) - بلدي sub-type numbers
       minNumberFontSize: 18, // أصغر حجم للرقم لما يصغر - smallest quantity font size when shrinking
       unitFontSize: 14, // حجم الوحدة الصغيرة جنب الرقم الكبير (كجم/رول/كيس/طن) - small unit next to the big number
+      // كروت الشكاير لما القطاعي ظاهر عليها (erp.stock.showRetailOnCard) - عشان نعمل مكان للسطر الصغير من غير ما الكارت يطول
+      // Sack cards while retail is shown on them - frees room for the small line without making the card taller
+      sackRetail: {
+        nameFontSize: 16, // اسم الكارت (العادي nameFontSize فوق) - card name (normally nameFontSize)
+        iconFontSize: 24, // حجم أيقونة الفاكهة 🍊🥭🌲 (العادي 30) - fruit icon size (normally 30)
+        paddingTop: 6, // المسافة فوق جوه الكارت (العادي 10) - card top padding (normally 10)
+        rowGap: 3, // المسافة بين صف الأنواع وصف الإجمالي (العادي 6) - gap between the variant row and the total row (normally 6)
+        retailFontSize: 12, // سطر "قطاعي X" تحت كل رقم - the "قطاعي X" line under each number
+        chipFontSize: 12, // كبسولة "+ قطاعي Y" جنب الإجمالي - the "+ قطاعي Y" chip next to the total
+      },
     },
 
     // صف "الإجمالي" في كروت الصفحة 2 - the "الإجمالي" (total) rows on page 2

@@ -85,16 +85,25 @@ function resolveItem(group: StockGroup, name: string, variant: string | null) {
   const variants = Object.keys(parts).filter(Boolean);
   if (variant !== null && !variants.includes(variant)) throw new UnknownStockItemError(`unknown variant ${variant}`);
   const mappings = new Map<string, StockMapping>();
+  // كل أنواع الكارت (للتقسيم رئيسي / قطاعي) - every variant of the card (for the main / retail split)
+  const byLabel = new Map<string, StockMapping>();
   for (const [label, field] of Object.entries(parts)) {
-    if (field.source !== "erp" || (variant !== null && label !== variant)) continue;
+    if (field.source !== "erp") continue;
+    byLabel.set(label, field);
+    if (variant !== null && label !== variant) continue;
     for (const code of field.itemCodes) mappings.set(code, field);
   }
   if (mappings.size === 0) throw new UnknownStockItemError(`${group}/${name} is not linked to ERPNext`);
+  // القطاعي للشكاير بس - retail applies to sacks only
+  const retail = group === "sacks" ? erp.retailWarehouses : [];
   return {
     variants,
     mappings,
-    // العربيات برّه رصيد المنتجات المعبأة بس - vehicles are left out of packaged products only
-    excluded: group === "packaged" ? erp.excludedWarehouses : [],
+    byLabel,
+    retail,
+    // العربيات برّه رصيد المنتجات المعبأة، والعربيات والقطاعي برّه رصيد الشكاير الرئيسي
+    // vehicles are left out of packaged products; vehicles and retail are left out of the sacks' MAIN balance
+    excluded: group === "packaged" ? erp.excludedWarehouses : group === "sacks" ? [...erp.excludedWarehouses, ...retail] : [],
     decimals: group === "wood" ? 1 : 0,
   };
 }
@@ -206,17 +215,20 @@ async function monthsOf(codes: string[], today: string) {
 }
 
 async function load(group: StockGroup, name: string, variant: string | null, month: string, today: string): Promise<StockDetails> {
-  const { variants, mappings, excluded, decimals } = resolveItem(group, name, variant);
+  const { variants, mappings, byLabel, retail, excluded, decimals } = resolveItem(group, name, variant);
   const codes = Array.from(mappings.keys());
-  const inScope = (code: string, warehouse: string) => {
-    const mapping = mappings.get(code);
-    return !!mapping && (mapping.warehouses.length === 0 || mapping.warehouses.includes(warehouse)) && !excluded.includes(warehouse);
-  };
+  const allCodes = Array.from(new Set(Array.from(byLabel.values()).flatMap((m) => m.itemCodes)));
+  const listed = (mapping: StockMapping | undefined, warehouse: string) =>
+    !!mapping && (mapping.warehouses.length === 0 || mapping.warehouses.includes(warehouse));
+  const inScope = (code: string, warehouse: string) => listed(mappings.get(code), warehouse) && !excluded.includes(warehouse);
+  // مخزن قطاعي (الشكاير بس) - a retail warehouse (sacks only)
+  const isRetail = (code: string, warehouse: string) => listed(mappings.get(code), warehouse) && retail.includes(warehouse);
   const from = `${month}-01`;
   const to = monthEnd(month) < today ? monthEnd(month) : today;
 
   const [current, opening, rows, months] = await Promise.all([
-    lastBalances(codes, "<=", today),
+    // الشكاير: رصيد كل أنواع الكارت للتقسيم - sacks: every variant's balance, for the split
+    lastBalances(retail.length > 0 ? allCodes : codes, "<=", today),
     // الرصيد قبل أول الشهر لكل صنف ومخزن - the balance before the month per item and warehouse
     lastBalances(codes, "<", from),
     from > to
@@ -250,9 +262,11 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
   // (a Stock Reconciliation stores actual_qty = 0)
   const last = new Map<string, number>();
   let openingBalance = 0;
+  let retailRunning = 0;
   for (const [key, entry] of Array.from(opening)) {
     last.set(key, entry.qty);
     if (inScope(entry.itemCode, entry.warehouse)) openingBalance += entry.qty;
+    if (isRetail(entry.itemCode, entry.warehouse)) retailRunning += entry.qty;
   }
   openingBalance = round(openingBalance);
   let running = openingBalance;
@@ -263,6 +277,8 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
     last.set(key, after);
     const scoped = inScope(row.item_code, row.warehouse);
     if (scoped) running = round(running + qty);
+    const inRetail = isRetail(row.item_code, row.warehouse);
+    if (inRetail) retailRunning = round(retailRunning + qty);
     const voucher = info.get(`${row.voucher_type}\u0000${row.voucher_no}`);
     const postingDate = String(row.posting_date).slice(0, 10);
     const van = vans.get(row.warehouse);
@@ -275,14 +291,15 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
       itemCode: row.item_code,
       warehouse: row.warehouse,
       qty,
-      balanceAfter: scoped ? running : null,
+      balanceAfter: scoped ? running : inRetail ? retailRunning : null,
       inScope: scoped,
+      retail: inRetail,
       category: categoryOf(row.voucher_type, voucher),
       voucherType: row.voucher_type,
       voucherNo: row.voucher_no,
       voucherLabel: voucher?.label ?? "",
       party: voucher?.party ?? "",
-      van: van ? van.van : excluded.includes(row.warehouse) ? row.warehouse.replace(/^مخزن\s*/, "").replace(/\s*-\s*AC$/, "") : "",
+      van: van ? van.van : excluded.includes(row.warehouse) && !inRetail ? row.warehouse.replace(/^مخزن\s*/, "").replace(/\s*-\s*AC$/, "") : "",
       owner: names.get(row.owner) ?? row.owner,
       remarks: voucher?.remarks ?? "",
     };
@@ -365,18 +382,39 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
   }
 
   // الرصيد في كل مخزن النهارده - the balance per warehouse today
-  const perWarehouse = new Map<string, { warehouse: string; qty: number; excluded: boolean }>();
+  const perWarehouse = new Map<string, { warehouse: string; qty: number; excluded: boolean; retail: boolean }>();
   let balance = 0;
   let uom = "";
   for (const entry of Array.from(current.values())) {
+    if (!mappings.has(entry.itemCode)) continue; // نوع تاني في الكارت (للتقسيم بس) - another variant (split only)
     uom ||= entry.uom;
     const scoped = inScope(entry.itemCode, entry.warehouse);
     if (scoped) balance += entry.qty;
-    const w = perWarehouse.get(entry.warehouse) ?? { warehouse: entry.warehouse, qty: 0, excluded: !scoped };
+    const w = perWarehouse.get(entry.warehouse) ?? {
+      warehouse: entry.warehouse,
+      qty: 0,
+      excluded: !scoped,
+      retail: isRetail(entry.itemCode, entry.warehouse),
+    };
     w.qty = round(w.qty + entry.qty);
     perWarehouse.set(entry.warehouse, w);
   }
   const factor = 10 ** decimals;
+
+  // الشكاير: الرئيسي / القطاعي / الإجمالي لكل نوع (بنفس قواعد الكارت) - sacks: main / retail / total per variant (card rules)
+  let split: StockDetails["split"] = null;
+  if (retail.length > 0) {
+    split = Array.from(byLabel, ([label, mapping]) => {
+      let main = 0;
+      let inRetail = 0;
+      for (const entry of Array.from(current.values())) {
+        if (!mapping.itemCodes.includes(entry.itemCode) || !listed(mapping, entry.warehouse)) continue;
+        if (retail.includes(entry.warehouse)) inRetail += entry.qty;
+        else if (!excluded.includes(entry.warehouse)) main += entry.qty;
+      }
+      return { label, main: Math.round(main), retail: round(inRetail, 1), total: round(Math.round(main) + round(inRetail, 1), 1) };
+    });
+  }
 
   return {
     group,
@@ -393,6 +431,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
     months,
     balance: Math.round(balance * factor) / factor,
     warehouses: Array.from(perWarehouse.values()).sort((a, b) => Number(a.excluded) - Number(b.excluded) || b.qty - a.qty),
+    split,
     openingBalance,
     closingBalance,
     totalIn: round(totalIn),
