@@ -539,17 +539,33 @@ function SectionCard({
   );
 }
 
-// كارت "مخزن القطاعي": إجمالي كل اللي في مخازن القطاعي وتحته أكبر الأصناف
+// سطر مجموعة في كارت القطاعي ("باكتات 120" / "شكاير 32") - one group line on the retail card
+function RetailGroupLine({ label, value, accent, available }: { label: string; value: number; accent: string; available: boolean }) {
+  const card = dashboardConfig.sizes.stockPage.retailCard;
+  const { count } = useCountUp(value, 500);
+  return (
+    <div className="flex items-baseline justify-between gap-2 min-w-0 whitespace-nowrap">
+      <span className="text-gray-400 shrink-0" style={{ fontSize: `${card.groupLabelFontSize}px` }}>
+        {label}
+      </span>
+      <span
+        className="font-numbers font-bold tabular-nums"
+        style={{ fontSize: `${card.groupNumberFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: available ? accent : "#6B7280" }}
+      >
+        {available ? formatNumber(count) : "—"}
+      </span>
+    </div>
+  );
+}
+
+// كارت "مخزن القطاعي": المخزن بيشيل أي صنف، فمفيش إجمالي واحد - سطرين "باكتات" و"شكاير" وتحتهم أكبر الأصناف
 // عدد الأصناف بيتحسب من المكان الفاضي (لحد maxItems) فالكارت عمره ما بيطوّل الصف
-// The "مخزن القطاعي" card: the retail warehouses' total and the largest items under it. The item count follows the
-// free space (up to maxItems), so the card never makes the row taller
+// The "مخزن القطاعي" card: the warehouse holds any item, so no single total - "باكتات" and "شكاير" lines, then the
+// largest items. The item count follows the free space (up to maxItems), so the card never makes the row taller
 function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; accent: string; onOpen?: () => void }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const card = sizes.retailCard;
-  const total = retail?.total ?? 0;
   const items = retail?.items ?? [];
-  const { count } = useCountUp(total, 500);
-  const [numberRef, numberFontSize] = useFitFontSize<HTMLDivElement>(card.numberFontSize, sizes.minNumberFontSize, `${total}|${retail?.unit}`);
   const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, "مخزن القطاعي");
 
   // كام سطر يدخل في المكان الفاضي - how many rows fit in the free space
@@ -598,25 +614,18 @@ function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; ac
         </h3>
       </div>
 
-      <div
-        ref={numberRef}
-        className="font-numbers font-bold tabular-nums whitespace-nowrap min-w-0"
-        style={{ fontSize: `${numberFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: retail ? accent : "#6B7280" }}
-      >
-        {retail ? formatNumber(count) : "—"}
-        {retail?.unit && (
-          <span className="font-normal text-gray-400" style={{ fontSize: `${sizes.unitFontSize}px`, lineHeight: 1.6 }}>
-            {" "}
-            {toEnglishDigits(retail.unit)}
-          </span>
-        )}
+      <div className="grid gap-0.5 min-w-0">
+        <RetailGroupLine label="باكتات" value={retail?.packets ?? 0} accent={accent} available={!!retail} />
+        <RetailGroupLine label="شكاير" value={retail?.sacks ?? 0} accent={accent} available={!!retail} />
       </div>
 
       <div
         ref={listRef}
         className="min-h-0 overflow-hidden border-t border-cardBorder pt-1 flex flex-col"
-        style={{ fontSize: `${card.itemFontSize}px` }}
+        style={{ fontSize: `${card.itemFontSize}px`, containerType: "inline-size", containerName: "retail-list" }}
       >
+        {/* الكارت ضيق (1366): الوحدة بتستخبى عشان اسم الصنف يبان كامل - narrow card: hide the unit so the name shows in full */}
+        <style>{`@container retail-list (max-width: ${card.hideUnitBelow}px) { .retail-unit { display: none; } }`}</style>
         {retail && items.length === 0 ? (
           <span className="text-gray-500 whitespace-nowrap" style={{ lineHeight: `${rowHeight}px` }}>
             مفيش رصيد قطاعي
@@ -626,8 +635,11 @@ function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; ac
             {shown.map((item) => (
               <div key={item.itemCode} className="flex items-center justify-between gap-2 min-w-0 shrink-0" style={{ height: rowHeight }}>
                 <span className="text-gray-300 truncate min-w-0">{toEnglishDigits(item.name)}</span>
-                <span className={`font-numbers font-bold tabular-nums shrink-0 ${item.qty < 0 ? "text-statusRed" : "text-white"}`}>
-                  {formatNumber(item.qty)}
+                <span className="shrink-0 whitespace-nowrap">
+                  <span className={`font-numbers font-bold tabular-nums ${item.qty < 0 ? "text-statusRed" : "text-white"}`}>
+                    {formatNumber(item.qty)}
+                  </span>
+                  {item.unit && <span className="retail-unit text-gray-500"> {toEnglishDigits(item.unit)}</span>}
                 </span>
               </div>
             ))}
@@ -794,7 +806,7 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
                   onOpenItem({
                     group: "retail",
                     name: "مخزن القطاعي",
-                    unit: data.retail?.unit ?? "",
+                    unit: "",
                     variant: null,
                     variants: [],
                     low: { total: false, variants: {} },

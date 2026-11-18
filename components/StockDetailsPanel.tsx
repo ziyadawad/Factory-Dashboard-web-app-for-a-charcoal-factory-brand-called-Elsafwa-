@@ -24,7 +24,8 @@ import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import DuplicatesTab from "./DuplicatesTab";
-import { retailItemName } from "@/lib/retail-names";
+import { packetsOf, retailItemName } from "@/lib/retail-names";
+import type { RetailKind } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 // لوحة تفاصيل كارت في أرصدة المخازن (الصفحة 2): الرصيد في المخازن / الحركة / ملخص الشهر
@@ -82,6 +83,21 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "summary", label: "ملخص الشهر" },
   { id: "duplicates", label: "⚠ عمليات مكررة" }, // كل المخازن، آخر 60 يوم - all stock, last 60 days
 ];
+
+// أصناف القطاعي متجمعة - the retail items, grouped
+const RETAIL_GROUPS: { kind: RetailKind; label: string }[] = [
+  { kind: "packaged", label: "منتجات معبأة" },
+  { kind: "sacks", label: "شكاير" },
+  { kind: "other", label: "أخرى" },
+];
+
+// مجموع نوع: المعبأ بالباكت (نفس تحويل الداشبورد)، والشكاير بعددها - a kind's sum: packaged in packets, sacks as counted
+function retailSum(items: { itemCode: string; qty: number; kind: RetailKind }[] | null, kind: RetailKind) {
+  const total = (items ?? [])
+    .filter((item) => item.kind === kind)
+    .reduce((sum, item) => sum + (kind === "packaged" ? packetsOf(item.itemCode, item.qty) : item.qty), 0);
+  return Math.round(total * 10) / 10;
+}
 
 // فلتر الحركات في الشكاير - the sacks' movements filter
 type Scope = "main" | "retail" | "all";
@@ -370,7 +386,23 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
               </p>
             )}
           </div>
-          {data && (
+          {data && isRetail && (
+            // القطاعي: مفيش رقم واحد، باكتات وشكاير لوحدهم - retail: no single number, packets and sacks apart
+            <p className={`flex items-baseline gap-4 whitespace-nowrap ${loadingNew ? "opacity-50" : ""}`}>
+              {[
+                { label: "باكتات", value: retailSum(data.items, "packaged") },
+                { label: "شكاير", value: retailSum(data.items, "sacks") },
+              ].map((group) => (
+                <span key={group.label} className="flex items-baseline gap-2">
+                  <span className="text-gray-400">{group.label}</span>
+                  <span dir="ltr" className="font-numbers font-extrabold tabular-nums text-[30px] min-[1600px]:text-[34px] leading-tight text-teal-300">
+                    {formatNumber(group.value)}
+                  </span>
+                </span>
+              ))}
+            </p>
+          )}
+          {data && !isRetail && (
             <p className={`flex items-baseline gap-2 whitespace-nowrap ${loadingNew ? "opacity-50" : ""}`}>
               {data.split && <span className="text-gray-400 text-[0.9em]">المخزن الرئيسي</span>}
               <span
@@ -539,7 +571,21 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                 </tr>
               </thead>
               <tbody>
-                {(data.items ?? []).map((item) => (
+                {RETAIL_GROUPS.flatMap((group) => {
+                  const list = (data.items ?? []).filter((item) => item.kind === group.kind);
+                  if (list.length === 0) return [];
+                  return [
+                    <tr key={`group-${group.kind}`}>
+                      <td colSpan={5} className="px-4 py-1 border-b border-cardBorder bg-background/70 font-bold text-teal-300">
+                        {group.label}
+                        {group.kind !== "other" && (
+                          <span className="text-gray-400 font-semibold">
+                            {" "}— {n(retailSum(list, group.kind))} {group.kind === "packaged" ? "باكت" : "شيكارة"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>,
+                    ...list.map((item) => (
                   <tr key={item.itemCode} className={item.qty === 0 ? "text-gray-500" : ""}>
                     <td className={`${td} font-bold ${item.qty === 0 ? "" : "text-white"}`}>{toEnglishDigits(item.name)}</td>
                     <td className={`${td} ${item.qty === 0 ? "" : "text-gray-300"}`}>{toEnglishDigits(item.itemCode)}</td>
@@ -549,7 +595,9 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                       {item.lastDate ? formatDayName(item.lastDate) : "—"}
                     </td>
                   </tr>
-                ))}
+                    )),
+                  ];
+                })}
               </tbody>
             </table>
           ) : tab === "warehouses" ? (

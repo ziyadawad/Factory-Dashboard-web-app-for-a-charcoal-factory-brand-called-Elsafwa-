@@ -1,24 +1,46 @@
-// أسامي أصناف مخزن القطاعي على الشاشة - display names for the retail warehouse items
+// أصناف مخزن القطاعي: النوع (معبأ / شكاير / أخرى) والاسم على الشاشة
+// Retail warehouse items: their kind (packaged / sacks / other) and display name
 import { dashboardConfig } from "@/config/dashboard.config";
 
-// اسم قصير: لو الصنف مربوط بكارت شكاير يبقى "برتقال ناعم" بنفس أسامي الكروت (مانجو، كازوارينا)،
-// غير كده نشيل "شيكارة فحم" من أول اسم ERPNext ("شيكارة فحم جوافة خشن" ← "جوافة خشن")
-// Short name: an item mapped to a sack card uses the card naming ("مانجو خشن"); otherwise the ERPNext
-// name without its leading "شيكارة فحم"
-export function retailItemName(itemCode: string): string {
-  for (const [sack, variants] of Object.entries(dashboardConfig.erp.stock.sacks)) {
-    for (const [variant, field] of Object.entries(variants)) {
-      if (field.source === "erp" && field.itemCodes.includes(itemCode)) return `${sack.replace(/^شكاير\s*/, "")} ${variant}`;
+export type RetailKind = "packaged" | "sacks" | "other";
+
+// الكارت والنوع اللي الصنف مربوط بيهم في erp.stock - the card and variant an item is mapped to in erp.stock
+function mappedTo(itemCode: string): { group: "packaged" | "sacks"; card: string; variant: string } | null {
+  const { packaged, sacks } = dashboardConfig.erp.stock;
+  for (const [group, cards] of [["packaged", packaged], ["sacks", sacks]] as const) {
+    for (const [card, variants] of Object.entries(cards)) {
+      for (const [variant, field] of Object.entries(variants)) {
+        if (field.source === "erp" && field.itemCodes.includes(itemCode)) return { group, card, variant };
+      }
     }
   }
+  return null;
+}
+
+// النوع: معبأ = مربوط بكارت منتج معبأ، شكاير = مربوط بكارت شكاير أو وحدته "شيكارة..."، غير كده أخرى
+// Kind: packaged = mapped to a packaged card; sacks = mapped to a sack card or its unit starts with "شيكارة"; else other
+export function retailKind(itemCode: string, uom: string): RetailKind {
+  const mapped = mappedTo(itemCode);
+  if (mapped) return mapped.group;
+  return /^شيكار|^شكار/.test(uom.trim()) ? "sacks" : "other";
+}
+
+// الكمية بالباكت للمنتجات المعبأة (نفس تحويل باقي الداشبورد: sales.packetsPerUnit، الافتراضي 1)
+// Quantity in packets for packaged items (same conversion as the rest of the dashboard; default 1)
+export function packetsOf(itemCode: string, qty: number): number {
+  return qty * (dashboardConfig.sales.packetsPerUnit[itemCode] ?? 1);
+}
+
+// اسم قصير بأسامي الكروت: "ربع كيلو" / "ربع كيلو كامل" / "مانجو خشن"، وغير المربوط من غير "شيكارة فحم"
+// Short name in card naming: "ربع كيلو" / "ربع كيلو كامل" / "مانجو خشن"; unmapped items lose a leading "شيكارة فحم"
+export function retailItemName(itemCode: string): string {
+  const mapped = mappedTo(itemCode);
+  if (mapped?.group === "packaged") return mapped.variant === "عادي" ? mapped.card : `${mapped.card} ${mapped.variant}`;
+  if (mapped?.group === "sacks") return `${mapped.card.replace(/^شكاير\s*/, "")} ${mapped.variant}`;
   return itemCode.replace(/^(شيكارة|شيكاره|شكارة)?\s*فحم\s+/, "").trim() || itemCode;
 }
 
-// الوحدة المشتركة: لو كل الوحدات زي بعض تبقى هي، غير كده أول كلمة لو مشتركة ("شيكارة 14 ك" + "شيكارة 15 ك" ← "شيكارة")
-// The shared unit: identical units stay as they are; otherwise their common first word, if any
-export function sharedUnit(units: string[]): string {
-  const unique = Array.from(new Set(units.filter(Boolean)));
-  if (unique.length <= 1) return unique[0] ?? "";
-  const words = Array.from(new Set(unique.map((unit) => unit.split(/\s+/)[0])));
-  return words.length === 1 ? words[0] : "";
+// وحدة قصيرة للسطر الصغير: أول كلمة ("شيكارة 14 ك" ← "شيكارة") - short unit for small rows: the first word
+export function shortUnit(uom: string): string {
+  return uom.trim().split(/\s+/)[0] ?? "";
 }

@@ -503,11 +503,11 @@ export const dashboardConfig = {
     // Page order - open a specific page directly with ?page=2 in the URL
     list: [
       { id: "main", title: "الرئيسية", durationSeconds: 60 }, // الصفحة 1: الخزنة والحضور وإنتاج النهارده - page 1
-      { id: "production", title: "الإنتاج والأفران", durationSeconds: 60 }, // الصفحة 2: الإنتاج والأفران - page 2
-      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 3: المخازن - page 3
-      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 4: الخزن والمحافظ - page 4
-      { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 5: صناديق الصدقات - page 5
-      { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 6: مبيعات المناديب - page 6
+      { id: "stock", title: "أرصدة المخازن", durationSeconds: 60 }, // الصفحة 2: المخازن - page 2
+      { id: "production", title: "الإنتاج والأفران", durationSeconds: 60 }, // الصفحة 3: الإنتاج والأفران - page 3
+      { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 4: مبيعات المناديب - page 4
+      { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 5: الخزن والمحافظ - page 5
+      { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 6 (الأخيرة): صناديق الصدقات - page 6 (last)
       // متوقفة — غيّرها لـ true لو عايز ترجّعها
       { id: "distributors", title: "الموزعين", durationSeconds: 60, enabled: false }, // الموزعين - distributors (disabled)
     ] as ConfigPage[],
@@ -1013,8 +1013,10 @@ export const dashboardConfig = {
       // Sack cards while retail is shown on them - frees room for the small line without making the card taller
       // كارت "مخزن القطاعي" في قسم الشكاير - the "مخزن القطاعي" card in the sacks section
       retailCard: {
-        numberFontSize: 30, // الرقم الكبير (إجمالي القطاعي) - the big number (retail total)
-        maxItems: 4, // أكتر عدد أصناف تحت الرقم (بيقل لوحده لو المكان مش كفاية) - most item rows (fewer when there's no room)
+        groupNumberFontSize: 22, // رقم سطر "باكتات" و"شكاير" - the "باكتات" / "شكاير" line numbers
+        groupLabelFontSize: 14, // كلمة "باكتات" و"شكاير" - the "باكتات" / "شكاير" labels
+        hideUnitBelow: 150, // لو عرض السطور أقل من كده الوحدة بتستخبى (اسم الصنف أهم) - hide the unit when rows are narrower (the name matters more)
+        maxItems: 3, // أكتر عدد أصناف تحت السطرين (بيقل لوحده لو المكان مش كفاية، 2 على 1366) - most item rows (fewer when tight)
         itemFontSize: 13, // حجم سطر الصنف ("برتقال خشن 15") - item row font size
       },
       sackRetail: {

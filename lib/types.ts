@@ -115,10 +115,14 @@ export interface RawMaterials {
 
 // مخزن القطاعي (كارت في قسم الشكاير): كل الأصناف اللي في stock.retailWarehouses
 // The retail warehouse card (in the sacks section): every item in stock.retailWarehouses
+// مخزن القطاعي بيشيل أي صنف، فمفيش إجمالي واحد: باكتات (المعبأ بالباكت) وشكاير لوحدهم
+// The retail warehouse holds any item, so there's no single total: packets (packaged, in packets) and sacks apart
+export type RetailKind = "packaged" | "sacks" | "other";
 export interface RetailStock {
-  total: number; // مجموع كل الأصناف - sum of every item
-  unit: string; // وحدة ERPNext (أو الكلمة المشتركة لو الوحدات مختلفة) - ERPNext unit (or the shared word when they differ)
-  items: { itemCode: string; name: string; qty: number; unit: string }[]; // اللي رصيده مش صفر، الأكبر الأول - non-zero, largest first
+  packets: number; // المنتجات المعبأة بالباكت (sales.packetsPerUnit) - packaged products in packets
+  sacks: number; // الشكاير - sacks
+  // اللي رصيده مش صفر، الأكبر الأول (qty بوحدة ERPNext، unit مختصرة) - non-zero, largest first (ERPNext unit, shortened)
+  items: { itemCode: string; name: string; qty: number; unit: string; kind: RetailKind }[];
 }
 
 export interface Stock {
@@ -992,7 +996,7 @@ export interface StockDetails {
   // sacks only: MAIN / retail / total per variant of the card (every variant, even when one is selected)
   split: { label: string; main: number; retail: number; total: number }[] | null;
   // مخزن القطاعي بس: كل صنف فيه بالرصيد والوحدة وآخر حركة - retail card only: every item with qty, unit and last movement
-  items: { itemCode: string; name: string; qty: number; unit: string; lastDate: string }[] | null;
+  items: { itemCode: string; name: string; qty: number; unit: string; lastDate: string; kind: RetailKind }[] | null;
   openingBalance: number;
   closingBalance: number;
   totalIn: number;

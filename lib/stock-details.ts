@@ -6,7 +6,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { erpPost, erpToday } from "./erp";
 import { fullNames } from "./account-details";
 import { ConfigErpStockItem, StockCategory, StockDetails, StockGroup, StockMove } from "./types";
-import { retailItemName } from "./retail-names";
+import { retailItemName, retailKind } from "./retail-names";
 
 const CACHE_MS = 60_000;
 
@@ -95,16 +95,15 @@ function resolveItem(group: StockGroup, name: string, variant: string | null) {
     for (const code of field.itemCodes) mappings.set(code, field);
   }
   if (mappings.size === 0) throw new UnknownStockItemError(`${group}/${name} is not linked to ERPNext`);
-  // القطاعي للشكاير بس - retail applies to sacks only
-  const retail = group === "sacks" ? erp.retailWarehouses : [];
+  // القطاعي لكروت المعبأ والشكاير - retail applies to packaged and sack cards
+  const retail = group === "sacks" || group === "packaged" ? erp.retailWarehouses : [];
   return {
     variants,
     mappings,
     byLabel,
     retail,
-    // العربيات برّه رصيد المنتجات المعبأة، والعربيات والقطاعي برّه رصيد الشكاير الرئيسي
-    // vehicles are left out of packaged products; vehicles and retail are left out of the sacks' MAIN balance
-    excluded: group === "packaged" ? erp.excludedWarehouses : group === "sacks" ? [...erp.excludedWarehouses, ...retail] : [],
+    // العربيات والقطاعي برّه الرصيد الرئيسي للمعبأ والشكاير - vehicles and retail are outside the MAIN balance of packaged and sacks
+    excluded: group === "packaged" || group === "sacks" ? [...erp.excludedWarehouses, ...retail] : [],
     decimals: group === "wood" ? 1 : 0,
   };
 }
@@ -458,7 +457,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
   // كارت القطاعي: كل صنف بالرصيد والوحدة وآخر حركة (الأكبر الأول) - retail card: every item, largest first
   let items: StockDetails["items"] = null;
   if (group === "retail") {
-    const byItem = new Map<string, { itemCode: string; name: string; qty: number; unit: string; lastDate: string }>();
+    const byItem = new Map<string, NonNullable<StockDetails["items"]>[number]>();
     for (const entry of Array.from(current.values())) {
       const item = byItem.get(entry.itemCode) ?? {
         itemCode: entry.itemCode,
@@ -466,6 +465,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
         qty: 0,
         unit: SHORT_UNITS[entry.uom] ?? entry.uom,
         lastDate: "",
+        kind: retailKind(entry.itemCode, entry.uom),
       };
       item.qty = round(item.qty + entry.qty, 1);
       if (entry.at > item.lastDate) item.lastDate = entry.at;

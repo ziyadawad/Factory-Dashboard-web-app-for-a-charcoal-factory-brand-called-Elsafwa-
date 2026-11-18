@@ -156,7 +156,9 @@ export default function Dashboard() {
     setPageIndex(index);
     setSwitchCount((count) => count + 1);
     const url = new URL(window.location.href);
-    url.searchParams.set("page", String(index + 1));
+    // اسم الصفحة مش رقمها، عشان لو الترتيب اتغير التلفزيون يفتح نفس الصفحة بعد الريفريش
+    // The page id, not its number, so a reload after reordering still opens the same page
+    url.searchParams.set("page", PAGES[index]?.id ?? String(index + 1));
     window.history.replaceState(null, "", url);
   }, []);
 

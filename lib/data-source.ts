@@ -26,7 +26,7 @@ import { ErpError, erpBalanceOn, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
 import { distributorsSection, salesRepsSection } from "./sales";
 import { walletsSection } from "./wallets";
-import { retailItemName, sharedUnit } from "./retail-names";
+import { packetsOf, retailItemName, retailKind, shortUnit } from "./retail-names";
 import { CharityRaw, charityDuplicates, loadCharityRaw, unfundedCharity } from "./charity-auto";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
@@ -645,23 +645,27 @@ async function retailSection(results: ErpStatus[]): Promise<RetailStock | null> 
   if (warehouses.length === 0) return null;
   try {
     const rows = await loadStockBalances(["warehouse", "in", warehouses]);
-    const byItem = new Map<string, { qty: number; unit: string }>();
+    const byItem = new Map<string, { qty: number; uom: string }>();
     for (const row of rows) {
-      const item = byItem.get(row.item_code) ?? { qty: 0, unit: SHORT_UNITS[row.stock_uom] ?? row.stock_uom };
+      const item = byItem.get(row.item_code) ?? { qty: 0, uom: row.stock_uom };
       item.qty += row.balance_qty;
       byItem.set(row.item_code, item);
     }
-    const items = Array.from(byItem, ([itemCode, { qty, unit }]) => ({
+    const items = Array.from(byItem, ([itemCode, { qty, uom }]) => ({
       itemCode,
       name: retailItemName(itemCode),
       qty: Math.round(qty * 10) / 10,
-      unit,
+      unit: shortUnit(SHORT_UNITS[uom] ?? uom),
+      kind: retailKind(itemCode, uom),
     }))
       .filter((item) => item.qty !== 0)
       .sort((a, b) => b.qty - a.qty);
+    // المعبأ بالباكت والشكاير لوحدها، والباقي (أكياس...) في السطور بس - packets and sacks apart; others only in the rows
+    const sum = (list: typeof items, value: (item: (typeof items)[number]) => number) =>
+      Math.round(list.reduce((total, item) => total + value(item), 0) * 10) / 10;
     lastRetail = {
-      total: Math.round(items.reduce((sum, item) => sum + item.qty, 0) * 10) / 10,
-      unit: sharedUnit(Array.from(byItem.values(), (item) => item.unit)),
+      packets: sum(items.filter((i) => i.kind === "packaged"), (i) => packetsOf(i.itemCode, i.qty)),
+      sacks: sum(items.filter((i) => i.kind === "sacks"), (i) => i.qty),
       items,
     };
     results.push({ fromErp: true, failed: false });
@@ -751,7 +755,9 @@ export async function getDashboardData(): Promise<DashboardData> {
             label: variant.label,
             minimumThreshold: minimumOf(stockMinimums.packaged, product.name, { variant: variant.label }),
             quantity: await stock.quantity(`packaged.${product.name}.${variant.label}`,
-              erp.stock.packaged[product.name]?.[variant.label], variant.quantity, 0, erp.stock.excludedWarehouses),
+              erp.stock.packaged[product.name]?.[variant.label], variant.quantity, 0,
+              // الرئيسي = من غير العربيات ومن غير القطاعي - MAIN = without vehicles and retail
+              [...erp.stock.excludedWarehouses, ...erp.stock.retailWarehouses]),
           }))
         ),
       }))
