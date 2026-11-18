@@ -976,9 +976,22 @@ export const dashboardConfig = {
       },
       // عرض المنتجات المعبأة والشكاير في الصف اللي فوق (نسب من عرض الصف) - top row widths (ratios)
       topColumns: {
-        packaged: 56, // المنتجات المعبأة (على اليمين) - packaged products (right)
-        sacks: 44, // الشكاير (على الشمال) - sacks (left)
+        packaged: 52, // المنتجات المعبأة (على اليمين) - packaged products (right)
+        sacks: 48, // الشكاير + مخزن القطاعي (على الشمال) - sacks + the retail card (left)
       },
+      // عرض كل كارت جوه قسم الشكاير بالنسبة لبعض (بالترتيب: برتقال، مانجو، كازوارينا، مخزن القطاعي)
+      // مانجو أضيق عشان فيه نوعين بس - each card's width inside the sacks section (orange, mango, casuarina, retail)
+      sackColumns: [1, 0.7, 1, 0.88],
+      // تعويض أرقام الأنواع عن تضييق الكروت فوق (الرقم بيتحسب من عرض العمود): الرقم مضروب في المعامل ده عشان يفضل نفس حجمه قبل التضييق
+      // ولو رقم مش واخد مكانه بيصغر 1px لوحده لحد ما يدخل، فعمره ما بيتقص
+      // Variant-number boost for the narrower top cards (numbers follow the column width): the number is multiplied by this
+      // so it keeps its pre-narrowing size. A number that doesn't fit still steps down 1px at a time, so it's never cut
+      packagedNumberBoost: 1.055, // المنتجات المعبأة - packaged products
+      sackNumberBoost: [1.09, 1.66, 1.09], // برتقال، مانجو، كازوارينا - orange, mango, casuarina
+      // كروت الصف اللي فوق (المعبأة والشكاير والقطاعي) أضيق، فالمسافات جواها أقل عشان أرقام الإجمالي تفضل بنفس حجمها
+      // The top-row cards are narrower, so their inner spacing is smaller and the total numbers keep their size
+      topCardPaddingX: 7, // المسافة يمين وشمال جوه الكارت (العادي 10) - card left/right padding (normally 10)
+      topCardTotalGap: 4, // المسافة بين كلمة "الإجمالي" والرقم (العادي 8) - gap between "الإجمالي" and its number (normally 8)
       // ارتفاع الأخشاب ومواد التعبئة جوه قسم المواد الخام - wood vs packaging height inside raw materials
       rawMaterialsRows: {
         wood: 1.5, // الأخشاب - wood
@@ -998,6 +1011,12 @@ export const dashboardConfig = {
       unitFontSize: 14, // حجم الوحدة الصغيرة جنب الرقم الكبير (كجم/رول/كيس/طن) - small unit next to the big number
       // كروت الشكاير لما القطاعي ظاهر عليها (erp.stock.showRetailOnCard) - عشان نعمل مكان للسطر الصغير من غير ما الكارت يطول
       // Sack cards while retail is shown on them - frees room for the small line without making the card taller
+      // كارت "مخزن القطاعي" في قسم الشكاير - the "مخزن القطاعي" card in the sacks section
+      retailCard: {
+        numberFontSize: 30, // الرقم الكبير (إجمالي القطاعي) - the big number (retail total)
+        maxItems: 4, // أكتر عدد أصناف تحت الرقم (بيقل لوحده لو المكان مش كفاية) - most item rows (fewer when there's no room)
+        itemFontSize: 13, // حجم سطر الصنف ("برتقال خشن 15") - item row font size
+      },
       sackRetail: {
         nameFontSize: 16, // اسم الكارت (العادي nameFontSize فوق) - card name (normally nameFontSize)
         iconFontSize: 24, // حجم أيقونة الفاكهة 🍊🥭🌲 (العادي 30) - fruit icon size (normally 30)
@@ -1218,6 +1237,7 @@ export const dashboardConfig = {
     colors: {
       packaged: "#FF7A00", // المنتجات المعبأة (برتقالي) - packaged products (orange)
       sacks: "#10B981", // الشكاير (أخضر زمردي) - sacks (emerald green)
+      retail: "#14B8A6", // كارت مخزن القطاعي (تيل) - the retail warehouse card (teal)
       rawMaterials: "#C8873A", // المواد الخام: الأخشاب ومواد التعبئة (بني خشبي) - raw materials: wood + packaging (wood brown)
     },
   },

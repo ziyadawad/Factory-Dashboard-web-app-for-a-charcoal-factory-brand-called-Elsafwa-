@@ -14,6 +14,7 @@ import {
   LucideIcon,
   Package,
   ShoppingBag,
+  Store,
   Trees,
   X,
 } from "lucide-react";
@@ -23,6 +24,8 @@ import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import DuplicatesTab from "./DuplicatesTab";
+import { retailItemName } from "@/lib/retail-names";
+import { dashboardConfig } from "@/config/dashboard.config";
 
 // لوحة تفاصيل كارت في أرصدة المخازن (الصفحة 2): الرصيد في المخازن / الحركة / ملخص الشهر
 // A stock card's details panel (page 2): balance per warehouse / movements / month summary
@@ -46,7 +49,7 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-const GROUP_ICONS: Record<StockGroup, LucideIcon> = { packaged: Package, sacks: ShoppingBag, wood: Trees, packaging: Box };
+const GROUP_ICONS: Record<StockGroup, LucideIcon> = { packaged: Package, sacks: ShoppingBag, wood: Trees, packaging: Box, retail: Store };
 const PACKAGING_ICONS: Record<string, LucideIcon> = { plastic: Layers, roll: Cylinder, bag: ShoppingBag, tape: Disc3 };
 const GREEN = "#22C55E";
 const RED = "#EF4444";
@@ -91,7 +94,22 @@ const SCOPES: { id: Scope; label: string }[] = [
 const td = "px-2 min-[1600px]:px-2.5 border-b border-cardBorder/60 align-middle";
 
 // صف حركة (والضغط عليه يفتح التفاصيل) - one movement row (click opens its details)
-function MoveRow({ move, erpUrl, unit, open, onToggle }: { move: StockMove; erpUrl: string; unit: string; open: boolean; onToggle: () => void }) {
+// showItem = كارت القطاعي: عمود المخزن بيبقى اسم الصنف (كله نفس المخزن) - retail card: the warehouse column shows the item
+function MoveRow({
+  move,
+  erpUrl,
+  unit,
+  open,
+  onToggle,
+  showItem = false,
+}: {
+  move: StockMove;
+  erpUrl: string;
+  unit: string;
+  open: boolean;
+  onToggle: () => void;
+  showItem?: boolean;
+}) {
   const incoming = move.qty > 0;
   const muted = !move.inScope && !move.retail;
   return (
@@ -131,7 +149,7 @@ function MoveRow({ move, erpUrl, unit, open, onToggle }: { move: StockMove; erpU
           )}
         </td>
         <td className={`${td} text-gray-200 whitespace-nowrap`}>
-          {shortWarehouse(move.warehouse)}
+          {showItem ? toEnglishDigits(retailItemName(move.itemCode)) : shortWarehouse(move.warehouse)}
           {move.retail && (
             <span className="ms-1.5 rounded-full border border-teal-500/40 bg-teal-500/10 text-teal-300 text-[0.8em] px-2 leading-[1.7]">قطاعي</span>
           )}
@@ -240,6 +258,8 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
   const [month, setMonth] = useState(cairoMonth);
   const [openId, setOpenId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>("all");
+  const isRetail = target.group === "retail";
+  const retailWarehouseNames = dashboardConfig.erp.stock.retailWarehouses;
   useIdleClose(onClose);
 
   const params = new URLSearchParams({ group: target.group, name: target.name, month });
@@ -370,11 +390,23 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
               محتاج نزوّد (أقل من الحد الأدنى)
             </span>
           )}
+          {isRetail && data?.erpUrl && (
+            // تقرير Stock Balance لمخزن القطاعي في ERPNext - the retail warehouse's Stock Balance report
+            <a
+              href={`${data.erpUrl}/app/query-report/Stock Balance?warehouse=${encodeURIComponent(retailWarehouseNames[0] ?? "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ms-auto shrink-0 flex items-center gap-2 rounded-xl border border-brandOrange/50 bg-brandOrange/10 text-brandOrange px-4 py-1.5 font-bold hover:bg-brandOrange/20"
+            >
+              <ExternalLink size={18} />
+              افتح في ERPNext
+            </a>
+          )}
           <button
             type="button"
             onClick={onClose}
             aria-label="إغلاق"
-            className="ms-auto p-2 rounded-xl border border-cardBorder bg-background/70 text-gray-300 hover:text-white hover:border-gray-500"
+            className={`${isRetail && data?.erpUrl ? "" : "ms-auto"} p-2 rounded-xl border border-cardBorder bg-background/70 text-gray-300 hover:text-white hover:border-gray-500`}
           >
             <X size={26} />
           </button>
@@ -427,7 +459,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
 
         {/* التابات، الأنواع، الشهور - tabs, variants, months */}
         <div className="shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-cardBorder">
-          {TABS.map((t) => (
+          {TABS.map((t) => (t.id === "warehouses" && isRetail ? { ...t, label: "الأصناف" } : t)).map((t) => (
             <button key={t.id} type="button" onClick={() => setTab(t.id)} className={chip(tab === t.id)}>
               {t.label}
             </button>
@@ -494,6 +526,32 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
             <div className="h-full flex items-center justify-center text-xl text-gray-400">
               {error && !isLoading ? "غير متصل — جرب تاني بعد شوية" : "جاري تحميل التفاصيل..."}
             </div>
+          ) : tab === "warehouses" && isRetail ? (
+            // كارت القطاعي: كل صنف بالرصيد والوحدة وآخر حركة - retail card: every item with qty, unit and last movement
+            <table className="w-full border-separate border-spacing-0 leading-[2.2]">
+              <thead className="sticky top-0 z-10 bg-card">
+                <tr>
+                  <th className={`${th} text-start`}>الصنف</th>
+                  <th className={`${th} text-start`}>الكود في ERPNext</th>
+                  <th className={`${th} text-center`}>الرصيد</th>
+                  <th className={`${th} text-center`}>الوحدة</th>
+                  <th className={`${th} text-center`}>آخر حركة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.items ?? []).map((item) => (
+                  <tr key={item.itemCode} className={item.qty === 0 ? "text-gray-500" : ""}>
+                    <td className={`${td} font-bold ${item.qty === 0 ? "" : "text-white"}`}>{toEnglishDigits(item.name)}</td>
+                    <td className={`${td} ${item.qty === 0 ? "" : "text-gray-300"}`}>{toEnglishDigits(item.itemCode)}</td>
+                    <td className={`${td} text-center font-extrabold text-[1.1em] ${item.qty < 0 ? "text-statusRed" : item.qty === 0 ? "" : "text-teal-300"}`}>{n(item.qty)}</td>
+                    <td className={`${td} text-center ${item.qty === 0 ? "" : "text-gray-300"}`}>{toEnglishDigits(item.unit)}</td>
+                    <td className={`${td} text-center whitespace-nowrap ${item.qty === 0 ? "" : "text-gray-300"}`}>
+                      {item.lastDate ? formatDayName(item.lastDate) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : tab === "warehouses" ? (
             <div className="px-6 py-4 flex flex-col gap-4">
               <div>
@@ -528,7 +586,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                     <th className={`${th} text-center`}>النوع</th>
                     <th className={`${th} text-center`}>الكمية</th>
                     <th className={`${th} text-center`}>الرصيد بعدها</th>
-                    <th className={`${th} text-start`}>المخزن</th>
+                    <th className={`${th} text-start`}>{isRetail ? "الصنف" : "المخزن"}</th>
                     <th className={`${th} text-start`}>المستند</th>
                     <th className={`${th} text-start`}>العميل / المورد / العربية</th>
                     <th className={`${th} text-start`}>سجّلها</th>
@@ -552,6 +610,7 @@ export default function StockDetailsPanel({ target, onClose }: { target: StockPa
                           move={move}
                           erpUrl={data.erpUrl}
                           unit={unit}
+                          showItem={isRetail}
                           open={openId === move.id}
                           onToggle={() => setOpenId(openId === move.id ? null : move.id)}
                         />

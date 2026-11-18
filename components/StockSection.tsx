@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PackagingItem, Stock, StockGroup, StockVariant, WoodType } from "@/lib/types";
+import { PackagingItem, RetailStock, Stock, StockGroup, StockVariant, WoodType } from "@/lib/types";
 import type { StockPanelTarget } from "./StockDetailsPanel";
 import { AlertTriangle, Box, Cylinder, Disc3, Layers, LucideIcon, Package, ShoppingBag, TreePine, Trees } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
@@ -83,6 +83,8 @@ function QuantityNumber({
   low,
   numberRef,
   fitColumn = false,
+  scale = 1,
+  cap,
 }: {
   value: number;
   unit?: string;
@@ -92,16 +94,19 @@ function QuantityNumber({
   // جوه عمود: الحجم من الكونفج (variantNumberMaxSize / variantNumberScale) وبيصغر مع عرض العمود
   // Inside a column: size comes from config (variantNumberMaxSize / variantNumberScale) and shrinks with the column width
   fitColumn?: boolean;
+  scale?: number; // تعويض تضييق الكارت (packagedNumberBoost / sackNumberBoost) - narrower-card boost
+  cap?: number; // أكبر حجم بعد ما الرقم ماخدش مكانه - the size cap after the number overflowed
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
   const { variantNumberMaxSize, variantNumberScale } = dashboardConfig.sizes.page2;
+  const maxSize = Math.min(variantNumberMaxSize, cap ?? variantNumberMaxSize);
   const { count } = useCountUp(value, 500);
 
   return (
     <div
       ref={numberRef}
       className={`font-numbers font-bold tabular-nums whitespace-nowrap shrink-0 ${low ? "text-statusRed" : "text-white"}`}
-      style={{ fontSize: fitColumn ? `min(${variantNumberMaxSize}px, ${variantNumberScale}cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
+      style={{ fontSize: fitColumn ? `min(${maxSize}px, ${Math.round(variantNumberScale * scale * 10) / 10}cqi)` : `${fontSize}px`, lineHeight: NUMBER_LINE_HEIGHT }}
     >
       {formatNumber(count)}
       {unit && (
@@ -146,7 +151,9 @@ function VariantColumn({
   onOverflow,
   onOpen,
   showRetail = false,
+  numberScale = 1,
 }: {
+  numberScale?: number;
   variant: StockVariant;
   numberFontSize: number;
   onOverflow: (fontSize: number) => void;
@@ -164,10 +171,17 @@ function VariantColumn({
     variant.label
   );
 
+  // لو الرقم أعرض من مكانه بيصغر 1px لحد ما يدخل (ولما الرقم يتغير نبدأ من الأول)
+  // A number wider than its column steps down 1px until it fits (and starts over when the value changes)
+  const [cap, setCap] = useState<number | undefined>(undefined);
+  useIsomorphicLayoutEffect(() => setCap(undefined), [variant.quantity]);
+
   // لو الرقم أعرض من مكانه نبلغ الكارت يصغر الخط (العرض بس) - width-only: report overflow so the card shrinks the shared font
   useIsomorphicLayoutEffect(() => {
     const el = numberRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
+    const current = parseFloat(getComputedStyle(el).fontSize);
+    if (current > sizes.minNumberFontSize) setCap(Math.max(sizes.minNumberFontSize, Math.floor(current) - 1));
     if (numberFontSize > sizes.minNumberFontSize) onOverflow(numberFontSize);
   });
 
@@ -193,7 +207,15 @@ function VariantColumn({
           {toEnglishDigits(variant.label)}
         </span>
       </div>
-      <QuantityNumber value={variant.quantity} fontSize={numberFontSize} low={low} numberRef={numberRef} fitColumn />
+      <QuantityNumber
+        value={variant.quantity}
+        fontSize={numberFontSize}
+        low={low}
+        numberRef={numberRef}
+        fitColumn
+        scale={numberScale}
+        cap={cap}
+      />
       {showRetail && (
         <span
           className={`text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis ${variant.retail ? "" : "invisible"}`}
@@ -256,7 +278,11 @@ function VariantsCard({
   totalMinimum = 0,
   onOpen,
   showRetail = false,
+  numberScale = 1,
+  tight = false,
 }: {
+  numberScale?: number; // تعويض أرقام الأنواع عن تضييق الكارت - variant-number boost for a narrower card
+  tight?: boolean; // كروت الصف اللي فوق: مسافات أقل (topCardPaddingX / topCardTotalGap) - top-row cards: less spacing
   onOpen?: (variant: string | null) => void; // null = الكارت كله - null = the whole card
   // كروت الشكاير: رصيد القطاعي تحت كل نوع وجنب الإجمالي (الأرقام الكبيرة = الرئيسي بس)
   // sack cards: retail under each variant and next to the total (the big numbers = MAIN only)
@@ -348,6 +374,7 @@ function VariantsCard({
         ...(anyLow ? {} : { borderColor: withAlpha(accent, 0.3) }),
         // الشكاير مع القطاعي: مسافة فوق أقل ومسافة أقل قبل الإجمالي - sacks with retail: less top padding and row gap
         ...(showRetail ? { paddingTop: compact.paddingTop, rowGap: compact.rowGap } : {}),
+        ...(tight ? { paddingLeft: sizes.topCardPaddingX, paddingRight: sizes.topCardPaddingX } : {}),
       }}
     >
       {/* "⚠ محتاج نزوّد" متعلّقة على الإطار اللي فوق، فمش بتاخد مكان ولا بتغطي الاسم
@@ -397,6 +424,7 @@ function VariantsCard({
                 onOverflow={shrinkNumber}
                 onOpen={onOpen ? () => onOpen(variant.label) : undefined}
                 showRetail={showRetail && retailTotal !== 0}
+                numberScale={numberScale}
               />
             ))}
           </div>
@@ -404,7 +432,10 @@ function VariantsCard({
       </div>
 
       {showTotal && (
-        <div className="flex items-center justify-between gap-2 border-t border-cardBorder pt-1 min-w-0">
+        <div
+          className="flex items-center justify-between gap-2 border-t border-cardBorder pt-1 min-w-0"
+          style={tight ? { columnGap: sizes.topCardTotalGap } : undefined}
+        >
           <span className="flex items-center gap-1.5 shrink-0 min-w-0">
             <span
               className="font-semibold text-gray-300 shrink-0 whitespace-nowrap"
@@ -442,12 +473,14 @@ function VariantsCard({
 }
 
 // كروت جنب بعض في صف واحد - cards side by side in one row
-function CardsGrid({ columns, children }: { columns: number; children: ReactNode }) {
+// widths = عرض كل كارت بالنسبة لبعض (من غيرها كلهم زي بعض) - widths = each card's relative width (default: equal)
+function CardsGrid({ columns, widths, children }: { columns: number; widths?: number[]; children: ReactNode }) {
+  const template =
+    widths && widths.length >= columns
+      ? widths.slice(0, columns).map((w) => `minmax(0, ${w}fr)`).join(" ")
+      : `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`;
   return (
-    <div
-      className="flex-1 grid gap-2.5"
-      style={{ gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))` }}
-    >
+    <div className="flex-1 grid gap-2.5" style={{ gridTemplateColumns: template }}>
       {children}
     </div>
   );
@@ -463,6 +496,7 @@ function SectionCard({
   accent,
   extra,
   columns,
+  widths,
   children,
 }: {
   title: string;
@@ -470,6 +504,7 @@ function SectionCard({
   accent: string;
   extra?: ReactNode;
   columns?: number;
+  widths?: number[];
   children: ReactNode;
 }) {
   const sizes = dashboardConfig.sizes.stockPage;
@@ -498,8 +533,112 @@ function SectionCard({
       {columns === undefined ? (
         <div className="flex-1 flex flex-col">{children}</div>
       ) : (
-        <CardsGrid columns={columns}>{children}</CardsGrid>
+        <CardsGrid columns={columns} widths={widths}>{children}</CardsGrid>
       )}
+    </div>
+  );
+}
+
+// كارت "مخزن القطاعي": إجمالي كل اللي في مخازن القطاعي وتحته أكبر الأصناف
+// عدد الأصناف بيتحسب من المكان الفاضي (لحد maxItems) فالكارت عمره ما بيطوّل الصف
+// The "مخزن القطاعي" card: the retail warehouses' total and the largest items under it. The item count follows the
+// free space (up to maxItems), so the card never makes the row taller
+function RetailCard({ retail, accent, onOpen }: { retail: RetailStock | null; accent: string; onOpen?: () => void }) {
+  const sizes = dashboardConfig.sizes.stockPage;
+  const card = sizes.retailCard;
+  const total = retail?.total ?? 0;
+  const items = retail?.items ?? [];
+  const { count } = useCountUp(total, 500);
+  const [numberRef, numberFontSize] = useFitFontSize<HTMLDivElement>(card.numberFontSize, sizes.minNumberFontSize, `${total}|${retail?.unit}`);
+  const [nameRef, nameFontSize] = useFitFontSize<HTMLHeadingElement>(sizes.nameFontSize, MIN_NAME_FONT_SIZE, "مخزن القطاعي");
+
+  // كام سطر يدخل في المكان الفاضي - how many rows fit in the free space
+  const rowHeight = Math.ceil(card.itemFontSize * 1.5);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number>(card.maxItems);
+  useIsomorphicLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    // pt-1 = 4px فوق السطور - 4px top padding above the rows
+    const measure = () => setFit(Math.max(1, Math.floor((el.clientHeight - 4) / rowHeight)));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [rowHeight]);
+  const cap = Math.min(card.maxItems, fit);
+  // لو الأصناف أكتر من المكان، آخر سطر بيبقى "+N أصناف" - when there are more items, the last row is "+N أصناف"
+  const shown = items.length <= cap ? items : items.slice(0, Math.max(cap - 1, 0));
+  const more = items.length - shown.length;
+
+  return (
+    <div
+      onClick={onOpen}
+      className={`relative bg-background border-2 rounded-2xl p-2.5 min-w-0 grid gap-1.5 ${
+        onOpen ? "cursor-pointer transition-colors hover:bg-white/[0.03]" : ""
+      }`}
+      style={{
+        gridTemplateRows: "auto auto minmax(0,1fr)",
+        borderColor: withAlpha(accent, 0.35),
+        paddingLeft: sizes.topCardPaddingX,
+        paddingRight: sizes.topCardPaddingX,
+      }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-3xl shrink-0" style={{ lineHeight: 2 }}>
+          🏪
+        </span>
+        <h3
+          ref={nameRef}
+          className="font-bold text-white whitespace-nowrap min-w-0"
+          style={{ fontSize: `${nameFontSize}px`, lineHeight: BOLD_LINE_HEIGHT }}
+        >
+          مخزن القطاعي
+        </h3>
+      </div>
+
+      <div
+        ref={numberRef}
+        className="font-numbers font-bold tabular-nums whitespace-nowrap min-w-0"
+        style={{ fontSize: `${numberFontSize}px`, lineHeight: NUMBER_LINE_HEIGHT, color: retail ? accent : "#6B7280" }}
+      >
+        {retail ? formatNumber(count) : "—"}
+        {retail?.unit && (
+          <span className="font-normal text-gray-400" style={{ fontSize: `${sizes.unitFontSize}px`, lineHeight: 1.6 }}>
+            {" "}
+            {toEnglishDigits(retail.unit)}
+          </span>
+        )}
+      </div>
+
+      <div
+        ref={listRef}
+        className="min-h-0 overflow-hidden border-t border-cardBorder pt-1 flex flex-col"
+        style={{ fontSize: `${card.itemFontSize}px` }}
+      >
+        {retail && items.length === 0 ? (
+          <span className="text-gray-500 whitespace-nowrap" style={{ lineHeight: `${rowHeight}px` }}>
+            مفيش رصيد قطاعي
+          </span>
+        ) : (
+          <>
+            {shown.map((item) => (
+              <div key={item.itemCode} className="flex items-center justify-between gap-2 min-w-0 shrink-0" style={{ height: rowHeight }}>
+                <span className="text-gray-300 truncate min-w-0">{toEnglishDigits(item.name)}</span>
+                <span className={`font-numbers font-bold tabular-nums shrink-0 ${item.qty < 0 ? "text-statusRed" : "text-white"}`}>
+                  {formatNumber(item.qty)}
+                </span>
+              </div>
+            ))}
+            {more > 0 && (
+              <span className="text-gray-500 whitespace-nowrap shrink-0" style={{ lineHeight: `${rowHeight}px` }}>
+                +{formatNumber(more)} أصناف
+              </span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -571,6 +710,8 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
   const { wood, packaging } = data.rawMaterials;
   const woodTotal = wood.types.reduce((sum, type) => sum + sumQuantities(woodVariants(type)), 0);
   const { count: woodTotalCount } = useCountUp(woodTotal, 500);
+  // كارت مخزن القطاعي بيظهر لو فيه مخزن قطاعي في الكونفج - the retail card shows when retail warehouses are configured
+  const hasRetailCard = dashboardConfig.erp.stock.retailWarehouses.length > 0;
 
   return (
     // الصفوف عمرها ما تصغر عن محتواها (min-content) والمساحة الزيادة بتتوزع بالنسب
@@ -598,6 +739,8 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
               variants={product.variants}
               accent={colors.packaged}
               totalMinimum={product.minimumThreshold}
+              numberScale={sizes.packagedNumberBoost}
+              tight
               onOpen={
                 onOpenItem &&
                 ((variant) =>
@@ -611,8 +754,14 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
           ))}
         </SectionCard>
 
-        <SectionCard title="الشكاير" icon={ShoppingBag} accent={colors.sacks} columns={data.sacks.length}>
-          {data.sacks.map((sack) => (
+        <SectionCard
+          title="الشكاير"
+          icon={ShoppingBag}
+          accent={colors.sacks}
+          columns={data.sacks.length + (hasRetailCard ? 1 : 0)}
+          widths={sizes.sackColumns}
+        >
+          {data.sacks.map((sack, index) => (
             <VariantsCard
               key={sack.id}
               name={sack.name}
@@ -622,6 +771,8 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
               accent={colors.sacks}
               totalMinimum={sack.minimumThreshold}
               showRetail={dashboardConfig.erp.stock.showRetailOnCard}
+              numberScale={hasRetailCard ? sizes.sackNumberBoost[index] ?? 1 : 1}
+              tight={hasRetailCard}
               onOpen={
                 onOpenItem &&
                 ((variant) =>
@@ -633,6 +784,24 @@ export default function StockSection({ data, className, onOpenItem }: StockSecti
               }
             />
           ))}
+          {hasRetailCard && (
+            <RetailCard
+              retail={data.retail}
+              accent={colors.retail}
+              onOpen={
+                onOpenItem &&
+                (() =>
+                  onOpenItem({
+                    group: "retail",
+                    name: "مخزن القطاعي",
+                    unit: data.retail?.unit ?? "",
+                    variant: null,
+                    variants: [],
+                    low: { total: false, variants: {} },
+                  }))
+              }
+            />
+          )}
         </SectionCard>
       </div>
 

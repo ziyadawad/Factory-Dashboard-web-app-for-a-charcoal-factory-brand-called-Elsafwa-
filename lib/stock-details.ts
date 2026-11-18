@@ -6,6 +6,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { erpPost, erpToday } from "./erp";
 import { fullNames } from "./account-details";
 import { ConfigErpStockItem, StockCategory, StockDetails, StockGroup, StockMove } from "./types";
+import { retailItemName } from "./retail-names";
 
 const CACHE_MS = 60_000;
 
@@ -110,18 +111,20 @@ function resolveItem(group: StockGroup, name: string, variant: string | null) {
 
 // آخر حركة لكل صنف في كل مخزن لحد تاريخ (زي تقرير Stock Balance): الرصيد = qty_after_transaction بتاعها
 // The last entry per item and warehouse up to a date (like the Stock Balance report): balance = its qty_after_transaction
-async function lastBalances(codes: string[], op: "<" | "<=", date: string) {
+// whs = مخازن معينة بس (كارت القطاعي) - only these warehouses (the retail card)
+async function lastBalances(codes: string[], op: "<" | "<=", date: string, whs: string[] = []) {
   const base = [
     ["item_code", "in", codes],
     ["is_cancelled", "=", 0],
     ["posting_date", op, date],
+    ...warehouseFilter(whs),
   ];
   const latest = await getList<{ item_code: string; warehouse: string; at: string }>("Stock Ledger Entry", {
     filters: base,
     fields: ["item_code", "warehouse", "max(posting_datetime) as at"],
     group_by: "item_code, warehouse",
   });
-  const result = new Map<string, { itemCode: string; warehouse: string; qty: number; uom: string }>();
+  const result = new Map<string, { itemCode: string; warehouse: string; qty: number; uom: string; at: string }>();
   if (latest.length === 0) return result;
   const rows = await getList<{ item_code: string; warehouse: string; posting_datetime: string; creation: string; qty_after_transaction: number; stock_uom: string }>(
     "Stock Ledger Entry",
@@ -138,7 +141,13 @@ async function lastBalances(codes: string[], op: "<" | "<=", date: string) {
     // حركتين في نفس الوقت: الأحدث تسجيلًا هي الأخيرة - same time: the later created wins
     if ((creation.get(key) ?? "") > row.creation) continue;
     creation.set(key, row.creation);
-    result.set(key, { itemCode: row.item_code, warehouse: row.warehouse, qty: Number(row.qty_after_transaction) || 0, uom: row.stock_uom });
+    result.set(key, {
+      itemCode: row.item_code,
+      warehouse: row.warehouse,
+      qty: Number(row.qty_after_transaction) || 0,
+      uom: row.stock_uom,
+      at: String(row.posting_datetime).slice(0, 10),
+    });
   }
   return result;
 }
@@ -200,12 +209,13 @@ function categoryOf(voucherType: string, info: VoucherInfo | undefined): StockCa
 const CATEGORIES: StockCategory[] = ["إنتاج", "شراء", "بيع", "تحويل", "تسوية"];
 
 // الشهور اللي فيها حركات للأصناف دي (الأحدث الأول) - months with movements for these items, newest first
-async function monthsOf(codes: string[], today: string) {
+async function monthsOf(codes: string[], today: string, whs: string[] = []) {
   const rows = await getList<{ y: number; m: number; n: number }>("Stock Ledger Entry", {
     filters: [
       ["item_code", "in", codes],
       ["is_cancelled", "=", 0],
       ["posting_date", "<=", today],
+      ...warehouseFilter(whs),
     ],
     fields: ["year(posting_date) as y", "month(posting_date) as m", "count(name) as n"],
     group_by: "year(posting_date), month(posting_date)",
@@ -214,8 +224,36 @@ async function monthsOf(codes: string[], today: string) {
   return rows.map((r) => ({ month: `${r.y}-${String(r.m).padStart(2, "0")}`, count: Number(r.n) || 0 }));
 }
 
+const warehouseFilter = (whs: string[]) => (whs.length > 0 ? [["warehouse", "in", whs]] : []);
+
+// كارت مخزن القطاعي: كل صنف اتحرك في مخازن القطاعي، والرصيد والحركة جوه المخازن دي بس
+// The retail warehouse card: every item that ever moved in the retail warehouses; balance and moves stay inside them
+async function resolveRetail() {
+  const warehouses = dashboardConfig.erp.stock.retailWarehouses;
+  if (warehouses.length === 0) throw new UnknownStockItemError("no retail warehouses in config");
+  const items = await getList<{ item_code: string }>("Stock Ledger Entry", {
+    filters: [["warehouse", "in", warehouses], ["is_cancelled", "=", 0]],
+    fields: ["item_code"],
+    group_by: "item_code",
+  });
+  const mappings = new Map<string, StockMapping>(
+    items.map((row) => [row.item_code, { source: "erp", itemCodes: [row.item_code], warehouses }])
+  );
+  if (mappings.size === 0) throw new UnknownStockItemError("the retail warehouse has no movements");
+  return {
+    variants: [] as string[],
+    mappings,
+    byLabel: new Map<string, StockMapping>(),
+    retail: [] as string[],
+    excluded: [] as string[],
+    decimals: 1,
+    whs: warehouses,
+  };
+}
+
 async function load(group: StockGroup, name: string, variant: string | null, month: string, today: string): Promise<StockDetails> {
-  const { variants, mappings, byLabel, retail, excluded, decimals } = resolveItem(group, name, variant);
+  const { variants, mappings, byLabel, retail, excluded, decimals, whs } =
+    group === "retail" ? await resolveRetail() : { ...resolveItem(group, name, variant), whs: [] as string[] };
   const codes = Array.from(mappings.keys());
   const allCodes = Array.from(new Set(Array.from(byLabel.values()).flatMap((m) => m.itemCodes)));
   const listed = (mapping: StockMapping | undefined, warehouse: string) =>
@@ -228,9 +266,9 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
 
   const [current, opening, rows, months] = await Promise.all([
     // الشكاير: رصيد كل أنواع الكارت للتقسيم - sacks: every variant's balance, for the split
-    lastBalances(retail.length > 0 ? allCodes : codes, "<=", today),
+    lastBalances(retail.length > 0 ? allCodes : codes, "<=", today, whs),
     // الرصيد قبل أول الشهر لكل صنف ومخزن - the balance before the month per item and warehouse
-    lastBalances(codes, "<", from),
+    lastBalances(codes, "<", from, whs),
     from > to
       ? Promise.resolve([] as SleRow[])
       : getList<SleRow>("Stock Ledger Entry", {
@@ -239,6 +277,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
             ["is_cancelled", "=", 0],
             ["posting_date", ">=", from],
             ["posting_date", "<=", to],
+            ...warehouseFilter(whs),
           ],
           fields: [
             "name", "item_code", "warehouse", "posting_date", "posting_time", "posting_datetime", "creation",
@@ -246,7 +285,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
           ],
           order_by: "posting_datetime asc, creation asc",
         }),
-    monthsOf(codes, today),
+    monthsOf(codes, today, whs),
   ]);
   // ترتيب ERPNext (وقت الحركة ثم وقت التسجيل) للرصيد بعد كل حركة - ERPNext order for the running balance
   rows.sort((a, b) => String(a.posting_datetime).localeCompare(String(b.posting_datetime)) || a.creation.localeCompare(b.creation));
@@ -340,7 +379,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
 
   // المبيعات (كل المخازن، العربيات معاهم): بالمندوب/العربية وبالعميل - sales (every warehouse incl. vans): by rep/van and customer
   let sales: StockDetails["sales"] = null;
-  if (group === "packaged" || group === "sacks") {
+  if (group === "packaged" || group === "sacks" || group === "retail") {
     const byRep = new Map<string, number>();
     const byCustomer = new Map<string, number>();
     let total = 0;
@@ -416,6 +455,25 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
     });
   }
 
+  // كارت القطاعي: كل صنف بالرصيد والوحدة وآخر حركة (الأكبر الأول) - retail card: every item, largest first
+  let items: StockDetails["items"] = null;
+  if (group === "retail") {
+    const byItem = new Map<string, { itemCode: string; name: string; qty: number; unit: string; lastDate: string }>();
+    for (const entry of Array.from(current.values())) {
+      const item = byItem.get(entry.itemCode) ?? {
+        itemCode: entry.itemCode,
+        name: retailItemName(entry.itemCode),
+        qty: 0,
+        unit: SHORT_UNITS[entry.uom] ?? entry.uom,
+        lastDate: "",
+      };
+      item.qty = round(item.qty + entry.qty, 1);
+      if (entry.at > item.lastDate) item.lastDate = entry.at;
+      byItem.set(entry.itemCode, item);
+    }
+    items = Array.from(byItem.values()).sort((a, b) => b.qty - a.qty || b.lastDate.localeCompare(a.lastDate));
+  }
+
   return {
     group,
     name,
@@ -432,6 +490,7 @@ async function load(group: StockGroup, name: string, variant: string | null, mon
     balance: Math.round(balance * factor) / factor,
     warehouses: Array.from(perWarehouse.values()).sort((a, b) => Number(a.excluded) - Number(b.excluded) || b.qty - a.qty),
     split,
+    items,
     openingBalance,
     closingBalance,
     totalIn: round(totalIn),

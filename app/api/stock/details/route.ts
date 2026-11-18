@@ -5,7 +5,7 @@ import { StockGroup } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const GROUPS: StockGroup[] = ["packaged", "sacks", "wood", "packaging"];
+const GROUPS: StockGroup[] = ["packaged", "sacks", "wood", "packaging", "retail"];
 const NO_STORE = { "Cache-Control": "no-store" };
 
 // تفاصيل كارت في أرصدة المخازن: بتتسأل بس لما اللوحة تتفتح، كاش 60 ثانية على السيرفر (قراية بس من ERPNext)

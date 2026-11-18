@@ -113,9 +113,18 @@ export interface RawMaterials {
   packaging: PackagingItem[];
 }
 
+// مخزن القطاعي (كارت في قسم الشكاير): كل الأصناف اللي في stock.retailWarehouses
+// The retail warehouse card (in the sacks section): every item in stock.retailWarehouses
+export interface RetailStock {
+  total: number; // مجموع كل الأصناف - sum of every item
+  unit: string; // وحدة ERPNext (أو الكلمة المشتركة لو الوحدات مختلفة) - ERPNext unit (or the shared word when they differ)
+  items: { itemCode: string; name: string; qty: number; unit: string }[]; // اللي رصيده مش صفر، الأكبر الأول - non-zero, largest first
+}
+
 export interface Stock {
   packaged: PackagedProduct[];
   sacks: SackItem[];
+  retail: RetailStock | null; // null = مفيش مخزن قطاعي في الكونفج أو ERPNext عمره ما رد - none configured or never loaded
   rawMaterials: RawMaterials;
 }
 
@@ -936,7 +945,7 @@ export interface SectionSalaries {
 }
 
 // ===== تفاصيل صنف في أرصدة المخازن (الضغط على كارت في الصفحة 2) - stock item details (click a page 2 card) =====
-export type StockGroup = "packaged" | "sacks" | "wood" | "packaging";
+export type StockGroup = "packaged" | "sacks" | "wood" | "packaging" | "retail";
 export type StockCategory = "إنتاج" | "بيع" | "تحويل" | "تسوية" | "شراء";
 
 // حركة مخزن واحدة (Stock Ledger Entry) - one stock movement
@@ -982,6 +991,8 @@ export interface StockDetails {
   // الشكاير بس: الرئيسي / القطاعي / الإجمالي لكل نوع في الكارت (كل الأنواع حتى لو نوع واحد مختار)
   // sacks only: MAIN / retail / total per variant of the card (every variant, even when one is selected)
   split: { label: string; main: number; retail: number; total: number }[] | null;
+  // مخزن القطاعي بس: كل صنف فيه بالرصيد والوحدة وآخر حركة - retail card only: every item with qty, unit and last movement
+  items: { itemCode: string; name: string; qty: number; unit: string; lastDate: string }[] | null;
   openingBalance: number;
   closingBalance: number;
   totalIn: number;

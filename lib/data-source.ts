@@ -18,6 +18,7 @@ import {
   DashboardData,
   PersonStatus,
   SectionStatus,
+  RetailStock,
 } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { stockMinimums } from "@/config/stock-min";
@@ -25,6 +26,7 @@ import { ErpError, erpBalanceOn, erpGet, erpPost, erpToday } from "./erp";
 import { toEnglishDigits } from "./format";
 import { distributorsSection, salesRepsSection } from "./sales";
 import { walletsSection } from "./wallets";
+import { retailItemName, sharedUnit } from "./retail-names";
 import { CharityRaw, charityDuplicates, loadCharityRaw, unfundedCharity } from "./charity-auto";
 
 // كل رقم بييجي من الكونفج، إلا اللي source بتاعه "erp" في dashboardConfig.erp
@@ -579,10 +581,11 @@ const lastUnit = new Map<string, string>();
 // Balance per item and warehouse as of today, the way the Stock Balance report computes it: the
 // qty_after_transaction of the last ledger entry up to today. Not SUM(actual_qty), because Stock
 // Reconciliation entries store actual_qty = 0 and put the new balance in qty_after_transaction.
-async function loadStockBalances(): Promise<BalanceRow[]> {
+// filter = الأصناف المربوطة (الافتراضي) أو مخازن معينة (القطاعي) - mapped items (default) or given warehouses (retail)
+async function loadStockBalances(filter: unknown[] = ["item_code", "in", mappedItemCodes()]): Promise<BalanceRow[]> {
   const today = erpToday();
   const base = [
-    ["item_code", "in", mappedItemCodes()],
+    filter,
     ["is_cancelled", "=", 0],
     ["posting_date", "<=", today],
   ];
@@ -632,6 +635,41 @@ function retailField(field: ConfigErpStockItem | undefined, retail: string[]): C
   const warehouses = field.warehouses.length === 0 ? retail : field.warehouses.filter((w) => retail.includes(w));
   // [] معناها كل المخازن، فلو مفيش مخزن قطاعي يبقى 0 - [] means every warehouse, so no retail warehouse = 0
   return warehouses.length === 0 ? { source: "manual" } : { ...field, warehouses };
+}
+
+// مخزن القطاعي: كل الأصناف اللي في stock.retailWarehouses (مش بس المربوطة)، ولو فشل آخر رصيد نجح
+// The retail warehouse: every item in stock.retailWarehouses (not only mapped ones); on failure the last good one
+let lastRetail: RetailStock | null = null;
+async function retailSection(results: ErpStatus[]): Promise<RetailStock | null> {
+  const warehouses = dashboardConfig.erp.stock.retailWarehouses;
+  if (warehouses.length === 0) return null;
+  try {
+    const rows = await loadStockBalances(["warehouse", "in", warehouses]);
+    const byItem = new Map<string, { qty: number; unit: string }>();
+    for (const row of rows) {
+      const item = byItem.get(row.item_code) ?? { qty: 0, unit: SHORT_UNITS[row.stock_uom] ?? row.stock_uom };
+      item.qty += row.balance_qty;
+      byItem.set(row.item_code, item);
+    }
+    const items = Array.from(byItem, ([itemCode, { qty, unit }]) => ({
+      itemCode,
+      name: retailItemName(itemCode),
+      qty: Math.round(qty * 10) / 10,
+      unit,
+    }))
+      .filter((item) => item.qty !== 0)
+      .sort((a, b) => b.qty - a.qty);
+    lastRetail = {
+      total: Math.round(items.reduce((sum, item) => sum + item.qty, 0) * 10) / 10,
+      unit: sharedUnit(Array.from(byItem.values(), (item) => item.unit)),
+      items,
+    };
+    results.push({ fromErp: true, failed: false });
+  } catch (error) {
+    console.error("[erp] retail warehouse failed:", error instanceof Error ? error.message : error);
+    results.push({ fromErp: true, failed: true, stale: lastRetail !== null, error: errorText(error) });
+  }
+  return lastRetail;
 }
 
 // أرصدة المخازن: طلب واحد لكل الأصناف المربوطة في كل تحديث، وكل رقم بيجمع الصفوف بتاعته
@@ -686,7 +724,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   // كل الطلبات مع بعض في نفس الوقت - every request runs in parallel
   let treasuryStatus: SectionStatus = "ok";
-  const [treasury, packaged, sacks, wood, packaging, today, erpKilns, charity, sales, distributors, wallets] = await Promise.all([
+  const [treasury, packaged, sacks, wood, packaging, today, erpKilns, charity, sales, distributors, wallets, retail] = await Promise.all([
     Promise.all([
       erpNumber("treasury.balance", erp.treasury.balance, config.treasury.balance,
         ({ account }) => balanceOn(account)),
@@ -784,6 +822,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     distributorsPageEnabled ? distributorsSection(results) : null,
     // الخزن والمحافظ: كاش 10 ثواني (wallets.cacheSeconds) - wallets: cached for wallets.cacheSeconds
     walletsSection(results),
+    retailSection(results),
   ]);
   const [balance, incomingToday, outgoingToday] = treasury;
 
@@ -799,7 +838,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return {
     attendance: buildAttendance(today.value),
-    stock: { packaged, sacks, rawMaterials: { wood, packaging } },
+    stock: { packaged, sacks, retail, rawMaterials: { wood, packaging } },
     kilns: {
       working: workingCount,
       maintenance: maintenanceCount,
