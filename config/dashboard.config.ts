@@ -483,7 +483,8 @@ export const dashboardConfig = {
     // stock = أذون المخزن (صرف / إضافة / تحويل / تصنيع)، charity = الصدقات، salary = تسويات المرتبات (النوع والاسم بس، من غير مبلغ)
     // Event types shown (remove any you don't want): money = treasury and wallet moves, kiln = kiln exits,
     // sales = sales invoices and returns, stock = stock entries, charity = charity, salary = salary adjustments (no amounts)
-    enabledTypes: ["money", "kiln", "sales", "stock", "charity", "salary"] as ("money" | "kiln" | "sales" | "stock" | "charity" | "salary")[],
+    // it = جهاز أو راوتر فصل / رجع (من إيجنت IT، البيانات الحقيقية بس، عمرها ما بتبقى تجريبية) - it = device down / up (real agent data only)
+    enabledTypes: ["money", "kiln", "sales", "stock", "charity", "salary", "it"] as ("money" | "kiln" | "sales" | "stock" | "charity" | "salary" | "it")[],
     pulseCount: 5, // الحدث الجديد بينبض كام مرة قبل ما ينزل للقايمة - how many times a new event pulses before it moves down
     pulseSeconds: 1, // مدة النبضة الواحدة بالثواني - one pulse, in seconds
     listSize: 8, // عدد الأحداث في القايمة تحت الصندوق (الأحدث فوق) - events kept in the list under the box (newest on top)
@@ -493,6 +494,30 @@ export const dashboardConfig = {
   // الصفحات - الداشبورد بقى كذا صفحة، والتنقل بالأسهم اللي فوق على الشمال أو أسهم الكيبورد
   // Pages - the dashboard has several pages (arrows at the top-left of the header or keyboard arrows)
   // ============================================================
+
+  // ============================================================
+  // IT والمراقبة (آخر صفحة) - الشبكات والأجهزة والكاميرات من إيجنت على جهاز IT في المصنع
+  // الإيجنت بيبعت POST /api/it/status كل شوية (الشكل في docs/it-agent-payload.md) بالهيدر x-it-secret = IT_AGENT_SECRET
+  // IT & monitoring (last page) - networks, devices and cameras from an agent on the factory IT PC. The agent POSTs to
+  // /api/it/status (schema in docs/it-agent-payload.md) with header x-it-secret = env IT_AGENT_SECRET
+  // ============================================================
+  it: {
+    // true = لو الإيجنت لسه عمره ما بعت، الصفحة بتعرض بيانات تجريبية مع شريط "معاينة". أول ما بيانات حقيقية توصل
+    // التجريبي مبيظهرش تاني خالص، ومبيظهرش في أي صفحة تانية أبدا
+    // true = until the agent has ever sent data, the page shows sample data with a "معاينة" ribbon. Once real data
+    // arrives the sample is never shown again, and it never appears on any other page
+    previewMode: true,
+    agentOfflineSeconds: 120, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
+    refreshSeconds: 15, // الشاشة بتسأل كل 15 ثانية - the screen asks every 15 s
+    // سيرفر الكاميرات المحلي (بيتحط بكره)، والصورة = {cameraBaseUrl}/cameras/{id}/snapshot.jpg. فاضي = الكاميرات مش متاحة
+    // لازم HTTPS عشان الداشبورد نفسه HTTPS (المتصفح بيمنع صور http). مفيش باسورد في الرابط ده أبدا
+    // The local camera server (set tomorrow); snapshot = {cameraBaseUrl}/cameras/{id}/snapshot.jpg. Empty = unavailable.
+    // Must be HTTPS since the dashboard is HTTPS (browsers block http images). Never a password in this URL
+    cameraBaseUrl: "",
+    cameraRotateSeconds: 8, // الكاميرا الكبيرة بتتقلب كل 8 ثواني - the big camera tile switches every 8 s
+    cameraRefreshSeconds: 2, // الصورة بتتحدث كل 2 ثانية - the snapshot refreshes every 2 s
+    eventsShown: 8, // أكتر عدد أحداث في "آخر الأحداث" (بيقل لو المكان مش كفاية) - most events listed (fewer when tight)
+  },
 
   pages: {
     autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
@@ -508,6 +533,9 @@ export const dashboardConfig = {
       { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 4: مبيعات المناديب - page 4
       { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 5: الخزن والمحافظ - page 5
       { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 6 (الأخيرة): صناديق الصدقات - page 6 (last)
+      // IT والمراقبة: في الأسهم والنقط بس، والتقليب التلقائي بيعديها لحد ما الإيجنت يتربط (inRotation: true وقتها)
+      // IT & monitoring: arrows/dots only, skipped by auto-rotation until the agent is connected (then inRotation: true)
+      { id: "it", title: "IT والمراقبة", durationSeconds: 60, enabled: true, inRotation: false },
       // متوقفة — غيّرها لـ true لو عايز ترجّعها
       { id: "distributors", title: "الموزعين", durationSeconds: 60, enabled: false }, // الموزعين - distributors (disabled)
     ] as ConfigPage[],

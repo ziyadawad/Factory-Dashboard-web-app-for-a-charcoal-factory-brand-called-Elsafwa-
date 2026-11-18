@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
-import { Factory, HandHeart, House, LucideIcon, Maximize2, Minimize2, Store, Truck, Wallet, Warehouse } from "lucide-react";
+import { Factory, HandHeart, House, LucideIcon, Maximize2, Minimize2, Network, Store, Truck, Wallet, Warehouse } from "lucide-react";
 import { DATE_LOCALE } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -74,6 +74,7 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
   distributors: Store,
   wallets: Wallet,
   charity: HandHeart,
+  it: Network,
 };
 
 // يفتح أو يقفل ملء الشاشة (لو المتصفح رفض مفيش حاجة بتحصل) - enter or leave fullscreen (ignored if the browser refuses)

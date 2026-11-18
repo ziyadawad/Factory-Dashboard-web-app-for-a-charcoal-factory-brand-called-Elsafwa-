@@ -714,6 +714,8 @@ export interface ConfigPage {
   title: string;
   durationSeconds: number; // مدة الصفحة في التقليب التلقائي - seconds on screen when auto rotating
   enabled?: boolean; // false = الصفحة متوقفة (مش في التقليب ولا الأسهم ولا العداد) - false = page hidden everywhere
+  // false = الصفحة موجودة في الأسهم والنقط بس، والتقليب التلقائي بيعديها - false = reachable by arrows/dots only, skipped by auto-rotation
+  inRotation?: boolean;
 }
 
 // قسم حضور في الكونفج: أكواد البصمة (attendance_device_id) - رقم لوحده أو [من، لحد]
@@ -1014,7 +1016,7 @@ export interface StockDetails {
 // اللي بيحصل دلوقتي (كارت الرئيسية) - the live activity feed (main page card)
 // in / out = وارد / منصرف خزنة أو محفظة، kiln = طرحة، sale / return = فاتورة بيع / مرتجع،
 // stock = إذن مخزن، charity = صدقات، salary = تسوية مرتب (من غير مبلغ)
-export type ActivityKind = "in" | "out" | "kiln" | "sale" | "return" | "stock" | "charity" | "salary";
+export type ActivityKind = "in" | "out" | "kiln" | "sale" | "return" | "stock" | "charity" | "salary" | "it_down" | "it_up";
 
 export interface ActivityEvent {
   id: string; // "gl:ACC-GLE-…" - فريد لكل حدث - unique per event
@@ -1056,4 +1058,71 @@ export interface ActivityData {
   now: string;
   events: ActivityEvent[];
   offline: boolean;
+}
+
+// ===== IT والمراقبة: اللي بيبعته الإيجنت من جهاز IT في المصنع - IT & monitoring: what the factory IT agent sends =====
+// مفيش أي باسورد هنا خالص (ولا للكاميرات) - never any password here (cameras included)
+export type ItDeviceType = "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other";
+
+export interface ItInternet {
+  up: boolean;
+  since: string | null; // ISO: شغال / واقع من امتى - up / down since
+  latencyMs: number | null;
+}
+
+// راوتر أو أكسس بوينت - a router or access point
+export interface ItRouter {
+  id: string;
+  name: string;
+  kind: "router" | "ap";
+  ip: string;
+  up: boolean;
+  latencyMs: number | null;
+  internet: boolean | null; // فيه نت من خلاله؟ (null = مش معروف) - internet through it? (null = unknown)
+  since: string | null; // ISO
+  uptimeTodayPct: number | null; // 0..100
+}
+
+export interface ItDevice {
+  id: string;
+  name: string;
+  type: ItDeviceType;
+  ip: string;
+  up: boolean;
+  latencyMs: number | null;
+  lastSeen: string | null; // ISO: آخر رد - last reply
+  since: string | null; // ISO
+}
+
+export interface ItCamera {
+  id: string; // بيتحط في رابط الصورة: {cameraBaseUrl}/cameras/{id}/snapshot.jpg - used in the snapshot URL
+  name: string;
+  online: boolean | null;
+}
+
+export interface ItEvent {
+  id: string;
+  at: string; // ISO
+  kind: "down" | "up";
+  targetName: string;
+  targetType: "internet" | "router" | "ap" | ItDeviceType;
+  ip: string | null;
+}
+
+export interface ItSnapshot {
+  agent: { name: string; version: string } | null;
+  sentAt: string | null; // ISO (ساعة جهاز الإيجنت) - ISO (the agent PC's clock)
+  internet: ItInternet | null;
+  routers: ItRouter[];
+  devices: ItDevice[];
+  cameras: ItCamera[];
+  events: ItEvent[]; // الأحدث الأول (السيرفر بيجمعها من كل التحديثات) - newest first (merged across updates)
+}
+
+// رد GET /api/it/status - the GET /api/it/status response
+export interface ItStatus {
+  receivedAt: string | null; // ISO: آخر تحديث وصل من الإيجنت - when the latest agent update arrived
+  agentOnline: boolean; // وصل تحديث في آخر agentOfflineSeconds - an update arrived in the last agentOfflineSeconds
+  data: ItSnapshot | null; // null = الإيجنت عمره ما بعت - the agent never sent anything
+  storage: "redis" | "memory";
 }

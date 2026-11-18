@@ -19,6 +19,7 @@ import AccountDetailsPanel from "@/components/AccountDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
+import ItPage from "@/components/ItPage";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -38,6 +39,16 @@ const PRODUCTION_REFRESH_MS = dashboardConfig.production.refreshSeconds * 1000;
 
 // الصفحات الشغالة بس (enabled: false = متوقفة) - enabled pages only
 const PAGES = dashboardConfig.pages.list.filter((page) => page.enabled !== false);
+
+// الصفحة الجاية في التقليب التلقائي: بيعدي الصفحات اللي inRotation: false (بتتفتح بالأسهم والنقط بس)
+// The next page for auto-rotation: skips inRotation: false pages (those open by arrows / dots only)
+function nextInRotation(from: number): number {
+  for (let step = 1; step <= PAGES.length; step++) {
+    const index = (from + step) % PAGES.length;
+    if (PAGES[index].inRotation !== false) return index;
+  }
+  return from;
+}
 // رقم حساب الخزنة (نفس حساب الكارت: "1110 - الخزينة - AC" -> "1110") - the treasury card's account number
 const treasuryField = dashboardConfig.erp.treasury.balance;
 const TREASURY_ACCOUNT_NUMBER = treasuryField.source === "erp" ? treasuryField.account.split(" - ")[0].trim() : "1110";
@@ -131,6 +142,8 @@ export default function Dashboard() {
   // تفاصيل كارت في أرصدة المخازن - the open stock card details
   const [stockItem, setStockItem] = useState<StockPanelTarget | null>(null);
   const closeStockItem = useCallback(() => setStockItem(null), []);
+  // كاميرا مفتوحة صفحة كاملة (صفحة IT) - a camera open full-page (IT page)
+  const [itViewerOpen, setItViewerOpen] = useState(false);
   // تثبيت الصفحة (محفوظ في المتصفح عشان يفضل بعد الريفرش، وقفل اللوحة مش بيلغيه)
   // Page pin, kept in localStorage so it survives a refresh (closing a panel never unpins)
   const [pinned, setPinned] = useState(false);
@@ -149,7 +162,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -184,8 +197,9 @@ export default function Dashboard() {
   // (the timer restarts after every switch, manual or automatic)
   useEffect(() => {
     const seconds = PAGES[pageIndex]?.durationSeconds;
-    if (paused || pinned || !autoRotate || PAGES.length < 2 || !(seconds > 0)) return;
-    const timer = setTimeout(() => changePage((pageIndex + 1) % PAGES.length, 1), seconds * 1000);
+    const next = nextInRotation(pageIndex);
+    if (paused || pinned || !autoRotate || next === pageIndex || !(seconds > 0)) return;
+    const timer = setTimeout(() => changePage(next, 1), seconds * 1000);
     return () => clearTimeout(timer);
   }, [pageIndex, switchCount, paused, pinned, autoRotate, changePage]);
 
@@ -318,6 +332,8 @@ export default function Dashboard() {
             data={data.wallets ?? null}
             onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
           />;
+      case "it":
+        return <ItPage onOverlayChange={setItViewerOpen} />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>

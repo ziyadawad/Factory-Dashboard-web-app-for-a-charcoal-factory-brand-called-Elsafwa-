@@ -13,6 +13,7 @@ import { normalizeArabic } from "./data-source";
 import { packetsOf, productOfItem } from "./sales";
 import { ActivityData, ActivityEvent, MoveOut } from "./types";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { loadItStatus } from "./it-store";
 
 const config = dashboardConfig.activity;
 const enabled = (type: (typeof config.enabledTypes)[number]) => config.enabledTypes.includes(type);
@@ -28,6 +29,11 @@ const qtyText = (value: number) => new Intl.NumberFormat("en-US", { maximumFract
 
 // "الآن" بتوقيت القاهرة بنفس شكل ERPNext - now in Cairo, in the ERPNext format
 function cairoNow(): string {
+  return cairoStamp(new Date());
+}
+
+// أي وقت بتوقيت القاهرة "YYYY-MM-DD HH:MM:SS" - any instant as Cairo "YYYY-MM-DD HH:MM:SS"
+function cairoStamp(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Cairo",
     hourCycle: "h23",
@@ -37,7 +43,7 @@ function cairoNow(): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
 }
@@ -312,6 +318,39 @@ async function salaryEvents(since: string): Promise<ActivityEvent[]> {
   }));
 }
 
+// ===== IT: جهاز أو راوتر فصل / رجع (من إيجنت IT - بيانات حقيقية بس، عمر التجريبي ما بيظهر هنا) =====
+// IT: a device or router went down / came back (from the IT agent - real data only, never the preview sample)
+const IT_TYPES: Record<string, string> = {
+  internet: "النت",
+  router: "راوتر",
+  ap: "أكسس بوينت",
+  fingerprint: "بصمة",
+  nvr: "NVR",
+  printer: "طابعة",
+  pc: "كمبيوتر",
+  scale: "ميزان",
+  other: "جهاز",
+};
+
+async function itEvents(since: string): Promise<ActivityEvent[]> {
+  const status = await loadItStatus();
+  return (status.data?.events ?? [])
+    .map((event): ActivityEvent => ({
+      id: `it:${event.id}`,
+      kind: event.kind === "up" ? "it_up" : "it_down",
+      at: cairoStamp(new Date(event.at)),
+      title: event.kind === "up" ? "رجع يشتغل" : "فصل",
+      // اسم الجهاز هو السطر الكبير، والـ IP تحته - the device name is the big line, the IP under it
+      details: event.ip ?? "",
+      amount: null,
+      extra: event.targetName,
+      badge: IT_TYPES[event.targetType] ?? "جهاز",
+      doctype: "", // مفيش مستند ERPNext يتفتح - no ERPNext document to open
+      docname: "",
+    }))
+    .filter((event) => event.at >= since);
+}
+
 const SOURCES: { type: (typeof config.enabledTypes)[number]; load: (since: string) => Promise<ActivityEvent[]> }[] = [
   { type: "money", load: moneyEvents },
   { type: "kiln", load: kilnEvents },
@@ -319,6 +358,7 @@ const SOURCES: { type: (typeof config.enabledTypes)[number]; load: (since: strin
   { type: "stock", load: stockEvents },
   { type: "charity", load: charityEvents },
   { type: "salary", load: salaryEvents },
+  { type: "it", load: itEvents },
 ];
 
 // أحداث النهارده كلها (كاش)، وكل مصدر بآخر نتيجة نجحت لو فشل - all of today's events (cached); each source keeps its last good result

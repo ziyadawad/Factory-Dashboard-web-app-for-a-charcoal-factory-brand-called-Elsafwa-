@@ -28,6 +28,8 @@ const KINDS: Record<ActivityKind, { icon: string; color: string }> = {
   stock: { icon: "📦", color: "#A855F7" },
   charity: { icon: "🤲", color: "#14B8A6" },
   salary: { icon: "👤", color: "#38BDF8" },
+  it_down: { icon: "⚠️", color: "#EF4444" }, // جهاز أو راوتر فصل - a device or router went down
+  it_up: { icon: "✅", color: "#22C55E" }, // رجع يشتغل - came back
 };
 
 // لون بادج نوع الصرف (زي لوحة الخزنة) - payment-type badge colors (as in the treasury panel)
@@ -185,6 +187,10 @@ export default function ActivityFeed({ onDetailsChange }: { onDetailsChange?: (o
   // الحدث المفتوح في لوحة التفاصيل: الطابور بيقف لحد ما تتقفل - the event open in the details panel: the queue waits until it closes
   const [opened, setOpened] = useState<ActivityEvent | null>(null);
   const closeDetails = useCallback(() => setOpened(null), []);
+  // أحداث IT ملهاش مستند ERPNext فمش بتفتح لوحة - IT events have no ERPNext document, so no panel
+  const openDetails = useCallback((event: ActivityEvent) => {
+    if (event.doctype) setOpened(event);
+  }, []);
   useEffect(() => {
     onDetailsChange?.(opened !== null);
   }, [opened, onDetailsChange]);
@@ -261,10 +267,10 @@ export default function ActivityFeed({ onDetailsChange }: { onDetailsChange?: (o
         <div className="flex-1 flex items-center justify-center">{error ? <OfflineBadge /> : <p className="text-gray-500">جاري التحميل...</p>}</div>
       ) : (
         <>
-          <Spotlight event={current ?? list[0] ?? null} live={!!current} waiting={queue.length} now={now} sizes={sizes} onOpen={setOpened} />
+          <Spotlight event={current ?? list[0] ?? null} live={!!current} waiting={queue.length} now={now} sizes={sizes} onOpen={openDetails} />
           <div ref={listRef} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ gap }}>
             {shown.map((event, index) => (
-              <Row key={event.id} event={event} index={index} fresh={event.id === freshId} now={now} sizes={sizes} onOpen={setOpened} />
+              <Row key={event.id} event={event} index={index} fresh={event.id === freshId} now={now} sizes={sizes} onOpen={openDetails} />
             ))}
           </div>
         </>
