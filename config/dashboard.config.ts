@@ -502,11 +502,6 @@ export const dashboardConfig = {
   // /api/it/status (schema in docs/it-agent-payload.md) with header x-it-secret = env IT_AGENT_SECRET
   // ============================================================
   it: {
-    // true = لو الإيجنت لسه عمره ما بعت، الصفحة بتعرض بيانات تجريبية مع شريط "معاينة". أول ما بيانات حقيقية توصل
-    // التجريبي مبيظهرش تاني خالص، ومبيظهرش في أي صفحة تانية أبدا
-    // true = until the agent has ever sent data, the page shows sample data with a "معاينة" ribbon. Once real data
-    // arrives the sample is never shown again, and it never appears on any other page
-    previewMode: true,
     agentOfflineSeconds: 120, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
     refreshSeconds: 15, // الشاشة بتسأل كل 15 ثانية - the screen asks every 15 s
     // الإيجنت المحلي: المتصفح بيجيب {cameraBaseUrl}/cameras.json والصور {cameraBaseUrl}/cameras/{id}/snapshot.jpg على طول
@@ -515,8 +510,22 @@ export const dashboardConfig = {
     // directly (not via Vercel), so cameras only work inside the factory. HTTPS with the elsafwa-ca cert installed.
     // Never a password in this URL
     cameraBaseUrl: "https://192.168.1.200:8443",
-    cameraRotateSeconds: 8, // الكاميرا الكبيرة بتتقلب كل 8 ثواني - the big camera tile switches every 8 s
-    cameraRefreshSeconds: 2, // الصورة بتتحدث كل 2 ثانية - the snapshot refreshes every 2 s
+    // go2rtc للفيديو المباشر (WebRTC ثم MSE) في الصفحة الكاملة: {streamBaseUrl}/api/webrtc?src=… و /api/ws?src=…
+    // فاضي = نفس cameraBaseUrl. لو فشل، الصفحة الكاملة بترجع لصور كل ثانية
+    // go2rtc for live video (WebRTC, then MSE) in full page: {streamBaseUrl}/api/webrtc?src=… and /api/ws?src=….
+    // Empty = same as cameraBaseUrl. On failure the full page falls back to a snapshot every second
+    streamBaseUrl: "",
+    liveVideo: true, // false = الصفحة الكاملة صور بس من غير فيديو - false = full page uses snapshots only
+    cameraLayouts: [1, 4, 6, 9, 16, 32], // اختيارات العرض في هيدر الكاميرات - the layout choices in the cameras header
+    defaultCameraLayout: 4, // أول مرة (بعد كده بيتفتكر في المتصفح) - first time (then remembered in the browser)
+    cameraRotateSeconds: 8, // عرض كاميرا واحدة: بتتقلب كل 8 ثواني - single layout: switches camera every 8 s
+    cameraPageSeconds: 15, // عرض الشبكة: الصفحة بتتقلب كل 15 ثانية - grid layout: the page of cameras switches every 15 s
+    cameraRefreshSeconds: 2, // عرض كاميرا واحدة: الصورة (main) كل 2 ثانية - single layout: main snapshot every 2 s
+    gridRefreshSeconds: 4, // الشبكة: صورة الـ sub-stream كل 4 ثواني (متوزعة مش كلها مع بعض) - grid: sub-stream every 4 s, staggered
+    viewerSnapshotSeconds: 1, // الصفحة الكاملة لو الفيديو فشل: صورة كل ثانية - full page fallback: a snapshot every second
+    // أسامي الـ NVR في شرايح الفلتر (اسم الـ nvr في cameras.json ← الاسم اللي يظهر). مش مكتوب = يظهر زي ما هو
+    // NVR names on the filter chips (nvr value in cameras.json → label shown). Missing = shown as is
+    nvrLabels: {} as Record<string, string>,
     eventsShown: 8, // أكتر عدد أحداث في "آخر الأحداث" (بيقل لو المكان مش كفاية) - most events listed (fewer when tight)
   },
 

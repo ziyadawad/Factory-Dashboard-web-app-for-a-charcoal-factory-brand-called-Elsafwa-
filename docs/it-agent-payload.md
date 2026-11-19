@@ -102,22 +102,24 @@ Limits: names 120 chars; `ip` must be a bare IP or host name (no `user:pass@`); 
 
 ## الكاميرات (Cameras)
 
-الصور **مش** بتعدي على الداشبورد. الشاشة بتطلبها مباشرة من سيرفر محلي في المصنع:
-Images do **not** pass through the dashboard. The screen loads them straight from a local server in the factory:
+الكاميرات **مش** بتعدي على الداشبورد ولا على Vercel. المتصفح بيطلبها مباشرة من الإيجنت المحلي (`it.cameraBaseUrl` = `https://192.168.1.200:8443`)، فبتشتغل جوه المصنع بس.
+Cameras never pass through the dashboard or Vercel: the browser loads them straight from the local agent, so they only work inside the factory.
 
-```
-{it.cameraBaseUrl}/cameras/{id}/snapshot.jpg?t=<counter>
-```
+| الطلب (Request) | الرد (Response) |
+|---|---|
+| `GET /cameras.json` | `[{ "id", "name", "nvr"?, "online"?, "stream"? }]` أو `{ "cameras": [...] }`. `nvr` = اسم شريحة الفلتر (مثلا "المصنع" / "التعبئة والمخزن")، `stream` = اسم الـ stream في go2rtc (مش موجود = `id`) |
+| `GET /cameras/{id}/snapshot.jpg` | صورة الـ main stream (عرض كاميرا واحدة، وفي الصفحة الكاملة لو الفيديو فشل) |
+| `GET /cameras/{id}/snapshot.jpg?stream=sub` | صورة الـ **sub-stream** الصغيرة (قناة X02 على الـ NVR، مثلا ISAPI `/Streaming/channels/{n}02/picture`) للشبكة والصور الصغيرة |
+| `POST /api/webrtc?src={stream}` | go2rtc WebRTC (WHEP): الطلب SDP offer بـ `Content-Type: application/sdp`، والرد SDP answer |
+| `WSS /api/ws?src={stream}` | go2rtc MSE (لو WebRTC فشل) |
 
-- `it.cameraBaseUrl` في `config/dashboard.config.ts` (فاضي دلوقتي). Set `it.cameraBaseUrl` in the config (empty for now).
-- السيرفر المحلي هو اللي معاه باسوردات الكاميرات / الـ NVR وبيرجع JPEG بس. **الباسورد عمره ما بيتبعت للداشبورد ولا بيتكتب في الكونفج.**
-  The local server holds the camera / NVR passwords and returns JPEG only. **No password is ever sent to the dashboard or written in the config.**
-- **لازم HTTPS**: الداشبورد HTTPS، والمتصفح بيمنع صور `http://` جوه صفحة HTTPS. محتاج شهادة للسيرفر المحلي (مثلا اسم محلي بشهادة) وإلا الصورة مش هتظهر.
-  **Must be HTTPS**: the dashboard is HTTPS and browsers block `http://` images on an HTTPS page. The local server needs a certificate, otherwise images won't load.
-- بره المصنع (أو لو السيرفر مش متاح) الصفحة بتعرض "الكاميرات متاحة جوه المصنع بس".
-  Outside the factory (or if the server is unreachable) the page shows "الكاميرات متاحة جوه المصنع بس".
-- الصورة بتتحدث كل `it.cameraRefreshSeconds` (2 ث)، ويفضل الـ snapshot يبقى صغير (≈ 1280×720، أقل من 200 KB).
-  Snapshots refresh every `it.cameraRefreshSeconds` (2 s); keep them small (≈ 1280×720, under 200 KB).
+- **CORS**: `cameras.json` و `/api/webrtc` لازم يرجعوا `Access-Control-Allow-Origin` بعنوان الداشبورد، و`/api/webrtc` لازم يرد على طلب `OPTIONS` (preflight) بـ `Access-Control-Allow-Methods: POST` و `Access-Control-Allow-Headers: Content-Type`. الصور مش محتاجة CORS.
+  `cameras.json` and `/api/webrtc` must send `Access-Control-Allow-Origin` (and answer the `OPTIONS` preflight for `/api/webrtc`). Images need no CORS.
+- **HTTPS بشهادة elsafwa-ca** على كل حاجة (ومنها الـ wss). HTTPS with the elsafwa-ca certificate everywhere, wss included.
+- go2rtc ممكن يبقى على عنوان تاني: `it.streamBaseUrl` في الكونفج (فاضي = نفس `cameraBaseUrl`). go2rtc may live elsewhere: set `it.streamBaseUrl`.
+- الصفحة الكاملة: WebRTC ← MSE ← صورة كل ثانية. الشبكة: sub-stream كل 4 ثواني، متوزعة، وللمربعات الظاهرة بس.
+  Full page: WebRTC → MSE → a snapshot every second. Grid: sub-stream every 4 s, staggered, visible tiles only.
+- **الباسورد عمره ما بيتبعت للداشبورد ولا بيتكتب في الكونفج.** No camera / NVR password ever reaches the dashboard or the config.
 
 ## على السيرفر (Server setup, Vercel)
 
@@ -128,8 +130,8 @@ Images do **not** pass through the dashboard. The screen loads them straight fro
    **فعّل Upstash Redis** من Vercel → Storage / Marketplace → Upstash (الخطة المجانية كفاية). بيضيف لوحده `KV_REST_API_URL` و`KV_REST_API_TOKEN` (أو `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) — الكود بيقرا الاتنين، ومفيش أي حاجة تتنصب.
    **Enable Upstash Redis** from Vercel → Storage / Marketplace (free tier is enough). It adds the env vars automatically; the code reads either pair, nothing to install.
    رد الـ POST فيه `"storage": "redis"` لما يشتغل. The POST response says `"storage": "redis"` once it works.
-3. لما الإيجنت يتربط: `it.previewMode` يفضل زي ما هو (البيانات الحقيقية بتكسب لوحدها)، وغيّر صفحة `it` لـ `inRotation: true` لو عايزها في التقليب التلقائي.
-   Once connected: real data wins automatically; set the `it` page to `inRotation: true` to add it to auto-rotation.
+3. غيّر صفحة `it` لـ `inRotation: true` لو عايزها في التقليب التلقائي.
+   Set the `it` page to `inRotation: true` to add it to auto-rotation.
 
 ## مثال curl (Example)
 

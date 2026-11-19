@@ -101,32 +101,49 @@ export function sanitizePayload(body: unknown): ItSnapshot {
   const agent = b.agent && typeof b.agent === "object" ? (b.agent as Record<string, unknown>) : null;
   const internet = b.internet && typeof b.internet === "object" ? (b.internet as Record<string, unknown>) : null;
 
-  const routers: ItRouter[] = list(b.routers, 50)
-    .map((r) => ({
-      id: text(r.id, 64),
-      name: text(r.name),
-      kind: r.kind === "ap" ? ("ap" as const) : ("router" as const),
-      ip: ip(r.ip),
-      up: bool(r.up),
-      latencyMs: num(r.latencyMs, 0, 60_000),
-      internet: optBool(r.internet),
-      since: iso(r.since),
-      uptimeTodayPct: num(r.uptimeTodayPct, 0, 100),
-    }))
-    .filter((r) => r.id && r.name);
+  // راوتر / أكسس بوينت جاي في devices بالنوع router أو ap بيتنقل للشبكات، وأي حاجة في routers نوعها جهاز بتتنقل للأجهزة
+  // A router / AP sent inside devices (type router or ap) moves to the networks list; anything in routers whose kind is a
+  // device type moves to the devices list. Unnamed entries keep their IP (the page shows "جهاز <ip>")
+  const NETWORK_KINDS = ["router", "ap", "accesspoint", "access_point"];
+  const rawRouters = list(b.routers, 50);
+  const rawDevices = list(b.devices, 300);
+  const isNetwork = (value: unknown) => typeof value === "string" && NETWORK_KINDS.includes(value.toLowerCase());
+  const nameOf = (r: Record<string, unknown>) => text(r.name) || (ip(r.ip) ? `unknown ${ip(r.ip)}` : "");
 
-  const devices: ItDevice[] = list(b.devices, 300)
-    .map((d) => ({
-      id: text(d.id, 64),
-      name: text(d.name),
-      type: DEVICE_TYPES.includes(d.type as ItDeviceType) ? (d.type as ItDeviceType) : ("other" as const),
-      ip: ip(d.ip),
-      up: bool(d.up),
-      latencyMs: num(d.latencyMs, 0, 60_000),
-      lastSeen: iso(d.lastSeen),
-      since: iso(d.since),
-    }))
-    .filter((d) => d.id && d.name);
+  const toRouter = (r: Record<string, unknown>, kind: unknown): ItRouter => ({
+    id: text(r.id, 64) || ip(r.ip),
+    name: nameOf(r),
+    kind: typeof kind === "string" && kind.toLowerCase() !== "router" ? ("ap" as const) : ("router" as const),
+    ip: ip(r.ip),
+    up: bool(r.up),
+    latencyMs: num(r.latencyMs, 0, 60_000),
+    internet: optBool(r.internet),
+    since: iso(r.since),
+    uptimeTodayPct: num(r.uptimeTodayPct, 0, 100),
+  });
+  const toDevice = (d: Record<string, unknown>, type: unknown): ItDevice => ({
+    id: text(d.id, 64) || ip(d.ip),
+    name: nameOf(d),
+    type: DEVICE_TYPES.includes(type as ItDeviceType) ? (type as ItDeviceType) : ("other" as const),
+    ip: ip(d.ip),
+    up: bool(d.up),
+    latencyMs: num(d.latencyMs, 0, 60_000),
+    lastSeen: iso(d.lastSeen),
+    since: iso(d.since),
+  });
+
+  const routers: ItRouter[] = [
+    ...rawRouters.filter((r) => r.kind === undefined || isNetwork(r.kind)).map((r) => toRouter(r, r.kind)),
+    ...rawDevices.filter((d) => isNetwork(d.type)).map((d) => toRouter(d, d.type)),
+  ].filter((r) => r.id && r.name);
+  const devices: ItDevice[] = [
+    ...rawDevices.filter((d) => !isNetwork(d.type)).map((d) => toDevice(d, d.type)),
+    ...rawRouters.filter((r) => r.kind !== undefined && !isNetwork(r.kind)).map((r) => toDevice(r, r.kind)),
+  ].filter((d) => d.id && d.name);
+  // من غير تكرار (نفس id) - no duplicates (same id)
+  const unique = <T extends { id: string }>(items: T[]) => items.filter((item, i) => items.findIndex((x) => x.id === item.id) === i);
+  routers.splice(0, routers.length, ...unique(routers));
+  devices.splice(0, devices.length, ...unique(devices));
 
   // الكاميرات: id واسم وحالة بس - أي رابط أو باسورد بيترمي - cameras: id, name and status only; any URL / password is dropped
   const cameras: ItCamera[] = list(b.cameras, 64)

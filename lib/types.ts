@@ -1099,6 +1099,8 @@ export interface ItCamera {
   name: string;
   nvr?: string | null; // اسم الـ NVR (من cameras.json المحلي) - the NVR name (from the local cameras.json)
   online: boolean | null;
+  stream?: string | null; // اسم الـ stream في go2rtc (main) - the go2rtc stream name (main); missing = id
+
 }
 
 export interface ItEvent {
