@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ItPayloadError, loadItStatus, sanitizePayload, saveItStatus, secretMatches } from "@/lib/it-store";
+import { IT_SECRET_ENV_NAME, ItPayloadError, itAgentSecret, loadItStatus, sanitizePayload, saveItStatus, secretMatches } from "@/lib/it-store";
 import { NO_STORE, salaryAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,9 @@ const MAX_BYTES = 256 * 1024; // أكبر حجم للتحديث الواحد - t
 // إيجنت IT بيبعت حالة الشبكة والأجهزة: POST /api/it/status بالهيدر x-it-secret = IT_AGENT_SECRET (الشكل في docs/it-agent-payload.md)
 // The IT agent posts the network / device status with header x-it-secret = env IT_AGENT_SECRET (schema in docs/it-agent-payload.md)
 export async function POST(request: NextRequest) {
-  if (!process.env.IT_AGENT_SECRET) {
-    return NextResponse.json({ error: "IT_AGENT_SECRET is not set on the server" }, { status: 503, headers: NO_STORE });
+  // السر بيتقرا من IT_AGENT_SECRET بالظبط (بعد trim) - the secret is read from exactly IT_AGENT_SECRET (trimmed)
+  if (!itAgentSecret()) {
+    return NextResponse.json({ error: `${IT_SECRET_ENV_NAME} is not set on the server` }, { status: 503, headers: NO_STORE });
   }
   if (!secretMatches(request.headers.get("x-it-secret"))) {
     return NextResponse.json({ error: "bad or missing x-it-secret" }, { status: 401, headers: NO_STORE });

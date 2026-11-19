@@ -183,9 +183,19 @@ export async function loadItStatus(): Promise<ItStatus> {
   };
 }
 
-// مقارنة السر من غير ما الوقت يفضح حاجة - compare the secret in constant time
-export function secretMatches(given: string | null): boolean {
-  const expected = process.env.IT_AGENT_SECRET;
+// اسم متغير البيئة اللي فيه سر الإيجنت (بالظبط كده) - the exact env var name holding the agent secret
+export const IT_SECRET_ENV_NAME = "IT_AGENT_SECRET";
+
+// السر من البيئة بعد trim (مسافة أو سطر جديد زيادة في Vercel كانت بتبوظ المقارنة) - the env secret, trimmed
+// (a stray space / newline pasted into Vercel used to break the comparison)
+export function itAgentSecret(): string {
+  return (process.env.IT_AGENT_SECRET ?? "").trim();
+}
+
+// مقارنة السر من غير ما الوقت يفضح حاجة، بعد trim للناحيتين - compare in constant time, both sides trimmed
+export function secretMatches(header: string | null): boolean {
+  const expected = itAgentSecret();
+  const given = (header ?? "").trim();
   if (!expected || !given) return false;
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
