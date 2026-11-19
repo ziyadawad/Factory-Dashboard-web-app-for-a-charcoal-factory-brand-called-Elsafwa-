@@ -12,16 +12,13 @@ import {
   Globe,
   LucideIcon,
   Monitor,
-  Network,
   Printer,
-  Router,
   Scale,
   ShieldCheck,
   TriangleAlert,
-  Wifi,
   X,
 } from "lucide-react";
-import { ItCamera, ItDeviceType, ItEvent, ItRouter, ItSnapshot, ItStatus } from "@/lib/types";
+import { ItCamera, ItDeviceType, ItEvent, ItSnapshot, ItStatus } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -134,45 +131,6 @@ const Ms = ({ value }: { value: number | null }) =>
     </span>
   );
 
-// جهاز من غير اسم: الإيجنت بيبعته "unknown 192.168.1.x" (الأسامي بتيجي من devices.json على جهاز IT)
-// An unnamed device: the agent sends "unknown 192.168.1.x" (names come from devices.json on the IT PC)
-function isUnnamed(name: string, ip: string): boolean {
-  const n = name.trim();
-  return !n || /^unknown\b/i.test(n) || n === ip;
-}
-const sortKey = (item: { name: string; ip: string }) => (isUnnamed(item.name, item.ip) ? `￿${item.ip}` : item.name);
-// الواقع الأول، وبعدين بالاسم (اللي من غير اسم في الآخر) - down first, then by name (unnamed last)
-const byStatusThenName = <T extends { up: boolean; name: string; ip: string }>(a: T, b: T) =>
-  Number(a.up) - Number(b.up) || sortKey(a).localeCompare(sortKey(b), "ar", { numeric: true });
-
-function NameLabel({ name, ip, up, hint = true }: { name: string; ip: string; up: boolean; hint?: boolean }) {
-  if (isUnnamed(name, ip)) {
-    return (
-      <span className="flex items-center gap-1.5 min-w-0">
-        <span className={`truncate min-w-0 ${up ? "text-gray-400" : "text-statusRed"}`}>
-          جهاز{" "}
-          <span dir="ltr" className="font-numbers tabular-nums">
-            {ip}
-          </span>
-        </span>
-        {hint && <NameHint />}
-      </span>
-    );
-  }
-  return <span className={`truncate min-w-0 ${up ? "text-white" : "text-statusRed"}`}>{toEnglishDigits(name)}</span>;
-}
-
-function NameHint() {
-  return (
-    <span
-      className="shrink-0 rounded-md border border-dashed border-gray-600 px-1.5 text-[11px] leading-[1.5] text-gray-500 font-normal"
-      title="اكتب اسمه في devices.json على جهاز IT"
-    >
-      سمّيه
-    </span>
-  );
-}
-
 // "unknown 192.168.1.x" في الأحداث = "جهاز 192.168.1.x" - in events too
 const eventName = (name: string) => name.replace(/^unknown\s+/i, "جهاز ");
 
@@ -206,51 +164,6 @@ function Section({
         {extra}
       </div>
       <div className="flex-1 min-h-0 flex flex-col">{children}</div>
-    </div>
-  );
-}
-
-// ===== الشبكات: سطر لكل راوتر / أكسس - networks: one line per router / AP =====
-const NET_ROW = 24;
-const NET_GAP = 2;
-
-function NetworkLine({ router, icon }: { router: ItRouter; icon: boolean }) {
-  return (
-    <div
-      className={`box-border flex items-center gap-2 min-w-0 rounded-lg px-2 text-[14px] font-semibold ${router.up ? "bg-background/60 border border-transparent" : "bg-statusRed/10 border border-statusRed/50"}`}
-      style={{ height: NET_ROW }}
-      title={router.ip}
-    >
-      <Dot up={router.up} size={9} pulse={!router.up} />
-      {icon && (router.kind === "ap" ? <Wifi size={14} className="text-gray-500 shrink-0" /> : <Router size={14} className="text-gray-500 shrink-0" />)}
-      <NameLabel name={router.name} ip={router.ip} up={router.up} hint={false} />
-      <span className="ms-auto shrink-0 text-[12.5px] font-normal">{router.up ? <Ms value={router.latencyMs} /> : <span className="text-statusRed font-semibold">واقع</span>}</span>
-    </div>
-  );
-}
-
-// عمود واحد، ولو مش مكفي عمودين (أو تلاتة لو العرض يسمح)، والـ scroll آخر حل - one column, then two (or three when wide)
-function NetworksList({ routers }: { routers: ItRouter[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { w, h } = useSize(ref);
-  const fit = Math.max(1, Math.floor((h + NET_GAP) / (NET_ROW + NET_GAP)));
-  const maxCols = Math.max(1, Math.min(3, Math.floor((w + 8) / 175)));
-  const cols = Math.min(maxCols, Math.max(1, Math.ceil(routers.length / fit)));
-  const rows = Math.ceil(routers.length / cols);
-  return (
-    <div ref={ref} className="flex-1 min-h-0" style={{ overflowY: rows > fit ? "auto" : "hidden" }}>
-      {routers.length === 0 ? (
-        <p className="text-gray-500 text-[15px]">مفيش راوترات في البيانات</p>
-      ) : (
-        <div
-          className="grid"
-          style={{ gap: NET_GAP, columnGap: 8, gridAutoFlow: "column", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${rows}, ${NET_ROW}px)` }}
-        >
-          {routers.map((router) => (
-            <NetworkLine key={router.id} router={router} icon={(w - 8 * (cols - 1)) / cols >= 220} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -343,18 +256,18 @@ function KeyRow({ device, now }: { device: KeyDevice; now: number }) {
   const Icon = TYPE_ICONS[device.type] ?? Boxes;
   return (
     <div
-      className={`flex items-center gap-2 min-w-0 rounded-lg px-2 border ${device.up ? "border-transparent bg-background/60" : "border-statusRed/50 bg-statusRed/10"}`}
+      className={`flex items-center gap-3 min-w-0 rounded-xl px-3 border ${device.up ? "border-transparent bg-background/60" : "border-statusRed/50 bg-statusRed/10"}`}
       style={{ height: KEY_ROW }}
     >
-      <span className="shrink-0 w-1 self-stretch my-1.5 rounded-full" style={{ backgroundColor: device.up ? device.color : RED }} />
-      <Icon size={17} className="shrink-0" style={{ color: device.up ? device.color : RED }} />
-      <span className={`truncate min-w-0 font-bold text-[15px] ${device.up ? "text-white" : "text-statusRed"}`}>{device.name}</span>
-      <span className={`ms-auto shrink-0 text-[13px] font-semibold whitespace-nowrap ${device.up ? "text-statusGreen" : "text-statusRed"}`}>
+      <span className="shrink-0 w-1.5 self-stretch my-2 rounded-full" style={{ backgroundColor: device.up ? device.color : RED }} />
+      <Icon size={28} className="shrink-0" style={{ color: device.up ? device.color : RED }} />
+      <span className={`truncate min-w-0 font-extrabold text-[22px] leading-[1.4] ${device.up ? "text-white" : "text-statusRed"}`}>{device.name}</span>
+      <span className={`ms-auto shrink-0 text-[18px] font-bold whitespace-nowrap ${device.up ? "text-statusGreen" : "text-statusRed"}`}>
         {device.up ? "متصل ✓" : `مفصول من ${duration(device.since, now, true)}`}
       </span>
       {/* المفصول مالوش latency، فالمكان للاسم - offline has no latency, the room goes to the name */}
       {device.up && (
-        <span className="shrink-0 w-[52px] text-end text-[12.5px]">
+        <span className="shrink-0 w-[58px] text-end text-[15px]">
           <Ms value={device.latencyMs} />
         </span>
       )}
@@ -362,30 +275,23 @@ function KeyRow({ device, now }: { device: KeyDevice; now: number }) {
   );
 }
 
-const KEY_ROW = 30;
+const KEY_ROW = 54;
+const KEY_GAP = 8;
 
-// الدايرة فوق والسطور تحتها؛ لو المكان قصير، الدايرة جنب السطور - the ring above the rows; beside them when height is short
-function KeyDevices({ devices, now, compact }: { devices: KeyDevice[]; now: number; compact: boolean }) {
-  const rows = (
-    <div className="flex-1 min-w-0 w-full flex flex-col gap-1">
-      {devices.map((device, i) => (
-        <KeyRow key={i} device={device} now={now} />
-      ))}
-    </div>
-  );
-  if (compact) {
-    const ring = Math.max(96, devices.length * (KEY_ROW + 4));
-    return (
-      <div className="flex items-center gap-3 min-w-0">
-        <KeyRing devices={devices} size={ring} />
-        {rows}
-      </div>
-    );
-  }
+// الدايرة فوق (بتكبر على قد المكان) والسطور تحتها - the ring on top (as big as the space allows), the rows under it
+function KeyDevices({ devices, now }: { devices: KeyDevice[]; now: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { w, h } = useSize(ref);
+  const rowsHeight = devices.length * KEY_ROW + Math.max(0, devices.length - 1) * KEY_GAP;
+  const ring = Math.floor(Math.max(110, Math.min(w * 0.85, 340, h - rowsHeight - 16)));
   return (
-    <div className="flex flex-col items-center gap-3 min-w-0">
-      <KeyRing devices={devices} size={150} />
-      {rows}
+    <div ref={ref} className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 min-w-0">
+      {w > 0 && <KeyRing devices={devices} size={ring} />}
+      <div className="w-full flex flex-col" style={{ gap: KEY_GAP }}>
+        {devices.map((device, i) => (
+          <KeyRow key={i} device={device} now={now} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1144,11 +1050,6 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
 
   const keys = useMemo(() => keyDevices(snapshot), [snapshot]);
   const keysDown = keys.filter((d) => !d.up).length;
-  const routers = useMemo(() => [...(snapshot?.routers ?? [])].sort(byStatusThenName), [snapshot]);
-  // العمود اليمين قصير (1366×768) = الدايرة جنب السطور - a short right column = the ring beside the rows
-  const sideRef = useRef<HTMLDivElement>(null);
-  const side = useSize(sideRef);
-  const compactKeys = side.h > 0 && side.h < 760;
   const internet = snapshot?.internet ?? null;
   // الإيجنت مبعتش من دقيقتين = "الإيجنت مش متصل" - no update for agentOfflineSeconds = agent offline
   const agentDown = !!snapshot && status !== undefined && !status.agentOnline;
@@ -1189,13 +1090,14 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
         </span>
       </div>
 
-      {/* عمودين: اليمين 30% (أهم الأجهزة، الشبكات، آخر الأحداث) والشمال 70% الكاميرات - two columns: right 30%, cameras 70% */}
+      {/* عمودين: اليمين 30% (أهم الأجهزة، آخر الأحداث) والشمال 70% الكاميرات - two columns: right 30%, cameras 70% */}
       <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: "minmax(0,3fr) minmax(0,7fr)", gridTemplateRows: "minmax(0,1fr)" }}>
-        <div ref={sideRef} className="min-h-0 min-w-0 flex flex-col gap-3">
+        <div className="min-h-0 min-w-0 flex flex-col gap-3">
           <Section
             title="أهم الأجهزة"
             icon={ShieldCheck}
-            className="shrink-0"
+            className="min-h-0"
+            style={{ flex: "3 1 0" }}
             extra={
               keys.length > 0 && (
                 <span
@@ -1206,23 +1108,7 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
               )
             }
           >
-            <KeyDevices devices={keys} now={now} compact={compactKeys} />
-          </Section>
-          <Section
-            title="الشبكات"
-            icon={Router}
-            className="min-h-[120px]"
-            style={{ flex: "2 1 0" }}
-            extra={
-              routers.length > 0 && (
-                <span className="text-[14px] text-gray-400 whitespace-nowrap">
-                  <span className={routers.some((r) => !r.up) ? "text-statusRed font-bold" : "text-statusGreen font-bold"}>{routers.filter((r) => r.up).length}</span> /{" "}
-                  {routers.length} شغال
-                </span>
-              )
-            }
-          >
-            {snapshot ? <NetworksList routers={routers} /> : <WaitingForAgent />}
+            <KeyDevices devices={keys} now={now} />
           </Section>
           <Section title="آخر الأحداث" icon={TriangleAlert} className="min-h-[110px]" style={{ flex: "1 1 0" }}>
             <div ref={eventsRef} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ contain: "size" }}>
@@ -1262,15 +1148,6 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
       </div>
 
       {viewer !== null && viewer.list.length > 0 && <CameraViewer cameras={viewer.list} start={viewer.index} onClose={closeViewer} />}
-    </div>
-  );
-}
-
-function WaitingForAgent() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center">
-      <Network size={36} className="text-gray-600" />
-      <p className="text-gray-400 text-[15px] font-semibold">لسه مفيش بيانات من إيجنت IT</p>
     </div>
   );
 }
