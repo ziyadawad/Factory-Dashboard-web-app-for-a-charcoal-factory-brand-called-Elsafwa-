@@ -1083,10 +1083,16 @@ export interface ItRouter {
   uptimeTodayPct: number | null; // 0..100
 }
 
+// مجموعة الجهاز من الإيجنت: critical = الأجهزة المهمة، staff = أجهزة الموظفين، network = الشبكات، other = مش بيظهر
+// The device group from the agent: critical, staff, network (shown as networks), other (hidden from the page)
+export type ItDeviceGroup = "critical" | "staff" | "network" | "other";
+
 export interface ItDevice {
   id: string;
   name: string;
   type: ItDeviceType;
+  group: ItDeviceGroup;
+  monitor: boolean; // other بس: أحداثه بتوصل لـ "اللي بيحصل دلوقتي" لو true - other only: its events reach the feed when true
   ip: string;
   up: boolean;
   latencyMs: number | null;

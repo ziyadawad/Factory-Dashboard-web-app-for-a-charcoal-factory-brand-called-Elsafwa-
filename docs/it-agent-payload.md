@@ -68,6 +68,8 @@ Every section is optional, but at least one is required. **Any field not listed 
       "id": "zk-admin",
       "name": "بصمة الإدارة",
       "type": "fingerprint",               // "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other"
+      "group": "critical",                 // "critical" (الأجهزة المهمة) | "staff" (أجهزة الموظفين) | "network" (الشبكات) | "other" (مبيظهرش)
+      "monitor": false,                    // other بس: true = أحداثه تظهر في "آخر الأحداث" و"اللي بيحصل دلوقتي" - other only: true = its events are shown
       "ip": "192.168.1.201",
       "up": true,
       "latencyMs": 6,                      // null لو واقع - null when down

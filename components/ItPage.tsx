@@ -16,6 +16,9 @@ import {
   Printer,
   Router,
   Scale,
+  ShieldCheck,
+  User,
+  Users,
   TriangleAlert,
   Wifi,
   X,
@@ -102,12 +105,6 @@ function duration(fromIso: string | null, now: number, short = false): string {
   return `${Math.floor(minutes / 1440)} يوم`;
 }
 
-// "آخر ظهور": الآن / من 12 دقيقة - "last seen": now / 12 minutes ago
-function lastSeen(device: ItDevice, now: number): string {
-  if (!device.lastSeen) return "—";
-  const minutes = (now - Date.parse(device.lastSeen)) / 60_000;
-  return minutes < 2 ? "الآن" : `من ${duration(device.lastSeen, now, true)}`;
-}
 
 function useNow(everyMs: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -207,78 +204,44 @@ function Section({ title, icon: Icon, extra, className = "", children }: { title
   );
 }
 
-// ===== الشبكات - networks =====
-const ROUTER_ROW = 56; // ارتفاع سطر الراوتر - router row height
-const ROUTER_GAP = 6;
+// ===== الشبكات: سطر لكل راوتر / أكسس - networks: one line per router / AP =====
+const NET_ROW = 28;
+const NET_GAP = 4;
 
-function RouterRow({ router, now, compact }: { router: ItRouter; now: number; compact: boolean }) {
-  const pct = router.uptimeTodayPct;
-  const pctColor = pct === null ? "#374151" : pct >= 99 ? GREEN : pct >= 90 ? "#F59E0B" : RED;
-  const unnamed = isUnnamed(router.name, router.ip);
+function NetworkLine({ router }: { router: ItRouter }) {
   return (
     <div
-      className={`relative rounded-xl border ps-3 pe-3 flex flex-col justify-center overflow-hidden ${router.up ? "border-cardBorder bg-background/70" : "border-statusRed/60 bg-statusRed/10"}`}
-      style={{ height: ROUTER_ROW }}
+      className={`box-border flex items-center gap-2 min-w-0 rounded-lg px-2 text-[14px] font-semibold ${router.up ? "bg-background/60 border border-transparent" : "bg-statusRed/10 border border-statusRed/50"}`}
+      style={{ height: NET_ROW }}
+      title={router.ip}
     >
-      <div className="flex items-center gap-2 min-w-0 text-[15px] leading-[22px] font-bold">
-        <Dot up={router.up} pulse={!router.up} />
-        {!compact && (router.kind === "ap" ? <Wifi size={15} className="text-gray-400 shrink-0" /> : <Router size={15} className="text-gray-400 shrink-0" />)}
-        <NameLabel name={router.name} ip={router.ip} up={router.up} hint={!compact} />
-        <span className="ms-auto shrink-0 text-[13px] font-semibold">
-          <Ms value={router.latencyMs} />
-        </span>
-      </div>
-      <div className={`flex items-center gap-1.5 min-w-0 leading-[18px] whitespace-nowrap ${compact ? "text-[11.5px] ps-[16px]" : "text-[12px] ps-[18px]"}`}>
-        {!unnamed && <Ip value={router.ip} />}
-        {unnamed && compact && <NameHint />}
-        {(!unnamed || compact) && <span className="text-gray-600">·</span>}
-        {router.internet === null ? (
-          <span className="text-gray-500">نت؟</span>
-        ) : router.internet ? (
-          <span className="text-statusGreen font-semibold">{compact ? "نت ✓" : "فيه نت ✓"}</span>
-        ) : (
-          <span className="text-statusRed font-semibold">{compact ? "نت ✗" : "مفيش نت ✗"}</span>
-        )}
-        <span className={`ms-auto truncate min-w-0 ${router.up ? "text-gray-400" : "text-statusRed font-semibold"}`}>
-          {compact ? (router.up ? "" : "واقع ") : router.up ? "شغال من " : "واقع من "}
-          {duration(router.since, now, true)}
-        </span>
-      </div>
-      {/* نسبة الشغل النهارده: شريط رفيع تحت - today's uptime: a thin bar at the bottom */}
-      <div className="absolute inset-x-0 bottom-0 h-[2px] bg-cardBorder" title={pct === null ? undefined : `شغال ${formatNumber(pct)}% النهارده`}>
-        <div className="h-full" style={{ width: `${pct ?? 0}%`, backgroundColor: pctColor }} />
-      </div>
+      <Dot up={router.up} size={9} pulse={!router.up} />
+      {router.kind === "ap" ? <Wifi size={14} className="text-gray-500 shrink-0" /> : <Router size={14} className="text-gray-500 shrink-0" />}
+      <NameLabel name={router.name} ip={router.ip} up={router.up} hint={false} />
+      <span className="ms-auto shrink-0 text-[12.5px] font-normal">{router.up ? <Ms value={router.latencyMs} /> : <span className="text-statusRed font-semibold">واقع</span>}</span>
     </div>
   );
 }
 
-// سطر لكل راوتر: عمود واحد، ولو مش مكفي عمودين، ولو برضه مش مكفي scroll جوه الكارت بس
-// One row per router: one column, two when they don't fit, and a scroll inside the card only as a last resort
-function NetworksList({ routers, now }: { routers: ItRouter[]; now: number }) {
+// عمود واحد، ولو مش مكفي عمودين (أو تلاتة لو العرض يسمح)، والـ scroll آخر حل - one column, then two (or three when wide)
+function NetworksList({ routers }: { routers: ItRouter[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useSize(ref);
-  const fit = Math.max(1, Math.floor((h + ROUTER_GAP) / (ROUTER_ROW + ROUTER_GAP)));
-  const cols = routers.length > fit ? 2 : 1;
+  const fit = Math.max(1, Math.floor((h + NET_GAP) / (NET_ROW + NET_GAP)));
+  const maxCols = Math.max(1, Math.min(3, Math.floor((w + 8) / 190)));
+  const cols = Math.min(maxCols, Math.max(1, Math.ceil(routers.length / fit)));
   const rows = Math.ceil(routers.length / cols);
-  const scroll = rows > fit;
-  // عمود ضيق = سطر مختصر (من غير أيقونة، "نت ✓"، المدة بس) - a narrow column = a compact row
-  const compact = (w - ROUTER_GAP * (cols - 1)) / cols < 300;
   return (
-    <div ref={ref} className="flex-1 min-h-0" style={{ overflowY: scroll ? "auto" : "hidden" }}>
+    <div ref={ref} className="flex-1 min-h-0" style={{ overflowY: rows > fit ? "auto" : "hidden" }}>
       {routers.length === 0 ? (
         <p className="text-gray-500 text-[15px]">مفيش راوترات في البيانات</p>
       ) : (
         <div
           className="grid"
-          style={{
-            gap: ROUTER_GAP,
-            gridAutoFlow: "column",
-            gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`,
-            gridTemplateRows: `repeat(${rows}, ${ROUTER_ROW}px)`,
-          }}
+          style={{ gap: NET_GAP, columnGap: 8, gridAutoFlow: "column", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${rows}, ${NET_ROW}px)` }}
         >
           {routers.map((router) => (
-            <RouterRow key={router.id} router={router} now={now} compact={compact} />
+            <NetworkLine key={router.id} router={router} />
           ))}
         </div>
       )}
@@ -286,143 +249,185 @@ function NetworksList({ routers, now }: { routers: ItRouter[]; now: number }) {
   );
 }
 
-// ===== الأجهزة - devices =====
-const DEVICE_GROUPS: { type: ItDeviceType; label: string; icon: LucideIcon }[] = [
-  { type: "fingerprint", label: "البصمة", icon: Fingerprint },
-  { type: "nvr", label: "NVR الكاميرات", icon: Cctv },
-  { type: "printer", label: "الطابعات", icon: Printer },
-  { type: "pc", label: "الكمبيوترات", icon: Monitor },
-  { type: "scale", label: "الميزان", icon: Scale },
-  { type: "other", label: "أخرى", icon: Boxes },
-];
-const DEVICE_ROW = 40;
-const DEVICE_ROW_GAP = 2;
-const GROUP_HEADER = 30;
-const GROUP_SUMMARY = 28;
-const GROUP_CHROME = 12 + 8; // padding + المسافة بين المجموعات - padding + gap between groups
+// ===== الأجهزة المهمة - critical devices =====
+const TYPE_ICONS: Record<ItDeviceType, LucideIcon> = { fingerprint: Fingerprint, nvr: Cctv, printer: Printer, pc: Monitor, scale: Scale, other: Boxes };
 
-function DeviceRow({ device, now }: { device: ItDevice; now: number }) {
-  const unnamed = isUnnamed(device.name, device.ip);
+// نقطة على الدايرة (0 = فوق، مع عقارب الساعة) - a point on the circle (0 = top, clockwise)
+const polar = (r: number, deg: number) => {
+  const rad = (deg * Math.PI) / 180;
+  return { x: 50 + r * Math.sin(rad), y: 50 - r * Math.cos(rad) };
+};
+
+// دايرة متقسمة أجزاء متساوية، جزء لكل جهاز مهم: أخضر متصل / أحمر مفصول (بينبض بهدوء)
+// A ring split into equal segments, one per critical device: green online / red offline (soft pulse)
+function CriticalRing({ devices, size }: { devices: ItDevice[]; size: number }) {
+  const n = devices.length;
+  const up = devices.filter((d) => d.up).length;
+  const r = 40;
+  const gap = n > 1 ? 7 : 0;
   return (
-    <div className={`rounded-lg px-2 flex flex-col justify-center ${device.up ? "" : "bg-statusRed/10 border border-statusRed/40"}`} style={{ height: DEVICE_ROW }}>
-      <div className="flex items-center gap-2 min-w-0 text-[14px] leading-[19px] font-semibold">
-        <Dot up={device.up} size={9} pulse={!device.up} />
-        <NameLabel name={device.name} ip={device.ip} up={device.up} />
-        <span className="ms-auto shrink-0 text-[12px] font-normal">
-          <Ms value={device.latencyMs} />
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#1f2937" strokeWidth="11" />
+        {n === 1 ? (
+          <circle cx="50" cy="50" r={r} fill="none" stroke={devices[0].up ? GREEN : RED} strokeWidth="11" className={devices[0].up ? "" : "animate-pulse"} />
+        ) : (
+          devices.map((device, i) => {
+            const start = (360 / n) * i + gap / 2;
+            const end = (360 / n) * (i + 1) - gap / 2;
+            const a = polar(r, start);
+            const b = polar(r, end);
+            return (
+              <path
+                key={device.id}
+                d={`M ${a.x} ${a.y} A ${r} ${r} 0 ${end - start > 180 ? 1 : 0} 1 ${b.x} ${b.y}`}
+                fill="none"
+                stroke={device.up ? GREEN : RED}
+                strokeWidth="11"
+                strokeLinecap="round"
+                className={device.up ? "" : "animate-pulse"}
+                style={{ filter: `drop-shadow(0 0 3px ${device.up ? GREEN : RED}88)` }}
+              >
+                <title>{device.name}</title>
+              </path>
+            );
+          })
+        )}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-numbers font-extrabold leading-none" style={{ fontSize: size * 0.2, color: up === n ? GREEN : RED }}>
+          {up}/{n}
         </span>
-      </div>
-      <div className="flex items-center gap-2 min-w-0 text-[11.5px] leading-[16px] ps-[17px] whitespace-nowrap">
-        {!unnamed && <Ip value={device.ip} />}
-        <span className={`ms-auto truncate min-w-0 ${device.up ? "text-gray-500" : "text-statusRed"}`}>
-          {device.up ? `آخر ظهور: ${lastSeen(device, now)}` : `واقع من ${duration(device.since ?? device.lastSeen, now, true)}`}
+        <span className="text-gray-400 font-semibold" style={{ fontSize: Math.max(12, size * 0.085) }}>
+          متصل
         </span>
       </div>
     </div>
   );
 }
 
-type DeviceGroup = { type: ItDeviceType; label: string; icon: LucideIcon; list: ItDevice[]; down: number; unnamed: number };
-
-function groupHeight(group: DeviceGroup, collapsed: boolean): number {
-  const rows = collapsed ? group.down : group.list.length;
-  const summary = collapsed && group.list.length > group.down ? GROUP_SUMMARY : 0;
-  return GROUP_HEADER + rows * (DEVICE_ROW + DEVICE_ROW_GAP) + summary + GROUP_CHROME;
+function CriticalTile({ device, now }: { device: ItDevice; now: number }) {
+  const Icon = TYPE_ICONS[device.type] ?? Boxes;
+  const color = device.up ? GREEN : RED;
+  return (
+    <div
+      className={`min-h-0 min-w-0 rounded-xl border flex items-center gap-3 px-3 overflow-hidden ${device.up ? "border-statusGreen/35 bg-statusGreen/[0.06]" : "border-statusRed/60 bg-statusRed/10"}`}
+    >
+      <span className="shrink-0 rounded-xl p-2" style={{ backgroundColor: `${color}1F`, color }}>
+        <Icon size={28} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-extrabold text-[20px] leading-[1.45] truncate">
+          <NameLabel name={device.name} ip={device.ip} up={device.up} hint={false} />
+        </p>
+        <p className={`text-[15px] leading-[1.5] font-bold truncate ${device.up ? "text-statusGreen" : "text-statusRed"}`}>
+          {device.up ? "متصل ✓" : `مفصول من ${duration(device.since ?? device.lastSeen, now, true)}`}
+        </p>
+      </div>
+      <span className="shrink-0 text-[16px] font-semibold">
+        <Ms value={device.up ? device.latencyMs : null} />
+      </span>
+    </div>
+  );
 }
 
-// توزيع المجموعات على الأعمدة: أطول مجموعة بتتقفل لعددها (والواقع بس يفضل ظاهر) لحد ما الكل يكفي
-// Pack the groups into columns: the longest group collapses to its counts (down devices stay visible) until all fit
-function planDevices(groups: DeviceGroup[], cols: number, height: number, manual: Record<string, boolean>) {
-  const collapsed = new Set<ItDeviceType>(groups.filter((g) => manual[g.type] === false).map((g) => g.type));
-  const pack = () => {
-    const columns: DeviceGroup[][] = Array.from({ length: cols }, () => []);
-    const heights = new Array(cols).fill(0);
-    for (const group of groups) {
-      const i = heights.indexOf(Math.min(...heights));
-      columns[i].push(group);
-      heights[i] += groupHeight(group, collapsed.has(group.type));
-    }
-    return { columns, tallest: Math.max(...heights) };
-  };
-  let plan = pack();
-  while (height > 0 && plan.tallest > height) {
-    const next = groups
-      .filter((g) => !collapsed.has(g.type) && manual[g.type] !== true && g.list.length > g.down)
-      .sort((a, b) => b.list.length - a.list.length)[0];
-    if (!next) break;
-    collapsed.add(next.type);
-    plan = pack();
-  }
-  return { ...plan, collapsed, scroll: height > 0 && plan.tallest > height };
-}
-
-function DevicesList({ devices, now }: { devices: ItDevice[]; now: number }) {
+// الدايرة جنب الكروت لو المكان عريض، وفوقها لو ضيق - the ring beside the tiles when wide, above them when narrow
+function CriticalDevices({ devices, now }: { devices: ItDevice[]; now: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useSize(ref);
-  // الضغط على عنوان المجموعة بيفتحها / يقفلها - clicking a group header opens / collapses it
-  const [manual, setManual] = useState<Record<string, boolean>>({});
-  const groups = useMemo<DeviceGroup[]>(
-    () =>
-      DEVICE_GROUPS.map((g) => {
-        const list = devices.filter((d) => d.type === g.type).sort(byStatusThenName);
-        return { ...g, list, down: list.filter((d) => !d.up).length, unnamed: list.filter((d) => isUnnamed(d.name, d.ip)).length };
-      })
-        .filter((g) => g.list.length > 0)
-        // المجموعات اللي فيها واقع الأول - groups with a down device first
-        .sort((a, b) => Number(b.down > 0) - Number(a.down > 0)),
+  const sorted = useMemo(() => [...devices].sort(byStatusThenName), [devices]);
+  const side = w >= h * 1.25;
+  const ring = Math.max(80, Math.floor(side ? Math.min(h, w * 0.42) : Math.min(w * 0.6, h * 0.42)));
+  const cols = sorted.length > 4 ? 2 : 1;
+  return (
+    <div ref={ref} className={`flex-1 min-h-0 flex gap-3 ${side ? "flex-row items-center" : "flex-col items-center"}`}>
+      {sorted.length === 0 ? (
+        <p className="text-gray-500 text-[15px]">مفيش أجهزة في مجموعة critical</p>
+      ) : (
+        <>
+          {w > 0 && <CriticalRing devices={sorted} size={ring} />}
+          <div
+            className="flex-1 min-h-0 min-w-0 w-full grid gap-2 self-stretch"
+            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${Math.ceil(sorted.length / cols)}, minmax(0,1fr))` }}
+          >
+            {sorted.map((device) => (
+              <CriticalTile key={device.id} device={device} now={now} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ===== أجهزة الموظفين - staff PCs =====
+const STAFF_CARD = 62;
+const STAFF_GAP = 8;
+const cairoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" });
+
+// الكمبيوتر المقفول عادي (بيتقفل بعد الشغل)، فلونه رمادي مش أحمر - an off PC is normal (turned off after work): gray, not red
+function StaffCard({ device, now, icon }: { device: ItDevice; now: number; icon: boolean }) {
+  const seen = device.lastSeen;
+  const seenToday = !!seen && cairoDay.format(new Date(seen)) === cairoDay.format(new Date(now));
+  const unnamed = isUnnamed(device.name, device.ip);
+  return (
+    <div
+      className={`min-w-0 rounded-xl border px-2.5 flex items-center gap-2 overflow-hidden ${device.up ? "border-statusGreen/30 bg-background/70" : "border-cardBorder bg-background/30"}`}
+      style={{ height: STAFF_CARD }}
+    >
+      {icon && (
+        <span className={`shrink-0 rounded-full p-1.5 ${device.up ? "bg-statusGreen/15 text-statusGreen" : "bg-gray-700/40 text-gray-500"}`}>
+          <User size={20} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Dot up={device.up ? true : null} size={8} />
+          <span className={`truncate min-w-0 leading-[1.35] ${unnamed ? "text-gray-400 font-semibold text-[14px]" : `font-extrabold text-[17px] ${device.up ? "text-white" : "text-gray-400"}`}`}>
+            {unnamed ? (
+              <>
+                جهاز{" "}
+                <span dir="ltr" className="font-numbers">
+                  {device.ip}
+                </span>
+              </>
+            ) : (
+              toEnglishDigits(device.name)
+            )}
+          </span>
+        </div>
+        <div className="text-[11.5px] leading-[1.4] ps-[14px] truncate">{!unnamed ? <Ip value={device.ip} /> : <span className="text-gray-600">من غير اسم</span>}</div>
+        {/* المقفول: الكارت والنقطة رمادي، وآخر ظهور مكتوب؛ "مقفول من" في الـ tooltip - off: gray card and dot, last seen shown */}
+        <div
+          className={`text-[12px] leading-[1.4] ps-[14px] truncate ${device.up ? "text-gray-300" : "text-gray-500"}`}
+          title={device.up ? undefined : `مقفول من ${duration(device.since ?? seen, now, true)}`}
+        >
+          {device.up ? `شغال من ${duration(device.since, now, true)}` : seen ? `آخر ظهور ${seenToday ? clock(seen) : `من ${duration(seen, now, true)}`}` : "مقفول"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StaffGrid({ devices, now }: { devices: ItDevice[]; now: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { w } = useSize(ref);
+  // أكتر عدد أعمدة يكفي، وبعدين نوزع بالتساوي (9 = 3×3 مش 4+4+1) - the most columns that fit, then spread evenly
+  const maxCols = Math.max(1, Math.min(4, Math.floor((w + STAFF_GAP) / (140 + STAFF_GAP))));
+  const cols = Math.max(1, Math.ceil(devices.length / Math.max(1, Math.ceil(devices.length / maxCols))));
+  const cardWidth = (w - STAFF_GAP * (cols - 1)) / cols;
+  // الشغال الأول، وبعدين بالاسم - online first, then by name
+  const sorted = useMemo(
+    () => [...devices].sort((a, b) => Number(b.up) - Number(a.up) || sortKey(a).localeCompare(sortKey(b), "ar", { numeric: true })),
     [devices]
   );
-  const cols = w >= 470 ? 2 : 1;
-  const plan = planDevices(groups, cols, h, manual);
-
   return (
-    <div ref={ref} className="flex-1 min-h-0 flex gap-3 items-start" style={{ overflowY: plan.scroll ? "auto" : "hidden" }}>
-      {groups.length === 0 && <p className="text-gray-500 text-[15px]">مفيش أجهزة في البيانات</p>}
-      {plan.columns.map((column, ci) => (
-        <div key={ci} className="flex-1 min-w-0 flex flex-col gap-2">
-          {column.map((group) => {
-            const collapsed = plan.collapsed.has(group.type);
-            const Icon = group.icon;
-            const shown = collapsed ? group.list.filter((d) => !d.up) : group.list;
-            const upCount = group.list.length - group.down;
-            return (
-              <div key={group.type} className="rounded-xl border border-cardBorder bg-background/60 p-1.5">
-                <button
-                  type="button"
-                  onClick={() => setManual((m) => ({ ...m, [group.type]: collapsed }))}
-                  className="w-full flex items-center gap-2 px-1 text-[14px] text-start"
-                  style={{ height: GROUP_HEADER - 4 }}
-                >
-                  <Icon size={16} style={{ color: ACCENT }} className="shrink-0" />
-                  <span className="font-bold text-gray-200 truncate">{group.label}</span>
-                  <span className="ms-auto shrink-0 font-numbers text-[13px]">
-                    {group.down > 0 && <span className="text-statusRed font-bold">{formatNumber(group.down)} واقع · </span>}
-                    <span className="text-gray-400">
-                      {formatNumber(upCount)}/{formatNumber(group.list.length)}
-                    </span>
-                  </span>
-                </button>
-                <div className="flex flex-col" style={{ gap: DEVICE_ROW_GAP }}>
-                  {shown.map((device) => (
-                    <DeviceRow key={device.id} device={device} now={now} />
-                  ))}
-                </div>
-                {collapsed && upCount > 0 && (
-                  <div className="flex items-center gap-1.5 px-2 text-[12.5px] whitespace-nowrap min-w-0" style={{ height: GROUP_SUMMARY }}>
-                    <Dot up size={8} />
-                    <span className="text-gray-300 font-semibold">{formatNumber(upCount)} شغال</span>
-                    {group.unnamed > 0 && (
-                      <span className="text-gray-500 truncate min-w-0" title="سمّيهم في devices.json على جهاز IT">
-                        · {formatNumber(group.unnamed)} من غير اسم
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+    <div ref={ref} className="grid" style={{ gap: STAFF_GAP, gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>
+      {sorted.length === 0 ? (
+        <p className="text-gray-500 text-[15px]">مفيش أجهزة في مجموعة staff</p>
+      ) : (
+        sorted.map((device) => <StaffCard key={device.id} device={device} now={now} icon={cardWidth >= 185} />)
+      )}
     </div>
   );
 }
@@ -1174,10 +1179,12 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
   const eventsSize = useSize(eventsRef);
   const eventsFit = Math.max(1, Math.floor(eventsSize.h / 30));
 
-  const devices = snapshot?.devices ?? [];
+  // other مبيظهرش في الصفحة خالص - the other group never shows on the page
+  const critical = useMemo(() => (snapshot?.devices ?? []).filter((d) => d.group === "critical"), [snapshot]);
+  const staff = useMemo(() => (snapshot?.devices ?? []).filter((d) => d.group === "staff"), [snapshot]);
   const routers = useMemo(() => [...(snapshot?.routers ?? [])].sort(byStatusThenName), [snapshot]);
-  const upCount = devices.filter((d) => d.up).length;
-  const downCount = devices.length - upCount;
+  const criticalDown = critical.filter((d) => !d.up).length;
+  const staffUp = staff.filter((d) => d.up).length;
   const internet = snapshot?.internet ?? null;
   // الإيجنت مبعتش من دقيقتين = "الإيجنت مش متصل" - no update for agentOfflineSeconds = agent offline
   const agentDown = !!snapshot && status !== undefined && !status.agentOnline;
@@ -1218,39 +1225,56 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.2fr)", gridTemplateRows: "minmax(0,1fr)" }}>
-        {/* الشبكات (العمود كله) - networks (the whole column) */}
-        <Section
-          title="الشبكات"
-          icon={Router}
-          extra={
-            routers.length > 0 && (
-              <span className="text-[14px] text-gray-400 whitespace-nowrap">
-                <span className={routers.some((r) => !r.up) ? "text-statusRed font-bold" : "text-statusGreen font-bold"}>{routers.filter((r) => r.up).length}</span> /{" "}
-                {routers.length} شغال
-              </span>
-            )
-          }
-        >
-          {snapshot ? <NetworksList routers={routers} now={now} /> : <WaitingForAgent />}
-        </Section>
-
-        {/* الأجهزة + آخر الأحداث - devices + latest events */}
-        <div className="min-h-0 min-w-0 grid gap-3" style={{ gridTemplateRows: "minmax(0,2.3fr) minmax(0,1fr)" }}>
+      <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.15fr)", gridTemplateRows: "minmax(0,1fr)" }}>
+        {/* أجهزة الموظفين + الشبكات - staff PCs + networks */}
+        <div className="min-h-0 min-w-0 flex flex-col gap-3">
           <Section
-            title="الأجهزة"
-            icon={Monitor}
+            title="أجهزة الموظفين"
+            icon={Users}
+            className="shrink-0"
             extra={
-              devices.length > 0 && (
-                <span className="rounded-full border border-cardBorder bg-background/70 px-3 text-[14px] leading-[1.9] whitespace-nowrap font-semibold">
-                  <span className="text-statusGreen">{formatNumber(upCount)} شغال</span>
-                  <span className="text-gray-500"> · </span>
-                  <span className={downCount ? "text-statusRed" : "text-gray-500"}>{formatNumber(downCount)} واقع</span>
+              staff.length > 0 && (
+                <span className="text-[14px] text-gray-400 whitespace-nowrap">
+                  <span className="text-statusGreen font-bold">{formatNumber(staffUp)}</span> / {formatNumber(staff.length)} شغال
                 </span>
               )
             }
           >
-            {snapshot ? <DevicesList devices={devices} now={now} /> : <WaitingForAgent />}
+            {snapshot ? <StaffGrid devices={staff} now={now} /> : <WaitingForAgent />}
+          </Section>
+          <Section
+            title="الشبكات"
+            icon={Router}
+            className="flex-1"
+            extra={
+              routers.length > 0 && (
+                <span className="text-[14px] text-gray-400 whitespace-nowrap">
+                  <span className={routers.some((r) => !r.up) ? "text-statusRed font-bold" : "text-statusGreen font-bold"}>{routers.filter((r) => r.up).length}</span> /{" "}
+                  {routers.length} شغال
+                </span>
+              )
+            }
+          >
+            {snapshot ? <NetworksList routers={routers} /> : <WaitingForAgent />}
+          </Section>
+        </div>
+
+        {/* الأجهزة المهمة + آخر الأحداث - critical devices + latest events */}
+        <div className="min-h-0 min-w-0 grid gap-3" style={{ gridTemplateRows: "minmax(0,1.7fr) minmax(0,1fr)" }}>
+          <Section
+            title="الأجهزة المهمة"
+            icon={ShieldCheck}
+            extra={
+              critical.length > 0 && (
+                <span
+                  className={`rounded-full border px-3 text-[14px] leading-[1.9] whitespace-nowrap font-bold ${criticalDown ? "border-statusRed/60 bg-statusRed/10 text-statusRed" : "border-statusGreen/40 bg-statusGreen/10 text-statusGreen"}`}
+                >
+                  {criticalDown ? `${formatNumber(criticalDown)} مفصول` : "كله متصل ✓"}
+                </span>
+              )
+            }
+          >
+            {snapshot ? <CriticalDevices devices={critical} now={now} /> : <WaitingForAgent />}
           </Section>
           <Section title="آخر الأحداث" icon={TriangleAlert}>
             <div ref={eventsRef} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ contain: "size" }}>

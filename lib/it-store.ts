@@ -4,7 +4,7 @@
 // Server only. Any field outside the agreed schema is dropped (no password is ever stored)
 import { timingSafeEqual } from "node:crypto";
 import { dashboardConfig } from "@/config/dashboard.config";
-import { ItCamera, ItDevice, ItDeviceType, ItEvent, ItRouter, ItSnapshot, ItStatus } from "./types";
+import { ItCamera, ItDevice, ItDeviceGroup, ItDeviceType, ItEvent, ItRouter, ItSnapshot, ItStatus } from "./types";
 
 const KEY = "elsafwa:it:status";
 const MAX_EVENTS = 200; // آخر 200 حدث - keep the last 200 events
@@ -107,13 +107,18 @@ export function sanitizePayload(body: unknown): ItSnapshot {
   const NETWORK_KINDS = ["router", "ap", "accesspoint", "access_point"];
   const rawRouters = list(b.routers, 50);
   const rawDevices = list(b.devices, 300);
-  const isNetwork = (value: unknown) => typeof value === "string" && NETWORK_KINDS.includes(value.toLowerCase());
+  const isNetworkKind = (value: unknown) => typeof value === "string" && NETWORK_KINDS.includes(value.toLowerCase());
+  const GROUPS: ItDeviceGroup[] = ["critical", "staff", "network", "other"];
+  // من غير group: الراوتر / الأكسس = network، غير كده other - no group: router / AP = network, otherwise other
+  const groupOf = (d: Record<string, unknown>): ItDeviceGroup =>
+    GROUPS.includes(d.group as ItDeviceGroup) ? (d.group as ItDeviceGroup) : isNetworkKind(d.type) ? "network" : "other";
+  const isNetwork = (d: Record<string, unknown>) => groupOf(d) === "network";
   const nameOf = (r: Record<string, unknown>) => text(r.name) || (ip(r.ip) ? `unknown ${ip(r.ip)}` : "");
 
   const toRouter = (r: Record<string, unknown>, kind: unknown): ItRouter => ({
     id: text(r.id, 64) || ip(r.ip),
     name: nameOf(r),
-    kind: typeof kind === "string" && kind.toLowerCase() !== "router" ? ("ap" as const) : ("router" as const),
+    kind: typeof kind === "string" && ["ap", "accesspoint", "access_point"].includes(kind.toLowerCase()) ? ("ap" as const) : ("router" as const),
     ip: ip(r.ip),
     up: bool(r.up),
     latencyMs: num(r.latencyMs, 0, 60_000),
@@ -125,6 +130,8 @@ export function sanitizePayload(body: unknown): ItSnapshot {
     id: text(d.id, 64) || ip(d.ip),
     name: nameOf(d),
     type: DEVICE_TYPES.includes(type as ItDeviceType) ? (type as ItDeviceType) : ("other" as const),
+    group: groupOf(d),
+    monitor: bool(d.monitor),
     ip: ip(d.ip),
     up: bool(d.up),
     latencyMs: num(d.latencyMs, 0, 60_000),
@@ -133,12 +140,12 @@ export function sanitizePayload(body: unknown): ItSnapshot {
   });
 
   const routers: ItRouter[] = [
-    ...rawRouters.filter((r) => r.kind === undefined || isNetwork(r.kind)).map((r) => toRouter(r, r.kind)),
-    ...rawDevices.filter((d) => isNetwork(d.type)).map((d) => toRouter(d, d.type)),
+    ...rawRouters.filter((r) => r.kind === undefined || isNetworkKind(r.kind)).map((r) => toRouter(r, r.kind)),
+    ...rawDevices.filter(isNetwork).map((d) => toRouter(d, d.type ?? d.kind)),
   ].filter((r) => r.id && r.name);
   const devices: ItDevice[] = [
-    ...rawDevices.filter((d) => !isNetwork(d.type)).map((d) => toDevice(d, d.type)),
-    ...rawRouters.filter((r) => r.kind !== undefined && !isNetwork(r.kind)).map((r) => toDevice(r, r.kind)),
+    ...rawDevices.filter((d) => !isNetwork(d)).map((d) => toDevice(d, d.type)),
+    ...rawRouters.filter((r) => r.kind !== undefined && !isNetworkKind(r.kind)).map((r) => toDevice(r, r.kind)),
   ].filter((d) => d.id && d.name);
   // من غير تكرار (نفس id) - no duplicates (same id)
   const unique = <T extends { id: string }>(items: T[]) => items.filter((item, i) => items.findIndex((x) => x.id === item.id) === i);
@@ -150,6 +157,7 @@ export function sanitizePayload(body: unknown): ItSnapshot {
     .map((c) => ({ id: text(c.id, 64), name: text(c.name), online: optBool(c.online) }))
     .filter((c) => /^[A-Za-z0-9_-]+$/.test(c.id) && c.name);
 
+  const hiddenTargets = new Set(devices.filter((d) => d.group === "other" && !d.monitor).flatMap((d) => [d.name, d.ip].filter(Boolean)));
   const TARGETS = ["internet", "router", "ap", ...DEVICE_TYPES];
   const events: ItEvent[] = list(b.events, MAX_EVENTS)
     .map((e) => ({
@@ -160,7 +168,9 @@ export function sanitizePayload(body: unknown): ItSnapshot {
       targetType: (TARGETS.includes(e.targetType as string) ? e.targetType : "other") as ItEvent["targetType"],
       ip: ip(e.ip) || null,
     }))
-    .filter((e) => e.id && e.at && e.targetName);
+    .filter((e) => e.id && e.at && e.targetName)
+    // أجهزة other من غير monitor: true أحداثها مبتظهرش خالص - other devices without monitor: true never reach the events
+    .filter((e) => !hiddenTargets.has(e.targetName) && !(e.ip && hiddenTargets.has(e.ip)));
 
   if (!internet && routers.length === 0 && devices.length === 0 && cameras.length === 0 && events.length === 0) {
     throw new ItPayloadError("payload has none of internet / routers / devices / cameras / events");
