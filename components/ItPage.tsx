@@ -208,10 +208,65 @@ function DeviceRow({ device, now }: { device: ItDevice; now: number }) {
 }
 
 // ===== الكاميرات - cameras =====
+// الكاميرات بتتحمل من المتصفح على طول من الإيجنت المحلي (مش من Vercel)، فبتشتغل جوه المصنع بس
+// Cameras load in the browser straight from the local agent (never through Vercel), so they only work inside the factory
+const CAMERA_BASE = cfg.cameraBaseUrl.trim().replace(/\/+$/, "");
+
 // رابط صورة الكاميرا من السيرفر المحلي (من غير أي باسورد) - the snapshot URL on the local server (never a password)
 function cameraUrl(camera: ItCamera, tick: number): string | null {
-  const base = cfg.cameraBaseUrl.trim().replace(/\/+$/, "");
-  return base ? `${base}/cameras/${encodeURIComponent(camera.id)}/snapshot.jpg?t=${tick}` : null;
+  return CAMERA_BASE ? `${CAMERA_BASE}/cameras/${encodeURIComponent(camera.id)}/snapshot.jpg?t=${tick}` : null;
+}
+
+// {cameraBaseUrl}/cameras.json: مصفوفة أو { cameras: [...] }، كل كاميرا { id, name, nvr?, online? }
+// {cameraBaseUrl}/cameras.json: an array or { cameras: [...] }, each camera { id, name, nvr?, online? }
+async function fetchLocalCameras(url: string): Promise<ItCamera[]> {
+  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body: unknown = await res.json();
+  const raw = Array.isArray(body)
+    ? body
+    : body && typeof body === "object" && Array.isArray((body as { cameras?: unknown }).cameras)
+      ? (body as { cameras: unknown[] }).cameras
+      : null;
+  if (!raw) throw new Error("cameras.json has no camera list");
+  const str = (v: unknown, max = 120) => (typeof v === "string" ? v.trim().slice(0, max) : typeof v === "number" ? String(v) : "");
+  return raw
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+    .slice(0, 64)
+    .map((c) => ({
+      id: str(c.id, 64),
+      name: str(c.name),
+      nvr: str(c.nvr ?? c.nvrName) || null,
+      online: typeof c.online === "boolean" ? c.online : null,
+    }))
+    .filter((c) => /^[A-Za-z0-9_-]+$/.test(c.id) && c.name);
+}
+
+// "loading" لحد أول رد، "ok" = الليستة الحقيقية، "unreachable" = مش جوه المصنع / الشهادة مش متسطبة / الإيجنت واقف
+// "loading" until the first answer, "ok" = the real list, "unreachable" = outside the factory / CA not installed / agent down
+type LocalCameras = { state: "loading" | "ok" | "unreachable"; cameras: ItCamera[] };
+function useLocalCameras(): LocalCameras {
+  const { data, error } = useSWR<ItCamera[]>(CAMERA_BASE ? `${CAMERA_BASE}/cameras.json` : null, fetchLocalCameras, {
+    refreshInterval: 60_000,
+    revalidateOnFocus: true,
+    errorRetryInterval: 15_000,
+  });
+  // آخر ليستة ناجحة بتفضل لو طلب واحد فشل - the last good list stays if a single request fails
+  const lastGood = useRef<ItCamera[] | null>(null);
+  if (data) lastGood.current = data;
+  if (!CAMERA_BASE) return { state: "unreachable", cameras: [] };
+  if (lastGood.current) return { state: "ok", cameras: lastGood.current };
+  return { state: error ? "unreachable" : "loading", cameras: [] };
+}
+
+function CamerasUnreachable() {
+  return (
+    <div className="flex-1 min-h-0 rounded-xl border border-cardBorder flex flex-col items-center justify-center gap-2 text-center px-4 bg-[repeating-linear-gradient(135deg,#111827_0,#111827_14px,#0f1623_14px,#0f1623_28px)]">
+      <Camera size={40} className="text-gray-600" />
+      <p className="text-gray-300 font-bold text-[17px] leading-[1.6]">الكاميرات متاحة جوه المصنع بس</p>
+      <p className="text-gray-500 text-[13px] leading-[1.6]">لو إنت جوه المصنع، اتأكد إن شهادة elsafwa-ca متسطّبة</p>
+    </div>
+  );
 }
 
 // صورة الكاميرا: الصورة الجديدة بتتحمل في الخلفية وبتتبدل لما تخلص (من غير رمشة). مش متاحة = شكل بديل
@@ -247,7 +302,7 @@ function CameraImage({ camera, index, tick, preview, fit = "cover", compact = fa
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-3 bg-[repeating-linear-gradient(135deg,#111827_0,#111827_14px,#0f1623_14px,#0f1623_28px)]">
         <Camera size={compact ? 18 : 40} className="text-gray-600" />
-        {!compact && <p className="text-gray-400 font-semibold text-[15px] leading-[1.6]">الكاميرات متاحة جوه المصنع بس</p>}
+        {!compact && <p className="text-gray-400 font-semibold text-[15px] leading-[1.6]">الصورة مش متاحة دلوقتي</p>}
       </div>
     );
   }
@@ -295,6 +350,7 @@ function CameraViewer({ cameras, start, preview, onClose }: { cameras: ItCamera[
       <div className="shrink-0 flex items-center gap-3 px-5 py-3">
         <Cctv size={26} style={{ color: ACCENT }} />
         <h2 className="text-white font-extrabold text-[24px] leading-[1.5]">{toEnglishDigits(camera.name)}</h2>
+        {camera.nvr && <span className="text-gray-400 text-[15px]">{toEnglishDigits(camera.nvr)}</span>}
         <LiveTag online={camera.online} />
         <span dir="ltr" className="font-numbers text-gray-400 text-[16px]">
           {index + 1} / {count}
@@ -388,7 +444,11 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
 
   // الكاميرا الكبيرة بتتقلب كل cameraRotateSeconds (وبتقف والكاميرا مفتوحة صفحة كاملة)
   // The big camera rotates every cameraRotateSeconds (paused while a camera is open full-page)
-  const cameras = snapshot?.cameras ?? [];
+  // الليستة الحقيقية من الإيجنت المحلي بتكسب دايما، حتى وباقي الصفحة لسه معاينة
+  // The real list from the local agent always wins, even while the rest of the page is still a preview
+  const local = useLocalCameras();
+  const cameras = local.cameras;
+  const cameraPreview = false; // الكاميرات عمرها ما بتبقى تجريبية - cameras are never sample data
   const [cameraIndex, setCameraIndex] = useState(0);
   const [viewer, setViewer] = useState<number | null>(null);
   const tileTick = useTick(cfg.cameraRefreshSeconds * 1000);
@@ -569,7 +629,7 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
                   className="relative flex-1 min-h-0 rounded-xl overflow-hidden border border-cardBorder bg-black cursor-zoom-in"
                   aria-label={`افتح ${camera.name}`}
                 >
-                  <CameraImage key={camera.id} camera={camera} index={cameraIndex % cameras.length} tick={tileTick} preview={preview} />
+                  <CameraImage key={camera.id} camera={camera} index={cameraIndex % cameras.length} tick={tileTick} preview={cameraPreview} />
                   <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-2.5 bg-gradient-to-b from-black/70 to-transparent">
                     <LiveTag online={camera.online} />
                     <span dir="ltr" className="font-numbers text-[13px] text-gray-200 bg-black/50 rounded-full px-2 leading-[1.8]">
@@ -578,6 +638,7 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
                   </div>
                   <div className="absolute inset-x-0 bottom-0 px-3 pb-2 pt-8 bg-gradient-to-t from-black/85 to-transparent text-start">
                     <p className="text-white font-extrabold text-[20px] leading-[1.6] truncate">{toEnglishDigits(camera.name)}</p>
+                    {camera.nvr && <p className="text-gray-300 text-[13px] leading-[1.5] truncate">{toEnglishDigits(camera.nvr)}</p>}
                   </div>
                 </button>
                 {/* نقطة لكل كاميرا (الضغط يفتحها) - a dot per camera (click opens it) */}
@@ -598,14 +659,18 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
                   ))}
                 </div>
               </>
+            ) : local.state === "unreachable" ? (
+              <CamerasUnreachable />
+            ) : local.state === "loading" ? (
+              <div className="flex-1 flex items-center justify-center text-gray-500 text-[15px]">بيدوّر على الكاميرات...</div>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-gray-500 text-[15px]">مفيش كاميرات في البيانات</div>
+              <div className="flex-1 flex items-center justify-center text-gray-500 text-[15px]">مفيش كاميرات في cameras.json</div>
             )}
           </Section>
         </div>
       )}
 
-      {viewer !== null && cameras.length > 0 && <CameraViewer cameras={cameras} start={viewer} preview={preview} onClose={closeViewer} />}
+      {viewer !== null && cameras.length > 0 && <CameraViewer cameras={cameras} start={viewer} preview={cameraPreview} onClose={closeViewer} />}
     </div>
   );
 }

@@ -509,11 +509,12 @@ export const dashboardConfig = {
     previewMode: true,
     agentOfflineSeconds: 120, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
     refreshSeconds: 15, // الشاشة بتسأل كل 15 ثانية - the screen asks every 15 s
-    // سيرفر الكاميرات المحلي (بيتحط بكره)، والصورة = {cameraBaseUrl}/cameras/{id}/snapshot.jpg. فاضي = الكاميرات مش متاحة
-    // لازم HTTPS عشان الداشبورد نفسه HTTPS (المتصفح بيمنع صور http). مفيش باسورد في الرابط ده أبدا
-    // The local camera server (set tomorrow); snapshot = {cameraBaseUrl}/cameras/{id}/snapshot.jpg. Empty = unavailable.
-    // Must be HTTPS since the dashboard is HTTPS (browsers block http images). Never a password in this URL
-    cameraBaseUrl: "",
+    // الإيجنت المحلي: المتصفح بيجيب {cameraBaseUrl}/cameras.json والصور {cameraBaseUrl}/cameras/{id}/snapshot.jpg على طول
+    // (مش من Vercel)، فالكاميرات بتشتغل جوه المصنع بس. لازم HTTPS بشهادة elsafwa-ca متسطبة. مفيش باسورد في الرابط ده أبدا
+    // The local agent: the browser fetches {cameraBaseUrl}/cameras.json and {cameraBaseUrl}/cameras/{id}/snapshot.jpg
+    // directly (not via Vercel), so cameras only work inside the factory. HTTPS with the elsafwa-ca cert installed.
+    // Never a password in this URL
+    cameraBaseUrl: "https://192.168.1.200:8443",
     cameraRotateSeconds: 8, // الكاميرا الكبيرة بتتقلب كل 8 ثواني - the big camera tile switches every 8 s
     cameraRefreshSeconds: 2, // الصورة بتتحدث كل 2 ثانية - the snapshot refreshes every 2 s
     eventsShown: 8, // أكتر عدد أحداث في "آخر الأحداث" (بيقل لو المكان مش كفاية) - most events listed (fewer when tight)

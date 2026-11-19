@@ -1097,6 +1097,7 @@ export interface ItDevice {
 export interface ItCamera {
   id: string; // بيتحط في رابط الصورة: {cameraBaseUrl}/cameras/{id}/snapshot.jpg - used in the snapshot URL
   name: string;
+  nvr?: string | null; // اسم الـ NVR (من cameras.json المحلي) - the NVR name (from the local cameras.json)
   online: boolean | null;
 }
 
