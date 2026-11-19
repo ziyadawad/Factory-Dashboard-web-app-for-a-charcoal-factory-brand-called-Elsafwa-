@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, RefObject, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, CSSProperties, ReactNode, RefObject, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   Boxes,
@@ -17,13 +17,11 @@ import {
   Router,
   Scale,
   ShieldCheck,
-  User,
-  Users,
   TriangleAlert,
   Wifi,
   X,
 } from "lucide-react";
-import { ItCamera, ItDevice, ItDeviceType, ItEvent, ItRouter, ItSnapshot, ItStatus } from "@/lib/types";
+import { ItCamera, ItDeviceType, ItEvent, ItRouter, ItSnapshot, ItStatus } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -126,12 +124,6 @@ function Dot({ up, size = 10, pulse = false }: { up: boolean | null; size?: numb
   );
 }
 
-const Ip = ({ value }: { value: string }) => (
-  <span dir="ltr" className="font-numbers tabular-nums text-gray-500">
-    {value || "—"}
-  </span>
-);
-
 const Ms = ({ value }: { value: number | null }) =>
   value === null ? (
     <span className="text-gray-600">—</span>
@@ -185,11 +177,25 @@ function NameHint() {
 const eventName = (name: string) => name.replace(/^unknown\s+/i, "جهاز ");
 
 // قسم بنفس شكل أقسام صفحة المخازن: إطار، خط ملون على اليمين، أيقونة وعنوان - a section like the stock page sections
-function Section({ title, icon: Icon, extra, className = "", children }: { title: string; icon: LucideIcon; extra?: ReactNode; className?: string; children: ReactNode }) {
+function Section({
+  title,
+  icon: Icon,
+  extra,
+  className = "",
+  style,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  extra?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
   return (
     <div
       className={`relative bg-card border border-cardBorder rounded-2xl p-3 flex flex-col min-h-0 min-w-0 ${className}`}
-      style={{ backgroundImage: `linear-gradient(to left, ${ACCENT}0F, transparent 60%)` }}
+      style={{ backgroundImage: `linear-gradient(to left, ${ACCENT}0F, transparent 60%)`, ...style }}
     >
       <div className="absolute top-0 bottom-0 right-0 w-1" style={{ backgroundColor: ACCENT, borderTopRightRadius: 15, borderBottomRightRadius: 15 }} />
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0 min-w-0">
@@ -205,10 +211,10 @@ function Section({ title, icon: Icon, extra, className = "", children }: { title
 }
 
 // ===== الشبكات: سطر لكل راوتر / أكسس - networks: one line per router / AP =====
-const NET_ROW = 28;
-const NET_GAP = 4;
+const NET_ROW = 24;
+const NET_GAP = 2;
 
-function NetworkLine({ router }: { router: ItRouter }) {
+function NetworkLine({ router, icon }: { router: ItRouter; icon: boolean }) {
   return (
     <div
       className={`box-border flex items-center gap-2 min-w-0 rounded-lg px-2 text-[14px] font-semibold ${router.up ? "bg-background/60 border border-transparent" : "bg-statusRed/10 border border-statusRed/50"}`}
@@ -216,7 +222,7 @@ function NetworkLine({ router }: { router: ItRouter }) {
       title={router.ip}
     >
       <Dot up={router.up} size={9} pulse={!router.up} />
-      {router.kind === "ap" ? <Wifi size={14} className="text-gray-500 shrink-0" /> : <Router size={14} className="text-gray-500 shrink-0" />}
+      {icon && (router.kind === "ap" ? <Wifi size={14} className="text-gray-500 shrink-0" /> : <Router size={14} className="text-gray-500 shrink-0" />)}
       <NameLabel name={router.name} ip={router.ip} up={router.up} hint={false} />
       <span className="ms-auto shrink-0 text-[12.5px] font-normal">{router.up ? <Ms value={router.latencyMs} /> : <span className="text-statusRed font-semibold">واقع</span>}</span>
     </div>
@@ -228,7 +234,7 @@ function NetworksList({ routers }: { routers: ItRouter[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useSize(ref);
   const fit = Math.max(1, Math.floor((h + NET_GAP) / (NET_ROW + NET_GAP)));
-  const maxCols = Math.max(1, Math.min(3, Math.floor((w + 8) / 190)));
+  const maxCols = Math.max(1, Math.min(3, Math.floor((w + 8) / 175)));
   const cols = Math.min(maxCols, Math.max(1, Math.ceil(routers.length / fit)));
   const rows = Math.ceil(routers.length / cols);
   return (
@@ -241,7 +247,7 @@ function NetworksList({ routers }: { routers: ItRouter[] }) {
           style={{ gap: NET_GAP, columnGap: 8, gridAutoFlow: "column", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${rows}, ${NET_ROW}px)` }}
         >
           {routers.map((router) => (
-            <NetworkLine key={router.id} router={router} />
+            <NetworkLine key={router.id} router={router} icon={(w - 8 * (cols - 1)) / cols >= 220} />
           ))}
         </div>
       )}
@@ -249,8 +255,36 @@ function NetworksList({ routers }: { routers: ItRouter[] }) {
   );
 }
 
-// ===== الأجهزة المهمة - critical devices =====
+// ===== أهم الأجهزة - key devices =====
 const TYPE_ICONS: Record<ItDeviceType, LucideIcon> = { fingerprint: Fingerprint, nvr: Cctv, printer: Printer, pc: Monitor, scale: Scale, other: Boxes };
+
+type KeyDevice = {
+  name: string;
+  type: ItDeviceType;
+  color: string;
+  up: boolean;
+  latencyMs: number | null;
+  since: string | null;
+  real: boolean; // false = مفيش ip أو الإيجنت مبعتهوش (يظهر متصل مؤقتا) - false = placeholder shown as online
+};
+
+// من it.criticalDevices: لو الـ ip مكتوب والإيجنت باعت الجهاز ده، الحالة الحقيقية؛ غير كده "متصل" مؤقتا
+// From it.criticalDevices: the real status when the ip is set and the agent reports it, otherwise an online placeholder
+function keyDevices(snapshot: ItSnapshot | null): KeyDevice[] {
+  return cfg.criticalDevices.map((item) => {
+    const ip = item.ip.trim();
+    const found = ip && snapshot ? (snapshot.devices.find((d) => d.ip === ip) ?? snapshot.routers.find((r) => r.ip === ip)) : undefined;
+    return {
+      name: item.name,
+      type: item.type,
+      color: item.color,
+      up: found ? found.up : true,
+      latencyMs: found ? found.latencyMs : null,
+      since: found ? found.since : null,
+      real: !!found,
+    };
+  });
+}
 
 // نقطة على الدايرة (0 = فوق، مع عقارب الساعة) - a point on the circle (0 = top, clockwise)
 const polar = (r: number, deg: number) => {
@@ -258,176 +292,100 @@ const polar = (r: number, deg: number) => {
   return { x: 50 + r * Math.sin(rad), y: 50 - r * Math.cos(rad) };
 };
 
-// دايرة متقسمة أجزاء متساوية، جزء لكل جهاز مهم: أخضر متصل / أحمر مفصول (بينبض بهدوء)
-// A ring split into equal segments, one per critical device: green online / red offline (soft pulse)
-function CriticalRing({ devices, size }: { devices: ItDevice[]; size: number }) {
+// دايرة متقسمة أجزاء متساوية بلون كل جهاز؛ المفصول بيحمر وبينبض - equal segments in each device's colour; offline = red, pulsing
+function KeyRing({ devices, size }: { devices: KeyDevice[]; size: number }) {
   const n = devices.length;
   const up = devices.filter((d) => d.up).length;
   const r = 40;
-  const gap = n > 1 ? 7 : 0;
+  const gap = n > 1 ? 8 : 0;
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg viewBox="0 0 100 100" className="w-full h-full">
-        <circle cx="50" cy="50" r={r} fill="none" stroke="#1f2937" strokeWidth="11" />
-        {n === 1 ? (
-          <circle cx="50" cy="50" r={r} fill="none" stroke={devices[0].up ? GREEN : RED} strokeWidth="11" className={devices[0].up ? "" : "animate-pulse"} />
-        ) : (
-          devices.map((device, i) => {
-            const start = (360 / n) * i + gap / 2;
-            const end = (360 / n) * (i + 1) - gap / 2;
-            const a = polar(r, start);
-            const b = polar(r, end);
-            return (
-              <path
-                key={device.id}
-                d={`M ${a.x} ${a.y} A ${r} ${r} 0 ${end - start > 180 ? 1 : 0} 1 ${b.x} ${b.y}`}
-                fill="none"
-                stroke={device.up ? GREEN : RED}
-                strokeWidth="11"
-                strokeLinecap="round"
-                className={device.up ? "" : "animate-pulse"}
-                style={{ filter: `drop-shadow(0 0 3px ${device.up ? GREEN : RED}88)` }}
-              >
-                <title>{device.name}</title>
-              </path>
-            );
-          })
-        )}
+      <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#1f2937" strokeWidth="10" />
+        {devices.map((device, i) => {
+          const color = device.up ? device.color : RED;
+          const className = device.up ? "" : "animate-pulse";
+          const style = { filter: `drop-shadow(0 0 3px ${color}99)` };
+          if (n === 1) return <circle key={i} cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="10" className={className} style={style} />;
+          const start = (360 / n) * i + gap / 2;
+          const end = (360 / n) * (i + 1) - gap / 2;
+          const a = polar(r, start);
+          const b = polar(r, end);
+          return (
+            <path
+              key={i}
+              d={`M ${a.x} ${a.y} A ${r} ${r} 0 ${end - start > 180 ? 1 : 0} 1 ${b.x} ${b.y}`}
+              fill="none"
+              stroke={color}
+              strokeWidth="10"
+              strokeLinecap="round"
+              className={className}
+              style={style}
+            >
+              <title>{device.name}</title>
+            </path>
+          );
+        })}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-numbers font-extrabold leading-none" style={{ fontSize: size * 0.2, color: up === n ? GREEN : RED }}>
-          {up}/{n}
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span dir="ltr" className="font-numbers font-extrabold leading-none" style={{ fontSize: size * 0.2, color: up === n ? "#F3F4F6" : RED }}>
+          {up} / {n}
         </span>
-        <span className="text-gray-400 font-semibold" style={{ fontSize: Math.max(12, size * 0.085) }}>
-          متصل
+        <span className="text-gray-400 font-semibold leading-tight" style={{ fontSize: Math.max(11, size * 0.085) }}>
+          شغالين
         </span>
       </div>
     </div>
   );
 }
 
-function CriticalTile({ device, now }: { device: ItDevice; now: number }) {
+function KeyRow({ device, now }: { device: KeyDevice; now: number }) {
   const Icon = TYPE_ICONS[device.type] ?? Boxes;
-  const color = device.up ? GREEN : RED;
   return (
     <div
-      className={`min-h-0 min-w-0 rounded-xl border flex items-center gap-3 px-3 overflow-hidden ${device.up ? "border-statusGreen/35 bg-statusGreen/[0.06]" : "border-statusRed/60 bg-statusRed/10"}`}
+      className={`flex items-center gap-2 min-w-0 rounded-lg px-2 border ${device.up ? "border-transparent bg-background/60" : "border-statusRed/50 bg-statusRed/10"}`}
+      style={{ height: KEY_ROW }}
     >
-      <span className="shrink-0 rounded-xl p-2" style={{ backgroundColor: `${color}1F`, color }}>
-        <Icon size={28} />
+      <span className="shrink-0 w-1 self-stretch my-1.5 rounded-full" style={{ backgroundColor: device.up ? device.color : RED }} />
+      <Icon size={17} className="shrink-0" style={{ color: device.up ? device.color : RED }} />
+      <span className={`truncate min-w-0 font-bold text-[15px] ${device.up ? "text-white" : "text-statusRed"}`}>{device.name}</span>
+      <span className={`ms-auto shrink-0 text-[13px] font-semibold whitespace-nowrap ${device.up ? "text-statusGreen" : "text-statusRed"}`}>
+        {device.up ? "متصل ✓" : `مفصول من ${duration(device.since, now, true)}`}
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-extrabold text-[20px] leading-[1.45] truncate">
-          <NameLabel name={device.name} ip={device.ip} up={device.up} hint={false} />
-        </p>
-        <p className={`text-[15px] leading-[1.5] font-bold truncate ${device.up ? "text-statusGreen" : "text-statusRed"}`}>
-          {device.up ? "متصل ✓" : `مفصول من ${duration(device.since ?? device.lastSeen, now, true)}`}
-        </p>
-      </div>
-      <span className="shrink-0 text-[16px] font-semibold">
-        <Ms value={device.up ? device.latencyMs : null} />
-      </span>
-    </div>
-  );
-}
-
-// الدايرة جنب الكروت لو المكان عريض، وفوقها لو ضيق - the ring beside the tiles when wide, above them when narrow
-function CriticalDevices({ devices, now }: { devices: ItDevice[]; now: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { w, h } = useSize(ref);
-  const sorted = useMemo(() => [...devices].sort(byStatusThenName), [devices]);
-  const side = w >= h * 1.25;
-  const ring = Math.max(80, Math.floor(side ? Math.min(h, w * 0.42) : Math.min(w * 0.6, h * 0.42)));
-  const cols = sorted.length > 4 ? 2 : 1;
-  return (
-    <div ref={ref} className={`flex-1 min-h-0 flex gap-3 ${side ? "flex-row items-center" : "flex-col items-center"}`}>
-      {sorted.length === 0 ? (
-        <p className="text-gray-500 text-[15px]">مفيش أجهزة في مجموعة critical</p>
-      ) : (
-        <>
-          {w > 0 && <CriticalRing devices={sorted} size={ring} />}
-          <div
-            className="flex-1 min-h-0 min-w-0 w-full grid gap-2 self-stretch"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${Math.ceil(sorted.length / cols)}, minmax(0,1fr))` }}
-          >
-            {sorted.map((device) => (
-              <CriticalTile key={device.id} device={device} now={now} />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ===== أجهزة الموظفين - staff PCs =====
-const STAFF_CARD = 62;
-const STAFF_GAP = 8;
-const cairoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" });
-
-// الكمبيوتر المقفول عادي (بيتقفل بعد الشغل)، فلونه رمادي مش أحمر - an off PC is normal (turned off after work): gray, not red
-function StaffCard({ device, now, icon }: { device: ItDevice; now: number; icon: boolean }) {
-  const seen = device.lastSeen;
-  const seenToday = !!seen && cairoDay.format(new Date(seen)) === cairoDay.format(new Date(now));
-  const unnamed = isUnnamed(device.name, device.ip);
-  return (
-    <div
-      className={`min-w-0 rounded-xl border px-2.5 flex items-center gap-2 overflow-hidden ${device.up ? "border-statusGreen/30 bg-background/70" : "border-cardBorder bg-background/30"}`}
-      style={{ height: STAFF_CARD }}
-    >
-      {icon && (
-        <span className={`shrink-0 rounded-full p-1.5 ${device.up ? "bg-statusGreen/15 text-statusGreen" : "bg-gray-700/40 text-gray-500"}`}>
-          <User size={20} />
+      {/* المفصول مالوش latency، فالمكان للاسم - offline has no latency, the room goes to the name */}
+      {device.up && (
+        <span className="shrink-0 w-[52px] text-end text-[12.5px]">
+          <Ms value={device.latencyMs} />
         </span>
       )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Dot up={device.up ? true : null} size={8} />
-          <span className={`truncate min-w-0 leading-[1.35] ${unnamed ? "text-gray-400 font-semibold text-[14px]" : `font-extrabold text-[17px] ${device.up ? "text-white" : "text-gray-400"}`}`}>
-            {unnamed ? (
-              <>
-                جهاز{" "}
-                <span dir="ltr" className="font-numbers">
-                  {device.ip}
-                </span>
-              </>
-            ) : (
-              toEnglishDigits(device.name)
-            )}
-          </span>
-        </div>
-        <div className="text-[11.5px] leading-[1.4] ps-[14px] truncate">{!unnamed ? <Ip value={device.ip} /> : <span className="text-gray-600">من غير اسم</span>}</div>
-        {/* المقفول: الكارت والنقطة رمادي، وآخر ظهور مكتوب؛ "مقفول من" في الـ tooltip - off: gray card and dot, last seen shown */}
-        <div
-          className={`text-[12px] leading-[1.4] ps-[14px] truncate ${device.up ? "text-gray-300" : "text-gray-500"}`}
-          title={device.up ? undefined : `مقفول من ${duration(device.since ?? seen, now, true)}`}
-        >
-          {device.up ? `شغال من ${duration(device.since, now, true)}` : seen ? `آخر ظهور ${seenToday ? clock(seen) : `من ${duration(seen, now, true)}`}` : "مقفول"}
-        </div>
-      </div>
     </div>
   );
 }
 
-function StaffGrid({ devices, now }: { devices: ItDevice[]; now: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { w } = useSize(ref);
-  // أكتر عدد أعمدة يكفي، وبعدين نوزع بالتساوي (9 = 3×3 مش 4+4+1) - the most columns that fit, then spread evenly
-  const maxCols = Math.max(1, Math.min(4, Math.floor((w + STAFF_GAP) / (140 + STAFF_GAP))));
-  const cols = Math.max(1, Math.ceil(devices.length / Math.max(1, Math.ceil(devices.length / maxCols))));
-  const cardWidth = (w - STAFF_GAP * (cols - 1)) / cols;
-  // الشغال الأول، وبعدين بالاسم - online first, then by name
-  const sorted = useMemo(
-    () => [...devices].sort((a, b) => Number(b.up) - Number(a.up) || sortKey(a).localeCompare(sortKey(b), "ar", { numeric: true })),
-    [devices]
+const KEY_ROW = 30;
+
+// الدايرة فوق والسطور تحتها؛ لو المكان قصير، الدايرة جنب السطور - the ring above the rows; beside them when height is short
+function KeyDevices({ devices, now, compact }: { devices: KeyDevice[]; now: number; compact: boolean }) {
+  const rows = (
+    <div className="flex-1 min-w-0 w-full flex flex-col gap-1">
+      {devices.map((device, i) => (
+        <KeyRow key={i} device={device} now={now} />
+      ))}
+    </div>
   );
+  if (compact) {
+    const ring = Math.max(96, devices.length * (KEY_ROW + 4));
+    return (
+      <div className="flex items-center gap-3 min-w-0">
+        <KeyRing devices={devices} size={ring} />
+        {rows}
+      </div>
+    );
+  }
   return (
-    <div ref={ref} className="grid" style={{ gap: STAFF_GAP, gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>
-      {sorted.length === 0 ? (
-        <p className="text-gray-500 text-[15px]">مفيش أجهزة في مجموعة staff</p>
-      ) : (
-        sorted.map((device) => <StaffCard key={device.id} device={device} now={now} icon={cardWidth >= 185} />)
-      )}
+    <div className="flex flex-col items-center gap-3 min-w-0">
+      <KeyRing devices={devices} size={150} />
+      {rows}
     </div>
   );
 }
@@ -668,18 +626,18 @@ function CameraTile({
   );
 }
 
-// أحسن عدد أعمدة: المربعات تبقى أقرب لـ 16:9 وأكبر ما يمكن - the best column count: tiles as large as possible at 16:9
-function bestGrid(n: number, w: number, h: number) {
-  let best = { cols: 1, rows: n, score: -1 };
-  for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols);
-    const tw = w / cols;
-    const th = h / rows;
-    const fitW = Math.min(tw, (th * 16) / 9);
-    const score = fitW * ((fitW * 9) / 16) - (cols * rows - n) * 0.01;
-    if (score > best.score) best = { cols, rows, score };
-  }
-  return best;
+// شكل الشبكة لكل اختيار (أعمدة × صفوف) - the grid shape per layout (columns × rows)
+const GRID_SHAPES: Record<number, [number, number]> = { 1: [1, 1], 4: [2, 2], 6: [3, 2], 9: [3, 3], 16: [4, 4], 32: [8, 4] };
+const TILE_GAP = 6;
+function gridShape(n: number): [number, number] {
+  if (GRID_SHAPES[n]) return GRID_SHAPES[n];
+  const cols = Math.ceil(Math.sqrt(n));
+  return [cols, Math.ceil(n / cols)];
+}
+// مقاس المربع 16:9 أكبر ما يمكن في المساحة - the largest 16:9 tile that fits the area
+function tileSize(cols: number, rows: number, w: number, h: number) {
+  const width = Math.max(0, Math.min((w - TILE_GAP * (cols - 1)) / cols, (((h - TILE_GAP * (rows - 1)) / rows) * 16) / 9));
+  return { width: Math.floor(width), height: Math.floor((width * 9) / 16) };
 }
 
 const isLayout = (v: unknown): v is number => typeof v === "number" && cfg.cameraLayouts.includes(v);
@@ -736,8 +694,8 @@ function CamerasPanel({ cameras, onOpen }: { cameras: ItCamera[]; onOpen: (list:
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const { w, h } = useSize(bodyRef);
-  const cells = pages > 1 ? perPage : shown.length;
-  const grid = bestGrid(Math.max(1, cells), w || 16, h || 9);
+  const [cols, rows] = gridShape(perPage);
+  const tile = tileSize(cols, rows, w, h);
   const gridMs = cfg.gridRefreshSeconds * 1000;
 
   return (
@@ -778,33 +736,38 @@ function CamerasPanel({ cameras, onOpen }: { cameras: ItCamera[]; onOpen: (list:
       <div ref={bodyRef} className="relative flex-1 min-h-0 flex flex-col">
         {list.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-500 text-[15px]">مفيش كاميرات</div>
-        ) : layout === 1 ? (
-          <CameraTile
-            key={shown[0].id}
-            camera={shown[0]}
-            kind="main"
-            everyMs={cfg.cameraRefreshSeconds * 1000}
-            delayMs={0}
-            size="single"
-            onOpen={() => onOpen(list, current)}
-          />
         ) : (
-          <div
-            className="flex-1 min-h-0 grid gap-1.5"
-            style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0,1fr))` }}
-          >
-            {shown.map((camera, i) => (
-              <CameraTile
-                key={camera.id}
-                camera={camera}
-                kind="sub"
-                everyMs={gridMs}
-                // متوزعة على مدة التحديث، مش كلها في نفس اللحظة - spread over the refresh period, not all at once
-                delayMs={frameCache.has(`${camera.id}:sub`) ? Math.round((i * gridMs) / shown.length) : i * 120}
-                onOpen={() => onOpen(list, current * perPage + i)}
-              />
-            ))}
-          </div>
+          // شبكة حقيقية بمقاس ثابت (16:9) في النص، حتى لو الصفحة فيها كاميرات أقل - a real fixed-size 16:9 grid, centred
+          tile.width > 0 && (
+            <div
+              className="flex-1 min-h-0 grid content-center justify-center"
+              style={{ gap: TILE_GAP, gridTemplateColumns: `repeat(${cols}, ${tile.width}px)`, gridTemplateRows: `repeat(${rows}, ${tile.height}px)` }}
+            >
+              {shown.map((camera, i) =>
+                layout === 1 ? (
+                  <CameraTile
+                    key={camera.id}
+                    camera={camera}
+                    kind="main"
+                    everyMs={cfg.cameraRefreshSeconds * 1000}
+                    delayMs={0}
+                    size="single"
+                    onOpen={() => onOpen(list, current)}
+                  />
+                ) : (
+                  <CameraTile
+                    key={camera.id}
+                    camera={camera}
+                    kind="sub"
+                    everyMs={gridMs}
+                    // متوزعة على مدة التحديث، مش كلها في نفس اللحظة - spread over the refresh period, not all at once
+                    delayMs={frameCache.has(`${camera.id}:sub`) ? Math.round((i * gridMs) / shown.length) : i * 120}
+                    onOpen={() => onOpen(list, current * perPage + i)}
+                  />
+                )
+              )}
+            </div>
+          )
         )}
       </div>
 
@@ -1179,12 +1142,13 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
   const eventsSize = useSize(eventsRef);
   const eventsFit = Math.max(1, Math.floor(eventsSize.h / 30));
 
-  // other مبيظهرش في الصفحة خالص - the other group never shows on the page
-  const critical = useMemo(() => (snapshot?.devices ?? []).filter((d) => d.group === "critical"), [snapshot]);
-  const staff = useMemo(() => (snapshot?.devices ?? []).filter((d) => d.group === "staff"), [snapshot]);
+  const keys = useMemo(() => keyDevices(snapshot), [snapshot]);
+  const keysDown = keys.filter((d) => !d.up).length;
   const routers = useMemo(() => [...(snapshot?.routers ?? [])].sort(byStatusThenName), [snapshot]);
-  const criticalDown = critical.filter((d) => !d.up).length;
-  const staffUp = staff.filter((d) => d.up).length;
+  // العمود اليمين قصير (1366×768) = الدايرة جنب السطور - a short right column = the ring beside the rows
+  const sideRef = useRef<HTMLDivElement>(null);
+  const side = useSize(sideRef);
+  const compactKeys = side.h > 0 && side.h < 760;
   const internet = snapshot?.internet ?? null;
   // الإيجنت مبعتش من دقيقتين = "الإيجنت مش متصل" - no update for agentOfflineSeconds = agent offline
   const agentDown = !!snapshot && status !== undefined && !status.agentOnline;
@@ -1225,27 +1189,30 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.15fr)", gridTemplateRows: "minmax(0,1fr)" }}>
-        {/* أجهزة الموظفين + الشبكات - staff PCs + networks */}
-        <div className="min-h-0 min-w-0 flex flex-col gap-3">
+      {/* عمودين: اليمين 30% (أهم الأجهزة، الشبكات، آخر الأحداث) والشمال 70% الكاميرات - two columns: right 30%, cameras 70% */}
+      <div className="flex-1 min-h-0 grid gap-3" style={{ gridTemplateColumns: "minmax(0,3fr) minmax(0,7fr)", gridTemplateRows: "minmax(0,1fr)" }}>
+        <div ref={sideRef} className="min-h-0 min-w-0 flex flex-col gap-3">
           <Section
-            title="أجهزة الموظفين"
-            icon={Users}
+            title="أهم الأجهزة"
+            icon={ShieldCheck}
             className="shrink-0"
             extra={
-              staff.length > 0 && (
-                <span className="text-[14px] text-gray-400 whitespace-nowrap">
-                  <span className="text-statusGreen font-bold">{formatNumber(staffUp)}</span> / {formatNumber(staff.length)} شغال
+              keys.length > 0 && (
+                <span
+                  className={`rounded-full border px-3 text-[13px] leading-[1.9] whitespace-nowrap font-bold ${keysDown ? "border-statusRed/60 bg-statusRed/10 text-statusRed" : "border-statusGreen/40 bg-statusGreen/10 text-statusGreen"}`}
+                >
+                  {keysDown ? `${formatNumber(keysDown)} مفصول` : "كله متصل ✓"}
                 </span>
               )
             }
           >
-            {snapshot ? <StaffGrid devices={staff} now={now} /> : <WaitingForAgent />}
+            <KeyDevices devices={keys} now={now} compact={compactKeys} />
           </Section>
           <Section
             title="الشبكات"
             icon={Router}
-            className="flex-1"
+            className="min-h-[120px]"
+            style={{ flex: "2 1 0" }}
             extra={
               routers.length > 0 && (
                 <span className="text-[14px] text-gray-400 whitespace-nowrap">
@@ -1257,26 +1224,7 @@ export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: b
           >
             {snapshot ? <NetworksList routers={routers} /> : <WaitingForAgent />}
           </Section>
-        </div>
-
-        {/* الأجهزة المهمة + آخر الأحداث - critical devices + latest events */}
-        <div className="min-h-0 min-w-0 grid gap-3" style={{ gridTemplateRows: "minmax(0,1.7fr) minmax(0,1fr)" }}>
-          <Section
-            title="الأجهزة المهمة"
-            icon={ShieldCheck}
-            extra={
-              critical.length > 0 && (
-                <span
-                  className={`rounded-full border px-3 text-[14px] leading-[1.9] whitespace-nowrap font-bold ${criticalDown ? "border-statusRed/60 bg-statusRed/10 text-statusRed" : "border-statusGreen/40 bg-statusGreen/10 text-statusGreen"}`}
-                >
-                  {criticalDown ? `${formatNumber(criticalDown)} مفصول` : "كله متصل ✓"}
-                </span>
-              )
-            }
-          >
-            {snapshot ? <CriticalDevices devices={critical} now={now} /> : <WaitingForAgent />}
-          </Section>
-          <Section title="آخر الأحداث" icon={TriangleAlert}>
+          <Section title="آخر الأحداث" icon={TriangleAlert} className="min-h-[110px]" style={{ flex: "1 1 0" }}>
             <div ref={eventsRef} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ contain: "size" }}>
               {(snapshot?.events ?? []).length === 0 ? (
                 <p className="text-gray-500 text-[15px] leading-[30px]">مفيش أحداث</p>

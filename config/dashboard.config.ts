@@ -502,6 +502,18 @@ export const dashboardConfig = {
   // /api/it/status (schema in docs/it-agent-payload.md) with header x-it-secret = env IT_AGENT_SECRET
   // ============================================================
   it: {
+    // "أهم الأجهزة": كل جهاز هنا = جزء في الدايرة بلونه، وسطر تحتها. زوّد جهاز = جزء جديد لوحده
+    // name = الاسم اللي يظهر، type = الأيقونة (fingerprint بصمة / pc كمبيوتر / printer طابعة / nvr / scale ميزان / other)
+    // ip = عنوان الجهاز: فاضي = يظهر "متصل" مؤقتا. لما تكتب الـ ip والإيجنت يبعت الجهاز ده، الحالة بتبقى حقيقية
+    //      (مفصول = الجزء بيحمر وبينبض، والسطر يكتب "مفصول من X د")
+    // color = لون الجزء والسطر
+    // "أهم الأجهزة": each device here = one coloured ring segment plus a row under the ring; add one = a new segment.
+    // ip empty = shown as online (placeholder); once set and the agent reports that IP, the real status is used
+    criticalDevices: [
+      { name: "البصمة", type: "fingerprint", ip: "", color: "#A78BFA" }, // بنفسجي - violet
+      { name: "كمبيوتر IT", type: "pc", ip: "", color: "#3B82F6" }, // أزرق - blue
+      { name: "الطابعة", type: "printer", ip: "", color: "#F97316" }, // برتقالي - orange
+    ] as { name: string; type: "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other"; ip: string; color: string }[],
     agentOfflineSeconds: 120, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
     refreshSeconds: 15, // الشاشة بتسأل كل 15 ثانية - the screen asks every 15 s
     // الإيجنت المحلي: المتصفح بيجيب {cameraBaseUrl}/cameras.json والصور {cameraBaseUrl}/cameras/{id}/snapshot.jpg على طول
