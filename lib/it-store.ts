@@ -13,9 +13,28 @@ const EVENT_DAYS = 3; // والأحداث الأقدم من 3 أيام بتتم�
 type Stored = { receivedAt: string; data: ItSnapshot };
 
 // ===== التخزين: Upstash Redis REST (نفس الـ API بتاع Vercel KV) - storage: Upstash Redis REST (same API as Vercel KV) =====
+// تكامل Upstash في Vercel بيضيف KV_REST_API_URL / KV_REST_API_TOKEN (أو UPSTASH_REDIS_REST_*)، وأحيانا بـ prefix
+// زي STORAGE_KV_REST_API_URL لو اتختار prefix وقت الربط. أي واحد منهم بيشتغل (التوكن اللي read-only مبيتاخدش)
+// The Vercel Upstash integration adds KV_REST_API_URL / KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_*), sometimes with a
+// custom prefix such as STORAGE_KV_REST_API_URL. Any of them works (the read-only token is never used)
+function envEndingWith(suffix: string): string | undefined {
+  const key = Object.keys(process.env).find((k) => k.endsWith(suffix) && process.env[k]);
+  return key ? process.env[key] : undefined;
+}
+
 function redisSettings() {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  const url = (
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    envEndingWith("UPSTASH_REDIS_REST_URL") ||
+    envEndingWith("KV_REST_API_URL")
+  )?.trim();
+  const token = (
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    envEndingWith("UPSTASH_REDIS_REST_TOKEN") ||
+    envEndingWith("KV_REST_API_TOKEN")
+  )?.trim();
   return url && token ? { url: url.replace(/\/+$/, ""), token } : null;
 }
 
