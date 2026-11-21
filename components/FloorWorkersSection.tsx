@@ -210,7 +210,7 @@ function NameChip({
   return (
     <span
       data-chip={id}
-      className={`block w-full min-w-0 text-start rounded-md whitespace-nowrap overflow-hidden text-ellipsis font-bold ${className}`}
+      className={`block w-fit max-w-full min-w-0 justify-self-start text-start rounded-md whitespace-nowrap overflow-hidden text-ellipsis font-bold ${className}`}
       style={{
         gridColumn: wide ? "1 / -1" : undefined,
         fontSize: `${fontSize}px`,
@@ -248,11 +248,12 @@ function OldChip({ name, text }: { name: string; text: WorkerSizes }) {
   );
 }
 
-// ليستة أسامي: كل اسم في سطر لوحده بعرض الكارت، أو عمودين لو مش واخدة مكانها (والاسم اللي مش واخد مكانه في نص
-// السطر بياخد السطر كله، والقصيرين بيملوا الفراغات) - a names list: one name per row at full width, or two columns
-// when they don't fit (a name too long for half a row takes the whole row; short ones fill the gaps)
-function NameList({ prefix, people, cols, wide, chipClass, text, fontSize }: {
+// ليستة أسامي: كل اسم في سطر لوحده (الكبسولة على قد الاسم)، أو عمودين لو مش واخدة مكانها (والاسم اللي مش واخد مكانه في نص
+// السطر بياخد السطر كله، والقصيرين بيملوا الفراغات) - a names list: one name per row, or two columns
+// when they don't fit; each chip only as wide as its name (a name too long for half a row takes the whole row; short ones fill the gaps)
+function NameList({ prefix, people, cols, wide, chipClass, text, fontSize, wrap = false }: {
   prefix: string;
+  wrap?: boolean; // جنب بعض لو فيه مكان (الغايبين) - side by side when there is room (the absent names)
   people: AttendanceGroup["people"];
   cols: number;
   wide: string[];
@@ -261,7 +262,10 @@ function NameList({ prefix, people, cols, wide, chipClass, text, fontSize }: {
   fontSize: number;
 }) {
   return (
-    <div className="grid gap-1 min-w-0" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoFlow: "row dense" }}>
+    <div
+      className={wrap ? "flex flex-wrap content-start gap-1 min-w-0" : "grid gap-1 min-w-0"}
+      style={wrap ? undefined : { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoFlow: "row dense" }}
+    >
       {people.map((person, index) => (
         <NameChip
           key={index}
@@ -270,8 +274,8 @@ function NameList({ prefix, people, cols, wide, chipClass, text, fontSize }: {
           className={chipClass(person)}
           text={text}
           fontSize={fontSize}
-          wide={cols > 1 && wide.includes(`${prefix}${index}`)}
-          compact={cols > 1}
+          wide={!wrap && cols > 1 && wide.includes(`${prefix}${index}`)}
+          compact={!wrap && cols > 1}
         />
       ))}
     </div>
@@ -336,7 +340,7 @@ function GroupBox({
     // Two columns and not too tall: the most-cut name takes the whole row (one at a time), then measure again
     if (candidates[step.index].cols > 1 && !tooTall) {
       const next = cutChips
-        .filter((chip) => chip.dataset.chip && !step.wide.includes(chip.dataset.chip))
+        .filter((chip) => chip.dataset.chip?.startsWith("p") && !step.wide.includes(chip.dataset.chip))
         .sort((a, b) => b.scrollWidth - b.clientWidth - (a.scrollWidth - a.clientWidth))[0];
       if (next) return setStep({ ...step, wide: [...step.wide, next.dataset.chip!] });
     }
@@ -419,7 +423,7 @@ function GroupBox({
                 <X className="w-4 h-4" strokeWidth={3} />
                 غائب
               </p>
-              <NameList prefix="a" people={absent} cols={cols} wide={step.wide} chipClass={() => "bg-statusRed/15 text-statusRed"} text={text} fontSize={fontSize} />
+              <NameList prefix="a" wrap people={absent} cols={cols} wide={step.wide} chipClass={() => "bg-statusRed/15 text-statusRed"} text={text} fontSize={fontSize} />
             </>
           )}
         </div>
