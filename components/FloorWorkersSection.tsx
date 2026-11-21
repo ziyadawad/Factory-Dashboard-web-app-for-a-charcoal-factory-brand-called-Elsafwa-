@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Factory,
   Package,
@@ -191,23 +191,31 @@ function GroupHeader({
 
 // كبسولة اسم - a name chip
 function NameChip({
+  id,
   name,
   className,
   text,
   fontSize,
+  wide = false,
+  compact = false,
 }: {
+  id: string;
   name: string;
   className: string;
   text: WorkerSizes;
   fontSize: number;
+  wide?: boolean; // في العمودين: اسم طويل واخد السطر كله - two columns: a long name taking the whole row
+  compact?: boolean; // في العمودين - in two columns
 }) {
   return (
     <span
-      data-chip
-      className={`rounded-md max-w-full whitespace-nowrap overflow-hidden text-ellipsis font-bold ${className}`}
+      data-chip={id}
+      className={`block w-full min-w-0 text-start rounded-md whitespace-nowrap overflow-hidden text-ellipsis font-bold ${className}`}
       style={{
+        gridColumn: wide ? "1 / -1" : undefined,
         fontSize: `${fontSize}px`,
-        padding: `${text.workerChipPaddingY}px ${text.workerChipPaddingX}px`,
+        // عمودين: مسافة جانبية أقل عشان الاسم ياخد مكانه - two columns: less side padding so the name fits
+        padding: `${text.workerChipPaddingY}px ${compact ? Math.max(2, Math.floor(text.workerChipPaddingX / 2)) : text.workerChipPaddingX}px`,
         lineHeight: text.workerChipLineHeight,
       }}
     >
@@ -216,10 +224,64 @@ function NameChip({
   );
 }
 
-// قسم: العنوان، الحاضرين (والإجازة رمادي)، وتحتهم "غائب" بالأحمر. مفيش scroll: لو الأسامي مش واخدة مكانها
-// خط القسم ده بس بيصغر لحد minWorkerChipFontSize
-// A section box: header, present (on leave in gray), then the red "غائب" list. No scroll: if the names don't
-// fit, only this box's chip font shrinks, down to minWorkerChipFontSize
+// الاسم متقصوص ("…")؟ بنقيس عرض الكلام نفسه بالظبط (scrollWidth بيتقرّب لرقم صحيح فممكن يفوّت كسور البكسل)
+// Is the name cut ("…")? Measures the text's exact width (scrollWidth rounds to whole pixels and can miss fractions)
+function isCut(chip: HTMLElement): boolean {
+  const range = document.createRange();
+  range.selectNodeContents(chip);
+  const textWidth = range.getBoundingClientRect().width;
+  const style = getComputedStyle(chip);
+  const room = chip.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  return textWidth > room + 0.25;
+}
+
+// الكبسولة القديمة (جنب بعض) في النسخة المخفية اللي بتحافظ على مقاس الكارت - the old side-by-side chip, used only
+// in the invisible copy that keeps the card sizes unchanged
+function OldChip({ name, text }: { name: string; text: WorkerSizes }) {
+  return (
+    <span
+      className="rounded-md max-w-full whitespace-nowrap overflow-hidden font-bold"
+      style={{ fontSize: `${text.workerChipFontSize}px`, padding: `${text.workerChipPaddingY}px ${text.workerChipPaddingX}px`, lineHeight: text.workerChipLineHeight }}
+    >
+      {toEnglishDigits(name)}
+    </span>
+  );
+}
+
+// ليستة أسامي: كل اسم في سطر لوحده بعرض الكارت، أو عمودين لو مش واخدة مكانها (والاسم اللي مش واخد مكانه في نص
+// السطر بياخد السطر كله، والقصيرين بيملوا الفراغات) - a names list: one name per row at full width, or two columns
+// when they don't fit (a name too long for half a row takes the whole row; short ones fill the gaps)
+function NameList({ prefix, people, cols, wide, chipClass, text, fontSize }: {
+  prefix: string;
+  people: AttendanceGroup["people"];
+  cols: number;
+  wide: string[];
+  chipClass: (person: AttendanceGroup["people"][number]) => string;
+  text: WorkerSizes;
+  fontSize: number;
+}) {
+  return (
+    <div className="grid gap-1 min-w-0" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoFlow: "row dense" }}>
+      {people.map((person, index) => (
+        <NameChip
+          key={index}
+          id={`${prefix}${index}`}
+          name={person.name}
+          className={chipClass(person)}
+          text={text}
+          fontSize={fontSize}
+          wide={cols > 1 && wide.includes(`${prefix}${index}`)}
+          compact={cols > 1}
+        />
+      ))}
+    </div>
+  );
+}
+
+// قسم: العنوان، الحاضرين (والإجازة رمادي)، وتحتهم "غائب" بالأحمر - كل اسم في سطر لوحده. مفيش scroll: لو الأسامي
+// مش واخدة مكانها بتبقى عمودين، ولو لسه، خط القسم ده بس بيصغر لحد minWorkerChipFontSize
+// A section box: header, present (on leave in gray), then the red "غائب" list, one name per row. No scroll: if the
+// names don't fit they go to two columns, and if they still don't, only this box's font shrinks (minWorkerChipFontSize)
 function GroupBox({
   group,
   icon,
@@ -240,18 +302,50 @@ function GroupBox({
   const absent = absentPeople(group);
   const chipsRef = useRef<HTMLDivElement>(null);
 
-  // نبدأ بالحجم العادي كل ما الأسامي أو المقاس يتغير، ونصغر خطوة خطوة لحد ما كله يبان
-  // Start at the normal size whenever the names or the screen change, then shrink step by step until all fit
-  const [fontSize, setFontSize] = useState(text.workerChipFontSize);
+  // الترتيب اللي بنجربه: عمود واحد بالحجم العادي، بعدين عمودين والخط بيصغر لحد minFontSize، بعدين عمود واحد والخط
+  // بيصغر. أول ترتيب الأسامي فيه كلها باينة ومتقصتش بيكسب؛ لو مفيش، اللي مفيهوش طول زيادة وفيه أقل "…"
+  // Layouts tried in order: one column at the normal size, then two columns shrinking to minFontSize, then one column
+  // shrinking. The first where every name shows uncut wins; if none, the one not too tall with the fewest "…" names
+  const base = text.workerChipFontSize;
+  const candidates = useMemo(() => {
+    const list = [{ cols: 1, fontSize: base }];
+    for (let f = base; f >= minFontSize; f--) list.push({ cols: 2, fontSize: f });
+    for (let f = base - 1; f >= minFontSize; f--) list.push({ cols: 1, fontSize: f });
+    return list;
+  }, [base, minFontSize]);
+  // wide = الأسامي اللي واخدة السطر كله في العمودين - wide = names spanning both columns (two-column layouts)
+  const [step, setStep] = useState<{ index: number; done: boolean; wide: string[] }>({ index: 0, done: false, wide: [] });
+  // أحسن ترتيب مفيهوش طول زيادة (أقل أسامي متقصوصة) - the best layout that is not too tall (fewest cut names)
+  const bestNotTall = useRef<{ index: number; cut: number; wide: string[] } | null>(null);
   const namesKey = group.people.map((p) => `${p.status}:${p.name}`).join("|");
-  useIsomorphicLayoutEffect(() => setFontSize(text.workerChipFontSize), [text.workerChipFontSize, namesKey, round]);
+  useIsomorphicLayoutEffect(() => {
+    bestNotTall.current = null;
+    setStep({ index: 0, done: false, wide: [] });
+  }, [base, namesKey, round]);
   useIsomorphicLayoutEffect(() => {
     const el = chipsRef.current;
-    if (!el || fontSize <= minFontSize) return;
+    if (!el || step.done) return;
+    const tooTall = el.scrollHeight > el.clientHeight + 1;
     const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-chip]"));
-    const overflows = el.scrollHeight > el.clientHeight || chips.some((chip) => chip.scrollWidth > chip.clientWidth);
-    if (overflows) setFontSize(Math.max(minFontSize, fontSize - 1));
+    const cutChips = chips.filter(isCut);
+    const cut = cutChips.length;
+    if (!tooTall && cut === 0) return setStep({ ...step, done: true });
+    // أي ترتيب مفيهوش طول زيادة بيتسجل (بأقل أسامي متقصوصة) - every layout that is not too tall is remembered (fewest cut)
+    if (!tooTall && (!bestNotTall.current || cut < bestNotTall.current.cut)) bestNotTall.current = { index: step.index, cut, wide: step.wide };
+    // عمودين ومفيش طول زيادة: أطول اسم متقصوص ياخد السطر كله (واحد واحد)، ونقيس تاني
+    // Two columns and not too tall: the most-cut name takes the whole row (one at a time), then measure again
+    if (candidates[step.index].cols > 1 && !tooTall) {
+      const next = cutChips
+        .filter((chip) => chip.dataset.chip && !step.wide.includes(chip.dataset.chip))
+        .sort((a, b) => b.scrollWidth - b.clientWidth - (a.scrollWidth - a.clientWidth))[0];
+      if (next) return setStep({ ...step, wide: [...step.wide, next.dataset.chip!] });
+    }
+    if (step.index + 1 < candidates.length) return setStep({ index: step.index + 1, done: false, wide: [] });
+    // مفيش ترتيب كامل: اللي فيه أقل أسامي متقصوصة ("…")، وإلا الأصغر - no perfect layout: the one with the fewest cut names, else the smallest
+    const best = bestNotTall.current;
+    setStep(best ? { index: best.index, done: true, wide: best.wide } : { index: candidates.length - 1, done: true, wide: step.wide });
   });
+  const { cols, fontSize } = candidates[Math.min(step.index, candidates.length - 1)];
   const textStyle = { fontSize: `${fontSize}px` };
 
   return (
@@ -275,19 +369,41 @@ function GroupBox({
           لا يوجد
         </p>
       ) : (
-        <div ref={chipsRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
-          {shown.length > 0 ? (
+        <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
+          {/* مقاس الكارت زي ما كان: نسخة مخفية من الكبسولات القديمة (جنب بعض) هي اللي بتحدد طول القسم في الشبكة،
+              والليستة الحقيقية فوقها. Card sizes unchanged: an invisible copy of the old side-by-side chips sets the
+              box's height in the grid; the real list sits on top of it */}
+          <div aria-hidden className="invisible pointer-events-none">
             <div className="flex flex-wrap content-start gap-1 min-w-0">
               {shown.map((person, index) => (
-                <NameChip
-                  key={index}
-                  name={person.name}
-                  className={person.status === "leave" ? "bg-gray-500/15 text-gray-300" : "bg-brandOrange/15 text-white"}
-                  text={text}
-                  fontSize={fontSize}
-                />
+                <OldChip key={index} name={person.name} text={text} />
               ))}
             </div>
+            {absent.length > 0 && (
+              <>
+                <p className="flex items-center gap-0.5 font-bold whitespace-nowrap mt-1 mb-0.5" style={{ fontSize: `${text.workerAbsentLabelFontSize}px` }}>
+                  <X className="w-4 h-4" strokeWidth={3} />
+                  غائب
+                </p>
+                <div className="flex flex-wrap content-start gap-1 min-w-0">
+                  {absent.map((person, index) => (
+                    <OldChip key={index} name={person.name} text={text} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        <div ref={chipsRef} data-names data-cols={cols} className="absolute inset-0 min-w-0 overflow-hidden">
+          {shown.length > 0 ? (
+            <NameList
+              prefix="p"
+              people={shown}
+              cols={cols}
+              wide={step.wide}
+              chipClass={(person) => (person.status === "leave" ? "bg-gray-500/15 text-gray-300" : "bg-brandOrange/15 text-white")}
+              text={text}
+              fontSize={fontSize}
+            />
           ) : (
             <p className="text-gray-400" style={textStyle}>
               لا يوجد
@@ -303,19 +419,10 @@ function GroupBox({
                 <X className="w-4 h-4" strokeWidth={3} />
                 غائب
               </p>
-              <div className="flex flex-wrap content-start gap-1 min-w-0">
-                {absent.map((person, index) => (
-                  <NameChip
-                    key={index}
-                    name={person.name}
-                    className="bg-statusRed/15 text-statusRed"
-                    text={text}
-                    fontSize={fontSize}
-                  />
-                ))}
-              </div>
+              <NameList prefix="a" people={absent} cols={cols} wide={step.wide} chipClass={() => "bg-statusRed/15 text-statusRed"} text={text} fontSize={fontSize} />
             </>
           )}
+        </div>
         </div>
       )}
     </div>

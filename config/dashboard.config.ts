@@ -1107,7 +1107,7 @@ export const dashboardConfig = {
       // لو قسم لسه مش واخد مكانه، خط الأسامي فيه هو بس بيصغر لحد minWorkerChipFontSize، والأسامي عمرها ما بتستخبى
       // Heights follow each section's names (present + absent), no scroll anywhere: if a section still doesn't
       // fit, only that section's chip font shrinks, down to minWorkerChipFontSize; names are never hidden
-      minWorkerChipFontSize: 13, // أصغر حجم لأسامي العمال - smallest worker name size (px)
+      minWorkerChipFontSize: 14, // أصغر حجم لأسامي العمال - smallest worker name size (px)
 
       // مقاسات الكلام جوه "حضور عمال" (بكسل) - text sizes inside "حضور عمال" (px)
       workerChipFontSize: 20, // حجم أسامي العمال (حاضر وغائب) - لو كتير بتعمل scroll جوه الكارت - worker name chips (present and absent)
@@ -1127,7 +1127,7 @@ export const dashboardConfig = {
       compactMaxWidth: 1599,
       compact: {
         // أصغر حجم لأسامي العمال على الشاشة الضيقة - smallest worker name size on narrow screens (px)
-        minWorkerChipFontSize: 12,
+        minWorkerChipFontSize: 14,
         workerChipFontSize: 17,
         workerChipPaddingX: 4,
         workerChipPaddingY: 0,
