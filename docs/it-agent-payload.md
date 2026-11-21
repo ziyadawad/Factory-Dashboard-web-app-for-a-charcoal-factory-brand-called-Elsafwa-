@@ -11,8 +11,8 @@ Content-Type: application/json
 x-it-secret: <IT_AGENT_SECRET>
 ```
 
-- **كل 30 ثانية** (أو أول ما حاجة تتغير). لو مفيش تحديث **دقيقتين** الصفحة بتكتب "الإيجنت مش متصل".
-  Send **every 30 s** (or on any change). After **2 minutes** without an update the page shows the agent as offline.
+- **مرة كل دقيقتين بالكتير**: ابعت لما حاجة تتغير بس، أو كل **دقيقتين** كنبضة (heartbeat) لو مفيش تغيير. السيرفر بيرفض أي تحديث أسرع من دقيقتين بـ `429` (والهيدر `Retry-After` = كام ثانية تستنى). لو مفيش تحديث **5 دقايق** الصفحة بتكتب "الإيجنت مش متصل".
+  **At most one POST per 2 minutes**: send only when something changed, or every **2 minutes** as a heartbeat when nothing did. The server refuses anything faster with `429` (`Retry-After` = seconds to wait). After **5 minutes** without an update the page shows the agent as offline.
 - **كل تحديث = الحالة كاملة**: `internet` و`routers` و`devices` و`cameras` بيتبدلوا بالموجود في آخر تحديث (أي حاجة مش مبعوتة بتختفي من الصفحة).
   **Every update is the full state**: `internet`, `routers`, `devices` and `cameras` are replaced by the latest update (anything left out disappears from the page).
 - **`events` بس بتتجمع**: السيرفر بيضيف الجديد على القديم بالـ `id` (من غير تكرار)، وبيحتفظ بآخر 200 حدث وآخر 3 أيام. فابعت الأحداث الجديدة (أو آخر شوية) — نفس الـ `id` مش بيتكرر.
@@ -28,6 +28,7 @@ x-it-secret: <IT_AGENT_SECRET>
 | `400` | JSON غلط أو مفيش ولا جزء من الأجزاء — invalid JSON or no known section |
 | `401` | `x-it-secret` غلط أو مش موجود — wrong or missing secret |
 | `413` | أكبر من 256 KB — too large |
+| `429` | أسرع من مرة كل دقيقتين، استنى `Retry-After` ثانية — faster than once per 2 minutes; wait `Retry-After` seconds |
 | `503` | `IT_AGENT_SECRET` مش متظبط على السيرفر — the secret is not set on the server |
 
 ## الشكل (Schema)

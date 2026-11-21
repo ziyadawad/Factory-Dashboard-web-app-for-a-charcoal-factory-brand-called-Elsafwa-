@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { accountDetails, UnknownAccountError } from "@/lib/account-details";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await accountDetails(account, month), {
-      headers: { "Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "max-age=30" },
+      headers: cdnCache(),
     });
   } catch (error) {
     if (error instanceof UnknownAccountError) {

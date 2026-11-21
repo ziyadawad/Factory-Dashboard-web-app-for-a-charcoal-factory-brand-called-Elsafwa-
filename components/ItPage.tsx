@@ -2,6 +2,7 @@
 
 import { createContext, CSSProperties, ReactNode, RefObject, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
+import { usePolling } from "@/lib/usePolling";
 import {
   Boxes,
   Camera,
@@ -1014,13 +1015,11 @@ function EventRow({ event }: { event: ItEvent }) {
 }
 
 // ===== الصفحة - the page =====
-export default function ItPage({ onOverlayChange }: { onOverlayChange?: (open: boolean) => void }) {
-  const { data: status, error } = useSWR<ItStatus>("/api/it/status", fetcher, {
-    refreshInterval: cfg.refreshSeconds * 1000,
-    revalidateOnFocus: true,
+// active: صفحة IT على الشاشة (غير كده مفيش طلبات لـ Vercel) - the IT page is on screen (otherwise no Vercel requests)
+export default function ItPage({ active = true, onOverlayChange }: { active?: boolean; onOverlayChange?: (open: boolean) => void }) {
+  const { data: status, error } = usePolling<ItStatus>("/api/it/status", fetcher, cfg.refreshSeconds * 1000, active, {
     revalidateOnReconnect: true,
     refreshWhenOffline: true,
-    errorRetryInterval: 15_000,
   });
   const now = useNow(10_000);
 

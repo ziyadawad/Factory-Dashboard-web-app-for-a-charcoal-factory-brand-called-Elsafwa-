@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { IT_SECRET_ENV_NAME, ItPayloadError, itAgentSecret, loadItStatus, sanitizePayload, saveItStatus, secretMatches } from "@/lib/it-store";
+import { IT_SECRET_ENV_NAME, ItPayloadError, itAgentSecret, itPostWaitSeconds, loadItStatus, sanitizePayload, saveItStatus, secretMatches } from "@/lib/it-store";
+import { dashboardConfig } from "@/config/dashboard.config";
 import { NO_STORE, salaryAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,15 @@ export async function POST(request: NextRequest) {
   }
   if (!secretMatches(request.headers.get("x-it-secret"))) {
     return NextResponse.json({ error: "bad or missing x-it-secret" }, { status: 401, headers: NO_STORE });
+  }
+  // تحديث واحد بس كل it.agentMinPostSeconds (دقيقتين): الأسرع بيترفض بـ 429 من غير ما يتخزن
+  // One update per it.agentMinPostSeconds (2 minutes): anything faster is refused with 429 and not stored
+  const wait = await itPostWaitSeconds();
+  if (wait > 0) {
+    return NextResponse.json(
+      { error: `too many updates: at most one per ${dashboardConfig.it.agentMinPostSeconds} s`, retryAfterSeconds: wait },
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(wait) } }
+    );
   }
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > MAX_BYTES) {

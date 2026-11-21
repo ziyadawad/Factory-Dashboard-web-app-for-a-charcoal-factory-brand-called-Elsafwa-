@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { activityDetails, DETAIL_DOCTYPES, UnknownDocError } from "@/lib/activity-details";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await activityDetails(doctype, name), {
-      headers: { ...NO_STORE, "Vercel-CDN-Cache-Control": "max-age=30" },
+      headers: cdnCache(),
     });
   } catch (error) {
     if (error instanceof UnknownDocError) return NextResponse.json({ error: "not found" }, { status: 404, headers: NO_STORE });

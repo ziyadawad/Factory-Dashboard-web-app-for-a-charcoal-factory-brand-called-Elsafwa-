@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import useSWR from "swr";
+import { usePolling } from "@/lib/usePolling";
 import Header from "@/components/Header";
 import AttendanceSection from "@/components/AttendanceSection";
 import StockSection from "@/components/StockSection";
@@ -69,43 +69,41 @@ function pageFromUrl(): number {
 }
 
 export default function Dashboard() {
-  const { data: serverData, error } = useSWR<DashboardData>(
-    "/api/dashboard",
-    fetcher,
-    {
-      // بيسأل كل refreshSeconds من غير reload للصفحة (الداتا القديمة فاضلة لحد ما الجديدة توصل، فمفيش رمشة)
-      // Polls every refreshSeconds without reloading the page (old data stays until the new data arrives: no flicker)
-      refreshInterval: REFRESH_MS,
-      // النت رجع أو الشاشة رجعلها الفوكس = اسأل حالا - internet back or window focused = refetch right away
-      revalidateOnReconnect: true,
-      revalidateOnFocus: true,
-      // يفضل يسأل وهو أوفلاين: الطلب بيفشل فتظهر "غير متصل" والأرقام القديمة فاضلة - keep polling offline so the badge shows
-      refreshWhenOffline: true,
-      dedupingInterval: 2000,
-      // لو الطلب فشل: إعادة كل ~15 ثانية وبتطول لحد دقيقة، ومش بتقف أبدا - on failure retry from ~15 s backing off to 60 s, forever
-      errorRetryInterval: 15_000,
-      onErrorRetry: (_error, _key, _config, revalidate, { retryCount }) => {
-        const delay = Math.min(60_000, 15_000 * 2 ** Math.min(retryCount - 1, 2));
-        setTimeout(() => revalidate({ retryCount }), delay);
-      },
-    }
-  );
+  // الصفحة الحالية - current page index (data stays in SWR, so switching never refetches)
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageId = PAGES[pageIndex]?.id;
+  // تفاصيل الإنتاج مفتوحة - the production details panel target
+  const [productionTarget, setProductionTarget] = useState<ProductionTarget | null>(null);
+
+  // /api/dashboard بيغذي كل الصفحات ما عدا الإنتاج و IT، فبيقف وهما على الشاشة (أو والتاب مستخبي)
+  // Polls every refreshSeconds without reloading (old data stays until new data arrives). It feeds every page except
+  // production and IT, so it stops while those are on screen, and whenever the tab is hidden
+  const { data: serverData, error } = usePolling<DashboardData>("/api/dashboard", fetcher, REFRESH_MS, pageId !== "production" && pageId !== "it", {
+    // النت رجع = اسأل حالا - internet back = refetch right away
+    revalidateOnReconnect: true,
+    // يفضل يسأل وهو أوفلاين: الطلب بيفشل فتظهر "غير متصل" والأرقام القديمة فاضلة - keep polling offline so the badge shows
+    refreshWhenOffline: true,
+    // لو الطلب فشل: إعادة كل ~15 ثانية وبتطول لحد دقيقة، ومش بتقف أبدا - on failure retry from ~15 s backing off to 60 s, forever
+    onErrorRetry: (_error, _key, _config, revalidate, { retryCount }) => {
+      const delay = Math.min(60_000, 15_000 * 2 ** Math.min(retryCount - 1, 2));
+      setTimeout(() => revalidate({ retryCount }), delay);
+    },
+  });
 
   // كل كارت بيحتفظ بآخر قيمة نجحت لوحده - every card keeps its own last good value
   const { view: data, cards } = useLastGood(serverData);
 
-  // الإنتاج والأفران (صفحة الإنتاج + كارت الرئيسية): طلب لوحده كل 10 ثواني، ولو فشل بتفضل آخر داتا مع "غير متصل"
-  // Production (its page + the main card): its own request every 10 s; on failure the last data stays, marked offline
-  const { data: productionRaw, error: productionError } = useSWR<ProductionData>("/api/production", fetcher, {
-    refreshInterval: PRODUCTION_REFRESH_MS,
-    revalidateOnReconnect: true,
-    revalidateOnFocus: true,
-    refreshWhenOffline: true,
-    dedupingInterval: 2000,
-    errorRetryInterval: 15_000,
-  });
+  // الإنتاج والأفران: طلب لوحده كل production.refreshSeconds وصفحة الإنتاج ظاهرة بس (أو تفاصيلها مفتوحة)، ولو فشل بتفضل آخر داتا مع "غير متصل"
+  // Production: its own request every production.refreshSeconds, only while its page is shown (or its panel is open);
+  // on failure the last data stays, marked offline
+  const { data: productionRaw, error: productionError } = usePolling<ProductionData>(
+    "/api/production",
+    fetcher,
+    PRODUCTION_REFRESH_MS,
+    pageId === "production" || productionTarget !== null,
+    { revalidateOnReconnect: true, refreshWhenOffline: true }
+  );
   const production = productionRaw ? (productionError ? { ...productionRaw, offline: true } : productionRaw) : null;
-  const [productionTarget, setProductionTarget] = useState<ProductionTarget | null>(null);
   const closeProduction = useCallback(() => setProductionTarget(null), []);
 
   const [flashSection, setFlashSection] = useState<string | null>(null);
@@ -114,8 +112,6 @@ export default function Dashboard() {
   const { slideMs, slideDistance } = dashboardConfig.sizes.pageNav;
   const autoRotate = dashboardConfig.pages.autoRotate;
 
-  // الصفحة الحالية - current page index (data stays in SWR, so switching never refetches)
-  const [pageIndex, setPageIndex] = useState(0);
   // بيزيد مع كل تقليب عشان العداد يبدأ من الأول حتى لو الصفحة هي هي - bumps on every switch so the timer restarts
   const [switchCount, setSwitchCount] = useState(0);
   // اتجاه آخر تقليب: 1 = الجاية (من تحت)، -1 = اللي فاتت (من فوق) - last switch direction: 1 next, -1 previous
@@ -315,7 +311,7 @@ export default function Dashboard() {
             </div>
             {/* اللي بيحصل دلوقتي (بيفضل شغال حتى والصفحة متقلبة) - the live feed (keeps running while pages rotate) */}
             <div className="min-h-0">
-              <ActivityFeed onDetailsChange={setActivityDetailsOpen} />
+              <ActivityFeed active={pageId === "main"} onDetailsChange={setActivityDetailsOpen} />
             </div>
           </div>
         );
@@ -333,7 +329,7 @@ export default function Dashboard() {
             onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
           />;
       case "it":
-        return <ItPage onOverlayChange={setItViewerOpen} />;
+        return <ItPage active={pageId === "it"} onOverlayChange={setItViewerOpen} />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>

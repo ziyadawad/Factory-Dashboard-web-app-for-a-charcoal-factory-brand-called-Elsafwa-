@@ -218,6 +218,17 @@ export async function saveItStatus(snapshot: ItSnapshot): Promise<{ receivedAt: 
   return { receivedAt: stored.receivedAt, storage };
 }
 
+// كام ثانية لازم الإيجنت يستنى قبل التحديث الجاي (0 = يبعت دلوقتي). 10 ثواني سماح عشان فرق الساعة / تأخير النت
+// Seconds the agent must still wait before its next update (0 = may post now). 10 s grace for clock / network jitter
+const POST_GRACE_SECONDS = 10;
+export async function itPostWaitSeconds(): Promise<number> {
+  const stored = await readStored();
+  if (!stored) return 0;
+  const minMs = (dashboardConfig.it.agentMinPostSeconds - POST_GRACE_SECONDS) * 1000;
+  const waitMs = Date.parse(stored.receivedAt) + minMs - Date.now();
+  return waitMs > 0 ? Math.ceil(waitMs / 1000) : 0;
+}
+
 export async function loadItStatus(): Promise<ItStatus> {
   const stored = await readStored();
   const offlineMs = dashboardConfig.it.agentOfflineSeconds * 1000;

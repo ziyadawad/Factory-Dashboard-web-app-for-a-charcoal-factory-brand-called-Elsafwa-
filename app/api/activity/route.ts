@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { activity } from "@/lib/activity";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -16,10 +17,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await activity(since), {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Vercel-CDN-Cache-Control": `max-age=${dashboardConfig.activity.cacheSeconds}`,
-      },
+      headers: cdnCache(dashboardConfig.activity.cacheSeconds),
     });
   } catch (error) {
     console.error("[erp] activity failed:", error instanceof Error ? error.message : error);

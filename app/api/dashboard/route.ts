@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { getDashboardData } from "@/lib/data-source";
 import { DashboardData } from "@/lib/types";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -39,11 +40,8 @@ export async function GET() {
     const data = await freshData();
 
     return NextResponse.json(data, {
-      headers: {
-        // المتصفح دايما يسأل، والـ CDN بيحتفظ بالرد CACHE_SECONDS - the browser always asks; the CDN keeps it CACHE_SECONDS
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Vercel-CDN-Cache-Control": `max-age=${CACHE_SECONDS}`,
-      },
+      // المتصفح دايما يسأل الـ CDN، والـ CDN بيحتفظ بالرد CACHE_SECONDS - the browser asks the CDN; the CDN keeps it CACHE_SECONDS
+      headers: cdnCache(CACHE_SECONDS),
     });
   } catch (error) {
     console.error("Error in dashboard API route:", error);

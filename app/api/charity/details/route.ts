@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { charityDetails, UnknownFundError } from "@/lib/charity-details";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await charityDetails(fund, month), {
-      headers: { ...NO_STORE, "Vercel-CDN-Cache-Control": "max-age=30" },
+      headers: cdnCache(),
     });
   } catch (error) {
     if (error instanceof UnknownFundError) return NextResponse.json({ error: "unknown fund" }, { status: 404, headers: NO_STORE });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { stockDetails, UnknownStockItemError } from "@/lib/stock-details";
 import { StockGroup } from "@/lib/types";
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await stockDetails(group, name, variant, month), {
-      headers: { ...NO_STORE, "Vercel-CDN-Cache-Control": "max-age=60" },
+      headers: cdnCache(),
     });
   } catch (error) {
     if (error instanceof UnknownStockItemError) {

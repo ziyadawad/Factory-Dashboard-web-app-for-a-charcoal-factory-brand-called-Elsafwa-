@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { duplicatesReport } from "@/lib/duplicates";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "bad scope" }, { status: 400, headers: NO_STORE });
   }
   try {
-    return NextResponse.json(await duplicatesReport(scope), { headers: { ...NO_STORE, "Vercel-CDN-Cache-Control": "max-age=60" } });
+    return NextResponse.json(await duplicatesReport(scope), { headers: cdnCache(300) });
   } catch (error) {
     console.error("[erp] duplicates failed:", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "ERPNext failed" }, { status: 502, headers: NO_STORE });

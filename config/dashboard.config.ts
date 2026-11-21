@@ -242,11 +242,13 @@ export const dashboardConfig = {
   // ============================================================
 
   erp: {
-    // كل 30 ثانية الشاشة بتجيب البيانات الجديدة من غير ما الصفحة تعمل reload (الشاشة الكاملة بتفضل شغالة)
-    // Every 30 s the screen fetches fresh data without reloading the page (fullscreen stays on)
-    refreshSeconds: 30,
-    // السيرفر بيكلم ERPNext مرة واحدة بالكتير كل الثواني دي، وفي النص بيرجع آخر نتيجة - the server calls ERPNext at most once per this many seconds
-    cacheSeconds: 10,
+    // كل 60 ثانية الشاشة بتجيب البيانات الجديدة من غير ما الصفحة تعمل reload (الشاشة الكاملة بتفضل شغالة)
+    // والتاب المستخبي أو صفحة مش ظاهرة (IT / الإنتاج) مبيسألش خالص - a hidden tab or an off-screen page never polls
+    // Every 60 s the screen fetches fresh data without reloading the page (fullscreen stays on)
+    refreshSeconds: 60,
+    // السيرفر (والـ CDN) بيكلم ERPNext مرة واحدة بالكتير كل الثواني دي (أقل حاجة 60 عشان حد Vercel Hobby)
+    // The server (and the CDN) calls ERPNext at most once per this many seconds (60 minimum: Vercel Hobby limits)
+    cacheSeconds: 60,
 
     treasury: {
       balance: { source: "erp", account: "1110 - الخزينة - AC" } as ConfigErpField, // رصيد الخزنة
@@ -444,8 +446,8 @@ export const dashboardConfig = {
   // ============================================================
 
   production: {
-    refreshSeconds: 10, // الشاشة بتسأل كل 10 ثواني - the screen asks every 10 s
-    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    refreshSeconds: 30, // الشاشة بتسأل كل 30 ثانية (وصفحة الإنتاج ظاهرة بس) - every 30 s, only while the production page is shown
+    cacheSeconds: 60, // السيرفر والـ CDN بيكلموا ERPNext مرة كل 60 ثانية بالكتير - ERPNext is asked at most once per 60 s
     // رسم الإنتاج بالساعة النهارده: من الساعة دي لحد الساعة دي (طرحة قبل/بعد كده بتدخل في أول/آخر عمود)
     // Today's hourly chart: from this hour to this hour (exits outside go into the first / last bar)
     hourFrom: 6,
@@ -456,9 +458,9 @@ export const dashboardConfig = {
   // ============================================================
   // اللي بيحصل دلوقتي - كارت الأحداث في الرئيسية (العمود اللي على الشمال)
   // The live activity feed - the main page card (left column)
-  // كل 10 ثواني الشاشة بتسأل عن الجديد، وأي حاجة اتعملت بعد ما الصفحة فتحت بتظهر في الصندوق الكبير اللي فوق
+  // كل 30 ثانية الشاشة بتسأل عن الجديد، وأي حاجة اتعملت بعد ما الصفحة فتحت بتظهر في الصندوق الكبير اللي فوق
   // وبتنبض pulseCount مرة، وبعدين بتنزل للقايمة. لو جم كذا حدث مع بعض بيستنوا دورهم واحد ورا التاني
-  // Every 10 s the screen asks for anything new; each event created after the page opened shows in the big box
+  // Every 30 s the screen asks for anything new; each event created after the page opened shows in the big box
   // on top, pulses pulseCount times, then slides into the list. Several at once wait their turn, one after another
   // ============================================================
 
@@ -476,8 +478,8 @@ export const dashboardConfig = {
   },
 
   activity: {
-    refreshSeconds: 10, // الشاشة بتسأل كل 10 ثواني - the screen asks every 10 s
-    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    refreshSeconds: 30, // الشاشة بتسأل كل 30 ثانية (والرئيسية ظاهرة بس) - every 30 s, only while the main page is shown
+    cacheSeconds: 30, // السيرفر والـ CDN بيكلموا ERPNext مرة كل 30 ثانية بالكتير - ERPNext is asked at most once per 30 s
     // أنواع الأحداث اللي بتظهر (امسح أي نوع مش عايزه):
     // money = وارد ومنصرف الخزنة وكل المحافظ، kiln = طرحة خرجت، sales = فواتير البيع والمرتجعات،
     // stock = أذون المخزن (صرف / إضافة / تحويل / تصنيع)، charity = الصدقات، salary = تسويات المرتبات (النوع والاسم بس، من غير مبلغ)
@@ -514,8 +516,10 @@ export const dashboardConfig = {
       { name: "كمبيوتر IT", type: "pc", ip: "", color: "#3B82F6" }, // أزرق - blue
       { name: "الطابعة", type: "printer", ip: "", color: "#F97316" }, // برتقالي - orange
     ] as { name: string; type: "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other"; ip: string; color: string }[],
-    agentOfflineSeconds: 120, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
-    refreshSeconds: 15, // الشاشة بتسأل كل 15 ثانية - the screen asks every 15 s
+    // الإيجنت بيبعت مرة كل دقيقتين بالكتير (السيرفر بيرفض أسرع من كده بـ 429) - the agent posts at most once per 2 minutes
+    agentMinPostSeconds: 120,
+    agentOfflineSeconds: 300, // مفيش تحديث من الإيجنت المدة دي (أكتر من دقيقتين ونص) = "الإيجنت مش متصل" - no update for this long = agent offline
+    refreshSeconds: 60, // الشاشة بتسأل كل 60 ثانية (وصفحة IT ظاهرة بس) - every 60 s, only while the IT page is shown
     // الإيجنت المحلي: المتصفح بيجيب {cameraBaseUrl}/cameras.json والصور {cameraBaseUrl}/cameras/{id}/snapshot.jpg على طول
     // (مش من Vercel)، فالكاميرات بتشتغل جوه المصنع بس. لازم HTTPS بشهادة elsafwa-ca متسطبة. مفيش باسورد في الرابط ده أبدا
     // The local agent: the browser fetches {cameraBaseUrl}/cameras.json and {cameraBaseUrl}/cameras/{id}/snapshot.jpg
@@ -579,7 +583,7 @@ export const dashboardConfig = {
   // created. On failure the last good value stays with "غير متصل" (never fake zeros)
   // ============================================================
   wallets: {
-    cacheSeconds: 10, // السيرفر بيكلم ERPNext مرة كل 10 ثواني بالكتير - ERPNext is asked at most once per 10 s
+    cacheSeconds: 60, // السيرفر بيكلم ERPNext مرة كل 60 ثانية بالكتير - ERPNext is asked at most once per 60 s
     company: "ALSafwa Coal", // الشركة اللي بندوّر فيها على أرقام الحسابات - the company whose account numbers are used
     // بالترتيب اللي بتظهر بيه: 1 يمين فوق، 2 النص فوق، 3 شمال فوق، 4 يمين تحت، 5 النص تحت، 6 شمال تحت
     // Display order (RTL): 1 top-right, 2 top-middle, 3 top-left, 4 bottom-right, 5 bottom-middle, 6 bottom-left

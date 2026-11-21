@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { attendanceDetails, isAttendanceSection } from "@/lib/attendance-details";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     return NextResponse.json(await attendanceDetails(section), {
-      headers: { "Cache-Control": "no-store", "Vercel-CDN-Cache-Control": "max-age=60" },
+      headers: cdnCache(),
     });
   } catch (error) {
     console.error("[erp] attendance details failed:", error instanceof Error ? error.message : error);

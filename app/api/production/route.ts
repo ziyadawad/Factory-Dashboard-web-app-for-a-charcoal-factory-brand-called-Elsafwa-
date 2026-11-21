@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cdnCache } from "@/lib/cdn-cache";
 import { productionData } from "@/lib/production";
 import { dashboardConfig } from "@/config/dashboard.config";
 
@@ -13,10 +14,7 @@ const CACHE_SECONDS = dashboardConfig.production.cacheSeconds;
 export async function GET() {
   try {
     return NextResponse.json(await productionData(), {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Vercel-CDN-Cache-Control": `max-age=${CACHE_SECONDS}`,
-      },
+      headers: cdnCache(CACHE_SECONDS),
     });
   } catch {
     return NextResponse.json({ error: "ERPNext failed" }, { status: 502, headers: { "Cache-Control": "no-store" } });

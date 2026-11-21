@@ -1,7 +1,7 @@
 "use client";
 
 import { CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import useSWR from "swr";
+import { usePolling } from "@/lib/usePolling";
 import { ActivityData, ActivityEvent, ActivityKind } from "@/lib/types";
 import { formatNumber } from "@/lib/format";
 import { agoText, cairoTime, useCompact } from "@/lib/production-stats";
@@ -162,21 +162,18 @@ ${event.extra}` : ""}`}
 }
 
 // onDetailsChange: لوحة التفاصيل مفتوحة (عشان التقليب يقف) - the details panel is open (so page rotation pauses)
-export default function ActivityFeed({ onDetailsChange }: { onDetailsChange?: (open: boolean) => void }) {
+// active: الرئيسية على الشاشة (غير كده مفيش طلبات) - the main page is on screen (otherwise no requests)
+export default function ActivityFeed({ active = true, onDetailsChange }: { active?: boolean; onDetailsChange?: (open: boolean) => void }) {
   const compact = useCompact();
   const sizes: Sizes = compact ? dashboardConfig.sizes.activityCard.compact : dashboardConfig.sizes.activityCard;
 
-  // أول طلب من غير since (آخر أحداث النهارده)، وبعده since = وقت فتح الصفحة (ناقص دقيقة للي اتسجل متأخر)
-  // The first request has no since (today's last events); after it since = the page-open time (minus a minute
-  // for late commits). Ids already seen are never played again.
-  const [since, setSince] = useState<string | null>(null);
-  const { data, error } = useSWR<ActivityData>(since ? `/api/activity?since=${encodeURIComponent(since)}` : "/api/activity", fetcher, {
-    refreshInterval: config.refreshSeconds * 1000,
-    revalidateOnFocus: true,
+  // كل الشاشات بتسأل نفس الرابط (من غير since) عشان الـ CDN يرد على الكل برد واحد متخزن: آخر listSize + 1 حدث النهارده.
+  // أول رد بيملا القايمة، وبعده أي id جديد بس بيدخل الطابور (اللي اتشاف عمره ما بيتعاد)
+  // Every screen asks the same URL (no since) so the CDN answers all of them from one cached response: today's last
+  // listSize + 1 events. The first answer fills the list; afterwards only unseen ids join the queue (never replayed)
+  const { data, error } = usePolling<ActivityData>("/api/activity", fetcher, config.refreshSeconds * 1000, active, {
     revalidateOnReconnect: true,
     refreshWhenOffline: true,
-    dedupingInterval: 2000,
-    keepPreviousData: true,
   });
 
   const seen = useRef<Set<string> | null>(null);
@@ -202,8 +199,6 @@ export default function ActivityFeed({ onDetailsChange }: { onDetailsChange?: (o
     if (!seen.current) {
       seen.current = new Set(data.events.map((e) => e.id));
       setList(data.events.slice(0, config.listSize));
-      const opened = Date.parse(`${data.now.replace(" ", "T")}Z`) - 60_000;
-      setSince(new Date(opened).toISOString().slice(0, 19).replace("T", " "));
       return;
     }
     const fresh = data.events.filter((e) => !seen.current!.has(e.id)).sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
