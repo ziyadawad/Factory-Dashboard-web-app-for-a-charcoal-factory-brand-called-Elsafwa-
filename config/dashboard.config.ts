@@ -67,7 +67,7 @@ export const dashboardConfig = {
     outsideBiometric: {
       "محمد عبدالمقصود محمد": "fixed", // محمد عبدالمقصود محمد - سواق (كود 1046)
       "فضل عمرو فضل": "default_present", // فضل عمرو فضل
-      "HR-EMP-00191": "default_present", // صلاح محمد عبد الرحمن
+      "صلاح عبدالراحمن": "default_present", // صلاح محمد عبدالرحمن — برّه المصنع
       "إسماعيل السيد إسماعيل": "fixed", // الحاج أشرف عوض — رئيس مجلس الإدارة
     } as Record<string, "fixed" | "default_present">,
     // اسم العرض بدل اسم ERPNext (Employee ID ← الاسم) في الكروت واللوحات والمرتبات وكشف الإكسيل.
