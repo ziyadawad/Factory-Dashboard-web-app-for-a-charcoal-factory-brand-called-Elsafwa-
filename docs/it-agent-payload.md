@@ -31,6 +31,21 @@ x-it-secret: <IT_AGENT_SECRET>
 | `429` | أسرع من مرة كل دقيقتين، استنى `Retry-After` ثانية — faster than once per 2 minutes; wait `Retry-After` seconds |
 | `503` | `IT_AGENT_SECRET` مش متظبط على السيرفر — the secret is not set on the server |
 
+## القراية المحلية (LAN-first): `GET {cameraBaseUrl}/status.json`
+
+صفحة IT بتسأل الإيجنت **على طول من المتصفح** كل 5 ثواني (مهلة 2 ثانية). لو رد، الصفحة بتاخد منه كل حاجة (النت، أهم الأجهزة، الأحداث) وبتكتب "📡 مباشر من الشبكة". لو مردش (برا المصنع) بترجع لـ `/api/it/status` وبتكتب "☁️ من السحابة".
+The IT page asks the agent **directly from the browser** every 5 s (2 s timeout). If it answers, everything (internet, key devices, events) comes from it ("📡 مباشر من الشبكة"); otherwise the page falls back to `/api/it/status` ("☁️ من السحابة").
+
+- الرد = **نفس شكل الـ POST بالظبط** (تحت)، أو `{ "data": { ... } }`. بيتنضف بنفس قواعد السيرفر.
+  The body is **exactly the POST payload** below (or `{ "data": { ... } }`), sanitized with the same rules.
+- `sentAt` = وقت آخر فحص عند الإيجنت؛ لو أقدم من 5 دقايق الصفحة بتكتب "الإيجنت مش متصل".
+  `sentAt` = the agent's last check; older than 5 minutes = shown as agent offline.
+- `events`: آخر الأحداث (مثلا آخر 50)، والصفحة بتجمعها بالـ `id`.
+  `events`: the latest events (e.g. the last 50); the page merges them by `id`.
+- هيدرز لازمة (نفس `cameras.json`) - required headers (same as `cameras.json`):
+  `Access-Control-Allow-Origin: https://<dashboard-domain>`، `Cache-Control: no-store`، وعلى طلب `OPTIONS`:
+  `Access-Control-Allow-Private-Network: true` (Chrome بيطلبها لما موقع عام يكلم IP محلي - Chrome requires it when a public site calls a private IP).
+
 ## الشكل (Schema)
 
 كل الأجزاء اختيارية، بس لازم واحد منهم على الأقل. أي حقل مش مكتوب هنا **بيترمي** (ومنها أي `password` أو رابط `rtsp`).

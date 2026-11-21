@@ -2,7 +2,8 @@
 
 import { createContext, CSSProperties, ReactNode, RefObject, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { usePolling } from "@/lib/usePolling";
+import { usePageVisible, usePolling } from "@/lib/usePolling";
+import { mergeEvents, sanitizePayload } from "@/lib/it-sanitize";
 import {
   Boxes,
   Camera,
@@ -23,10 +24,10 @@ import { ItCamera, ItDeviceType, ItEvent, ItSnapshot, ItStatus } from "@/lib/typ
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 
-// صفحة IT والمراقبة: النت والشبكات والأجهزة من إيجنت IT في المصنع (عن طريق /api/it/status)، والكاميرات من الإيجنت
-// المحلي على طول في المتصفح (مش من Vercel)
-// The IT & monitoring page: internet, networks and devices from the factory IT agent (via /api/it/status); cameras come
-// straight from the local agent in the browser (never through Vercel)
+// صفحة IT والمراقبة: النت والأجهزة والأحداث من الإيجنت على الشبكة المحلية على طول ({cameraBaseUrl}/status.json)، ولو مش
+// بيرد (برا المصنع) من /api/it/status في Vercel. الكاميرات من الإيجنت المحلي بس (مش من Vercel)
+// The IT & monitoring page: internet, devices and events straight from the agent on the LAN ({cameraBaseUrl}/status.json),
+// falling back to /api/it/status on Vercel when it does not answer (outside the factory). Cameras come from the local agent only
 
 const cfg = dashboardConfig.it;
 const GREEN = "#22C55E";
@@ -852,6 +853,14 @@ function LiveView({ camera }: { camera: ItCamera }) {
   const [mode, setMode] = useState<LiveMode>(canStream ? "connecting" : "snapshot");
   const playing = mode === "webrtc" || mode === "mse";
   const frame = useSnapshot(camera, "main", cfg.viewerSnapshotSeconds * 1000, 0, !playing);
+  // رجعنا للصور: نجرب الفيديو تاني كل 15 ثانية (الصور فاضلة ظاهرة لحد ما الفيديو يشتغل فعلا، فمفيش رمشة)
+  // Fell back to snapshots: retry the live video every 15 s (snapshots stay on screen until video really plays: no flicker)
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!canStream || mode !== "snapshot") return;
+    const timer = setTimeout(() => setRetry((r) => r + 1), 15_000);
+    return () => clearTimeout(timer);
+  }, [canStream, mode]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -900,7 +909,7 @@ function LiveView({ camera }: { camera: ItCamera }) {
       attempt?.abort();
       resetVideo(video);
     };
-  }, [camera.id, camera.stream, canStream]);
+  }, [camera.id, camera.stream, canStream, retry]);
 
   const badge =
     mode === "webrtc" ? "فيديو مباشر" : mode === "mse" ? "فيديو مباشر (MSE)" : mode === "connecting" ? "بيوصل للفيديو…" : `صورة كل ${formatNumber(cfg.viewerSnapshotSeconds)} ث`;
@@ -1014,19 +1023,84 @@ function EventRow({ event }: { event: ItEvent }) {
   );
 }
 
+// ===== مصدر البيانات: الشبكة المحلية الأول، وبعدين السحابة - data source: the LAN first, then the cloud =====
+// {cameraBaseUrl}/status.json: نفس شكل الـ POST (أو { data: {...} } زي /api/it/status)، وبيتنضف بنفس قواعد السيرفر
+// {cameraBaseUrl}/status.json: the POST payload shape (or { data: {...} } like /api/it/status), sanitized by the server's rules
+const LOCAL_STATUS_URL = CAMERA_BASE ? `${CAMERA_BASE}/status.json` : "";
+const LOCAL_FAILS_TOLERATED = 1; // فشلة واحدة (مهلة عدت) مش بتقلب للسحابة - one missed answer never switches to the cloud
+const LOCAL_RETRY_MS = 30_000; // بعد كذا فشلة (برا المصنع): بيجرب الشبكة تاني كل 30 ثانية - after repeated failures: re-probe every 30 s
+
+async function fetchLocalStatus(): Promise<ItSnapshot> {
+  const res = await fetch(LOCAL_STATUS_URL, { cache: "no-store", signal: AbortSignal.timeout(cfg.localStatusTimeoutMs) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body: unknown = await res.json();
+  const wrapped = body && typeof body === "object" ? (body as { data?: unknown }).data : undefined;
+  return sanitizePayload(wrapped && typeof wrapped === "object" ? wrapped : body);
+}
+
+type LocalStatus = { snapshot: ItSnapshot | null; at: number; failures: number; tried: boolean };
+// بيسأل الإيجنت على طول كل localStatusSeconds والصفحة ظاهرة بس؛ الأحداث بتتجمع (من غير تكرار) زي السيرفر
+// Asks the agent directly every localStatusSeconds, only while the page is on screen; events accumulate (deduplicated) like the server
+function useLocalStatus(active: boolean): LocalStatus {
+  const visible = usePageVisible();
+  const [state, setState] = useState<LocalStatus>({ snapshot: null, at: 0, failures: 0, tried: !LOCAL_STATUS_URL });
+  useEffect(() => {
+    if (!active || !visible || !LOCAL_STATUS_URL) return;
+    let stopped = false;
+    let fails = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const run = async () => {
+      try {
+        const snap = await fetchLocalStatus();
+        if (stopped) return;
+        fails = 0;
+        setState((s) => ({ snapshot: { ...snap, events: mergeEvents(s.snapshot?.events ?? [], snap.events) }, at: Date.now(), failures: 0, tried: true }));
+      } catch {
+        if (stopped) return;
+        fails += 1;
+        setState((s) => ({ ...s, failures: s.failures + 1, tried: true }));
+      }
+      timer = setTimeout(run, fails > LOCAL_FAILS_TOLERATED + 1 ? LOCAL_RETRY_MS : cfg.localStatusSeconds * 1000);
+    };
+    run();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [active, visible]);
+  return state;
+}
+
+function SourceChip({ source }: { source: "local" | "cloud" }) {
+  return source === "local" ? (
+    <span className="rounded-full border border-sky-400/50 bg-sky-400/10 text-sky-200 px-3 leading-[1.9] font-bold whitespace-nowrap">📡 مباشر من الشبكة</span>
+  ) : (
+    <span className="rounded-full border border-cardBorder bg-white/5 text-gray-300 px-3 leading-[1.9] font-bold whitespace-nowrap">☁️ من السحابة</span>
+  );
+}
+
 // ===== الصفحة - the page =====
-// active: صفحة IT على الشاشة (غير كده مفيش طلبات لـ Vercel) - the IT page is on screen (otherwise no Vercel requests)
+// active: صفحة IT على الشاشة (غير كده مفيش طلبات خالص) - the IT page is on screen (otherwise no requests at all)
 export default function ItPage({ active = true, onOverlayChange }: { active?: boolean; onOverlayChange?: (open: boolean) => void }) {
-  const { data: status, error } = usePolling<ItStatus>("/api/it/status", fetcher, cfg.refreshSeconds * 1000, active, {
+  const now = useNow(10_000);
+  // 1) الإيجنت على الشبكة المحلية - the agent on the LAN
+  const lan = useLocalStatus(active);
+  const localLive = !!lan.snapshot && lan.failures <= LOCAL_FAILS_TOLERATED;
+  // 2) السحابة بس لو الشبكة مش بترد (مش بتتسأل لحد ما أول محاولة محلية تخلص) - the cloud only when the LAN does not
+  // answer (never asked before the first lan attempt finishes)
+  const cloudOn = !localLive && lan.tried;
+  const { data: status, error } = usePolling<ItStatus>("/api/it/status", fetcher, cfg.refreshSeconds * 1000, active && cloudOn, {
     revalidateOnReconnect: true,
     refreshWhenOffline: true,
   });
-  const now = useNow(10_000);
 
-  // آخر بيانات وصلت بتفضل لو طلب فشل - the last data stays if a request fails
+  // آخر بيانات وصلت بتفضل لو طلب فشل (السحابة، وبعدين آخر رد محلي) - the last data stays if a request fails
   const lastReal = useRef<ItSnapshot | null>(null);
   if (status?.data) lastReal.current = status.data;
-  const snapshot = status?.data ?? lastReal.current;
+  const snapshot = localLive ? lan.snapshot : (status?.data ?? lastReal.current ?? lan.snapshot);
+  const source: "local" | "cloud" | null = localLive ? "local" : cloudOn ? "cloud" : null;
+  // وقت آخر تحديث: ساعة الإيجنت (sentAt) أو وقت الرد المحلي، أو receivedAt من السحابة - the last update time
+  const updatedAt = localLive ? (lan.snapshot?.sentAt ?? new Date(lan.at).toISOString()) : (status?.receivedAt ?? null);
 
   const local = useLocalCameras();
   const [viewer, setViewer] = useState<{ list: ItCamera[]; index: number } | null>(null);
@@ -1050,8 +1124,13 @@ export default function ItPage({ active = true, onOverlayChange }: { active?: bo
   const keys = useMemo(() => keyDevices(snapshot), [snapshot]);
   const keysDown = keys.filter((d) => !d.up).length;
   const internet = snapshot?.internet ?? null;
-  // الإيجنت مبعتش من دقيقتين = "الإيجنت مش متصل" - no update for agentOfflineSeconds = agent offline
-  const agentDown = !!snapshot && status !== undefined && !status.agentOnline;
+  // الإيجنت مبعتش من agentOfflineSeconds = "الإيجنت مش متصل". محلي: الإيجنت رد بس آخر فحص عنده (sentAt) قديم
+  // No update for agentOfflineSeconds = agent offline. Local: the agent answered but its last check (sentAt) is old
+  const agentDown = localLive
+    ? !!updatedAt && now - Date.parse(updatedAt) > cfg.agentOfflineSeconds * 1000
+    : !!snapshot && status !== undefined && !status.agentOnline;
+  // مفيش ولا مصدر شغال: لا الشبكة ولا السحابة - neither source answers: not the LAN, not the cloud
+  const unreachable = !localLive && lan.tried && !!error;
   const cameras = local.cameras;
 
   return (
@@ -1079,12 +1158,13 @@ export default function ItPage({ active = true, onOverlayChange }: { active?: bo
         <span className="ms-auto flex items-center gap-3 shrink-0 text-[15px]">
           {agentDown && (
             <span className="rounded-full border border-statusRed/60 bg-statusRed/10 text-statusRed px-3 leading-[1.9] font-bold">
-              الإيجنت مش متصل من {duration(status?.receivedAt ?? null, now)}
+              الإيجنت مش متصل من {duration(updatedAt, now)}
             </span>
           )}
-          {error && !snapshot && <span className="text-statusRed font-bold">غير متصل</span>}
+          {unreachable && <span className="text-statusRed font-bold">غير متصل</span>}
+          {source && !unreachable && <SourceChip source={source} />}
           <span className="text-gray-400">
-            آخر تحديث من الإيجنت: <span className="font-numbers text-white font-bold">{clock(status?.receivedAt ?? null)}</span>
+            آخر تحديث من الإيجنت: <span className="font-numbers text-white font-bold">{clock(updatedAt)}</span>
           </span>
         </span>
       </div>

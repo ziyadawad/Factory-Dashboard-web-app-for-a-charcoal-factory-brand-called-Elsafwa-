@@ -531,13 +531,19 @@ export const dashboardConfig = {
     // go2rtc for live video (WebRTC, then MSE) in full page: {streamBaseUrl}/api/webrtc?src=… and /api/ws?src=….
     // Empty = same as cameraBaseUrl. On failure the full page falls back to a snapshot every second
     streamBaseUrl: "",
+    // الحالة من الشبكة المحلية الأول: المتصفح بيسأل {cameraBaseUrl}/status.json على طول كل localStatusSeconds (مهلة
+    // localStatusTimeoutMs). لو رد = كل حاجة منه ("📡 مباشر من الشبكة")، ولو فشل (برا المصنع) = /api/it/status ("☁️ من السحابة")
+    // LAN first: the browser asks {cameraBaseUrl}/status.json directly every localStatusSeconds (timeout localStatusTimeoutMs).
+    // If it answers it is used for everything; if not (outside the factory) the page falls back to /api/it/status
+    localStatusSeconds: 5,
+    localStatusTimeoutMs: 2000,
     liveVideo: true, // false = الصفحة الكاملة صور بس من غير فيديو - false = full page uses snapshots only
     cameraLayouts: [1, 4, 6, 9, 16, 32], // اختيارات العرض في هيدر الكاميرات - the layout choices in the cameras header
     defaultCameraLayout: 4, // أول مرة (بعد كده بيتفتكر في المتصفح) - first time (then remembered in the browser)
     cameraRotateSeconds: 8, // عرض كاميرا واحدة: بتتقلب كل 8 ثواني - single layout: switches camera every 8 s
     cameraPageSeconds: 15, // عرض الشبكة: الصفحة بتتقلب كل 15 ثانية - grid layout: the page of cameras switches every 15 s
     cameraRefreshSeconds: 2, // عرض كاميرا واحدة: الصورة (main) كل 2 ثانية - single layout: main snapshot every 2 s
-    gridRefreshSeconds: 4, // الشبكة: صورة الـ sub-stream كل 4 ثواني (متوزعة مش كلها مع بعض) - grid: sub-stream every 4 s, staggered
+    gridRefreshSeconds: 2, // الشبكة: صورة الـ sub-stream كل 2 ثانية (متوزعة مش كلها مع بعض) - grid: sub-stream every 2 s, staggered
     viewerSnapshotSeconds: 1, // الصفحة الكاملة لو الفيديو فشل: صورة كل ثانية - full page fallback: a snapshot every second
     // أسامي الـ NVR في شرايح الفلتر (اسم الـ nvr في cameras.json ← الاسم اللي يظهر). مش مكتوب = يظهر زي ما هو
     // NVR names on the filter chips (nvr value in cameras.json → label shown). Missing = shown as is
