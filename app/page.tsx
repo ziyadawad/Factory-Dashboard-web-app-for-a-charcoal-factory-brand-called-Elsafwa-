@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { usePolling } from "@/lib/usePolling";
 import Header from "@/components/Header";
 import AttendanceSection from "@/components/AttendanceSection";
@@ -20,6 +20,8 @@ import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
 import ItPage from "@/components/ItPage";
+import OperatorQrButton from "@/components/OperatorQrButton";
+import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -103,7 +105,19 @@ export default function Dashboard() {
     pageId === "production" || productionTarget !== null,
     { revalidateOnReconnect: true, refreshWhenOffline: true }
   );
-  const production = productionRaw ? (productionError ? { ...productionRaw, offline: true } : productionRaw) : null;
+  // جوه المصنع: الطرحات على طول من الإيجنت بتتدمج فوق بيانات ERPNext (برا المصنع = زي ما هي)
+  // Inside the factory: live exits from the agent merged over the ERPNext data (outside = unchanged)
+  const liveExits = useLiveKilnExits(pageId === "production" || productionTarget !== null);
+  const production = useMemo(() => {
+    if (!productionRaw) return null;
+    const base = productionError ? { ...productionRaw, offline: true } : productionRaw;
+    return withLiveExits(base, liveExits.exits);
+  }, [productionRaw, productionError, liveExits.exits]);
+  const [operatorQrOpen, setOperatorQrOpen] = useState(false);
+  // صفحة تانية = الـ QR اتقفل (عشان التقليب ميفضلش واقف) - another page = the QR closes (so rotation never stays paused)
+  useEffect(() => {
+    if (pageId !== "production") setOperatorQrOpen(false);
+  }, [pageId]);
   const closeProduction = useCallback(() => setProductionTarget(null), []);
 
   const [flashSection, setFlashSection] = useState<string | null>(null);
@@ -158,7 +172,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen || operatorQrOpen;
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
@@ -316,7 +330,7 @@ export default function Dashboard() {
           </div>
         );
       case "production":
-        return <ProductionPage data={production} onOpen={setProductionTarget} />;
+        return <ProductionPage data={production} lan={liveExits.lan} onOpen={setProductionTarget} />;
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" onOpenItem={setStockItem} />;
       case "sales":
@@ -386,6 +400,7 @@ export default function Dashboard() {
         pageNumber={pageIndex + 1}
         pageCount={PAGES.length}
         pageTitles={PAGES.map((p) => p.title)}
+        actions={pageId === "production" ? <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} /> : undefined}
         onPageChange={changePage}
         nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} pinned={pinned} onTogglePin={togglePin} />}
       />

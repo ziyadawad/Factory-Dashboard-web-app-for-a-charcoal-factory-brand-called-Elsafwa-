@@ -286,6 +286,12 @@ export const dashboardConfig = {
       // الوزن بالكيلو (Float). لو الحقل لسه مش موجود في الـ DocType كل الطرحات بتبقى "بدون وزن" لحد ما يتضاف
       // Weight in kg (Float). While the DocType has no such field every batch shows "بدون وزن" until it is added
       weightField: "weight_kg",
+      // ممتلئ / فاضي / الترول / الغرفة (بتظهر في تفاصيل الطرحة). أي حقل مش موجود في الـ DocType بيتساب فاضي
+      // Full / empty / trolley / room (shown in the exit details). A field the DocType lacks is simply left empty
+      fullWeightField: "full_weight_kg",
+      emptyWeightField: "empty_weight_kg",
+      trolleyField: "trolley",
+      roomField: "room",
       // الأنواع بتتقري من خيارات charcoal_type في الـ DocType نفسه، فأي نوع جديد بيظهر لوحده بـ defaultTypeColor
       // واللي هنا بيحدد الترتيب واللون للأنواع المعروفة (الأسامي بتتطابق بعد توحيد الحروف: ة = ه، أ = ا ...)
       // Types are read from the DocType's charcoal_type options, so a new option shows up on its own with
@@ -453,6 +459,16 @@ export const dashboardConfig = {
     hourFrom: 6,
     hourTo: 22,
     glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
+    // جوه المصنع: أحداث "kiln_exit" على طول من الإيجنت ({it.cameraBaseUrl}/status.json كل liveSeconds، مهلة liveTimeoutMs)
+    // فالطرحة الجديدة بتظهر في "آخر وزنة" و"طرحات النهارده" على طول. برا المصنع = التحديث العادي (refreshSeconds)
+    // liveWsPath: لو الإيجنت عنده WebSocket (مثلا "/ws") المتصفح بيشترك فيه، ولو وقع بيرجع لـ status.json. null = status.json بس
+    // Inside the factory: "kiln_exit" events straight from the agent ({it.cameraBaseUrl}/status.json every liveSeconds,
+    // timeout liveTimeoutMs), so a new exit shows in "آخر وزنة" and "طرحات النهارده" at once. Outside = the normal refresh.
+    // liveWsPath: when the agent has a WebSocket (e.g. "/ws") the browser subscribes to it, falling back to status.json
+    // when it drops. null = status.json only
+    liveSeconds: 5,
+    liveTimeoutMs: 2000,
+    liveWsPath: null as string | null,
   },
 
   // ============================================================
@@ -531,6 +547,9 @@ export const dashboardConfig = {
     // go2rtc for live video (WebRTC, then MSE) in full page: {streamBaseUrl}/api/webrtc?src=… and /api/ws?src=….
     // Empty = same as cameraBaseUrl. On failure the full page falls back to a snapshot every second
     streamBaseUrl: "",
+    // شاشة الأوبريتر على الإيجنت (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها)
+    // The operator screen on the agent ("📱 شاشة الأوبريتر" on the production page opens a QR code for it)
+    operatorUrl: "https://192.168.1.200:8443/operator",
     // الحالة من الشبكة المحلية الأول: المتصفح بيسأل {cameraBaseUrl}/status.json على طول كل localStatusSeconds (مهلة
     // localStatusTimeoutMs). لو رد = كل حاجة منه ("📡 مباشر من الشبكة")، ولو فشل (برا المصنع) = /api/it/status ("☁️ من السحابة")
     // LAN first: the browser asks {cameraBaseUrl}/status.json directly every localStatusSeconds (timeout localStatusTimeoutMs).

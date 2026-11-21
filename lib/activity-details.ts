@@ -268,13 +268,28 @@ function kilnBody(doc: Doc): Body {
   const weightField = mapping.source === "erp" ? mapping.weightField : "weight_kg";
   const kg = Number(doc[weightField]);
   const exit = stamp(doc.exit_time);
+  // ممتلئ / فاضي / الترول / الغرفة لو الحقول موجودة - full / empty / trolley / room when the fields exist
+  const kgOf = (field: string) => {
+    const v = Number(doc[field]);
+    return Number.isFinite(v) && v > 0 ? `${n(v)} كجم` : "—";
+  };
+  const extra =
+    mapping.source === "erp"
+      ? [
+          { label: "ممتلئ", value: kgOf(mapping.fullWeightField) },
+          { label: "فاضي", value: kgOf(mapping.emptyWeightField) },
+          { label: "الترول", value: str(doc[mapping.trolleyField]) || "—" },
+          { label: "الغرفة", value: str(doc[mapping.roomField]) || "—" },
+        ]
+      : [];
   return {
     postingDate: exit.slice(0, 10) || null,
     postingTime: exit.slice(11, 16) || null,
     fields: [
       { label: "الفرن", value: str(doc.kiln) || "—", tone: "accent" },
       { label: "النوع", value: str(doc[typeField]) || "غير محدد" },
-      { label: "الوزن", value: Number.isFinite(kg) && kg > 0 ? `${n(kg)} كجم (${(kg / 1000).toFixed(2)} طن)` : "بدون وزن" },
+      { label: "الصافي", value: Number.isFinite(kg) && kg > 0 ? `${n(kg)} كجم (${(kg / 1000).toFixed(2)} طن)` : "بدون وزن" },
+      ...extra,
       { label: "وقت الخروج", value: exit || "—" },
     ],
     tables: [],

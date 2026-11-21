@@ -19,6 +19,17 @@ const n = (text: string) => (
   </span>
 );
 
+// خانة ممتلئ / فاضي (كجم) أو ترول / غرفة، و"—" لو مش متسجلة - a full / empty (kg) or trolley / room cell, "—" when not recorded
+const kgCell = (kg: number | null) =>
+  kg !== null ? (
+    <>
+      {n(formatKg(kg))} <span className="text-gray-500 text-[0.85em]">كجم</span>
+    </>
+  ) : (
+    <span className="text-gray-600">—</span>
+  );
+const textCell = (value: string) => (value ? n(toEnglishDigits(value)) : <span className="text-gray-600">—</span>);
+
 function Box({ label, value, unit, color = "text-white" }: { label: string; value: string; unit?: string; color?: string }) {
   return (
     <div className="flex-1 min-w-0 rounded-xl bg-background/60 border border-cardBorder px-3 py-1 text-center">
@@ -82,9 +93,9 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
         </div>
 
         <div className="shrink-0 flex items-stretch gap-3 px-5 py-3 border-b border-cardBorder">
-          <Box label="إنتاج الشهر" value={formatTons(total.kg)} unit="طن" color="text-brandOrange" />
+          <Box label="إنتاج الشهر (صافي)" value={formatTons(total.kg)} unit="طن" color="text-brandOrange" />
           <Box label="عدد الطرحات" value={formatNumber(total.count)} />
-          <Box label="متوسط وزن الطرحة" value={total.weighed ? formatTons(total.kg / total.weighed) : "—"} unit={total.weighed ? "طن" : undefined} />
+          <Box label="متوسط صافي الطرحة" value={total.weighed ? formatTons(total.kg / total.weighed) : "—"} unit={total.weighed ? "طن" : undefined} />
           <Box label="بدون وزن" value={formatNumber(unweighed)} unit="طرحة" color={unweighed ? "text-gray-300" : "text-gray-600"} />
           <Box label="أيام فيها طرحات" value={formatNumber(days.length)} unit="يوم" />
         </div>
@@ -100,14 +111,18 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                   <tr>
                     <th className={`${th} text-center`}>الساعة</th>
                     <th className={`${th} text-start`}>{isKiln ? "النوع" : "الفرن"}</th>
-                    <th className={`${th} text-center`}>الوزن</th>
+                    <th className={`${th} text-center`}>الصافي</th>
+                    <th className={`${th} text-center`}>ممتلئ</th>
+                    <th className={`${th} text-center`}>فاضي</th>
+                    <th className={`${th} text-center`}>الترول</th>
+                    <th className={`${th} text-center`}>الغرفة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {days.map((day) => (
                     <Fragment key={day.date}>
                       <tr>
-                        <td colSpan={3} className="px-4 py-0.5 border-b border-cardBorder bg-background/70 font-bold">
+                        <td colSpan={7} className="px-4 py-0.5 border-b border-cardBorder bg-background/70 font-bold">
                           <span className="text-white">{formatDayName(day.date)}</span>
                           <span className="text-gray-500"> — </span>
                           <span className="text-gray-200">{n(formatNumber(day.tally.count))} طرحة</span>
@@ -121,7 +136,7 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                       {day.exits.map((e) => {
                         const c = typeColor(data, e.type);
                         return (
-                          <tr key={e.id} className="hover:bg-white/5">
+                          <tr key={e.liveId ?? e.id} className="hover:bg-white/5">
                             <td className={`${td} text-center text-gray-300`}>{n(e.time)}</td>
                             <td className={`${td} font-semibold`}>
                               {isKiln ? (
@@ -142,6 +157,10 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                                 <span className="text-gray-500">بدون وزن</span>
                               )}
                             </td>
+                            <td className={`${td} text-center text-gray-200`}>{kgCell(e.fullKg)}</td>
+                            <td className={`${td} text-center text-gray-200`}>{kgCell(e.emptyKg)}</td>
+                            <td className={`${td} text-center text-gray-200`}>{textCell(e.trolley)}</td>
+                            <td className={`${td} text-center text-gray-200`}>{textCell(e.room)}</td>
                           </tr>
                         );
                       })}

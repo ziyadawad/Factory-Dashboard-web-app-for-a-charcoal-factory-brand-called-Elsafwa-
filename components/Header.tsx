@@ -21,6 +21,8 @@ interface HeaderProps {
   onPageChange?: (index: number, dir: 1 | -1) => void;
   // أسامي الصفحات (للتلميح على النقط) - page titles (dot tooltips)
   pageTitles?: string[];
+  // أزرار خاصة بالصفحة الحالية (جنب ملء الشاشة) - buttons for the current page (next to fullscreen)
+  actions?: ReactNode;
 }
 
 // عرض خانة كل نقطة (مساحة الضغط) - each dot's slot width (click area)
@@ -85,7 +87,7 @@ function toggleFullscreen() {
   request?.catch((error) => console.log("Fullscreen error:", error));
 }
 
-export default function Header({ isConnected, nav, page, pageNumber, pageCount, pinned, onPageChange, pageTitles }: HeaderProps) {
+export default function Header({ isConnected, nav, page, pageNumber, pageCount, pinned, onPageChange, pageTitles, actions }: HeaderProps) {
   const sizes = dashboardConfig.sizes.header;
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
@@ -250,6 +252,8 @@ export default function Header({ isConnected, nav, page, pageNumber, pageCount, 
             <span className="text-statusRed text-sm font-semibold">غير متصل</span>
           </div>
         )}
+
+        {actions}
 
         {/* زرار ملء الشاشة دايما ظاهر - the fullscreen button is always shown */}
         <button

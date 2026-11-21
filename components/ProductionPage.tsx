@@ -39,6 +39,10 @@ const num = (text: string, className = "") => (
   </span>
 );
 
+// مفتاح ثابت للطرحة: نفس الطرحة لما تيجي مباشر وبعدين من ERPNext ليها نفس المفتاح
+// A stable key: an exit seen live and later from ERPNext keeps the same key
+const exitKey = (e: ProductionExit) => e.liveId ?? e.id;
+
 // "12/11" - a short date
 export const shortDate = (date: string) => {
   const [, month, day] = date.split("-").map(Number);
@@ -110,7 +114,7 @@ function KpiRow({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
           {num(formatNumber(s.today.count))}
         </span>
       </Kpi>
-      <Kpi label="متوسط وزن الطرحة" sub={s.today.weighed > 0 ? `من ${s.today.weighed} طرحة متوزنة` : "مفيش أوزان النهارده"}>
+      <Kpi label="متوسط صافي الطرحة" sub={s.today.weighed > 0 ? `من ${s.today.weighed} طرحة متوزنة` : "مفيش أوزان النهارده"}>
         {s.today.weighed > 0 ? (
           <>
             <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
@@ -158,8 +162,10 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
   const minutes = useMinutesSince(last);
   const [glow, setGlow] = useState(false);
   const seen = useRef<string | null | undefined>(undefined);
+  // نفس الطرحة لما تيجي من الإيجنت وبعدين من ERPNext مش بتنور مرتين - the same exit seen live then from ERPNext glows once
+  const lastKey = last ? exitKey(last) : null;
   useEffect(() => {
-    const id = last?.id ?? null;
+    const id = lastKey;
     // أول مرة مش بتنور - no glow on the first render
     if (seen.current !== undefined && id && id !== seen.current) {
       setGlow(true);
@@ -168,7 +174,7 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
       return () => clearTimeout(timer);
     }
     seen.current = id;
-  }, [last?.id]);
+  }, [lastKey]);
 
   const color = last ? typeColor(data, last.type) : "#6B7280";
   return (
@@ -202,7 +208,7 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
                 </span>
                 <span className="prod-fs text-gray-400 font-bold" style={fs(sizes.lastChipFontSize)}>
                   {" "}
-                  كجم
+                  كجم صافي
                 </span>
               </p>
             ) : (
@@ -295,6 +301,27 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
 // never scroll, never cut: when more than fit, the newest that fit and a "+N طرحة تانية" line under them
 function ExitList({ data, exits, sizes }: { data: ProductionData; exits: ProductionExit[]; sizes: LeftSizes }) {
   const gap = 6;
+  // الطرحات الجديدة (بعد أول عرض) بتدخل بحركة ولمعة قصيرة - new exits (after the first render) slide in with a short flash
+  const seen = useRef<Set<string> | null>(null);
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
+  const keys = exits.map(exitKey).join("|");
+  useEffect(() => {
+    const now = exits.map(exitKey);
+    if (seen.current === null) {
+      seen.current = new Set(now);
+      return;
+    }
+    const added = now.filter((k) => !seen.current!.has(k));
+    now.forEach((k) => seen.current!.add(k));
+    if (added.length === 0) return;
+    setFresh((f) => new Set([...Array.from(f), ...added]));
+    const timer = setTimeout(
+      () => setFresh((f) => new Set(Array.from(f).filter((k) => !added.includes(k)))),
+      dashboardConfig.production.glowSeconds * 1000
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys]);
   const moreHeight = Math.round(sizes.exitMoreFontSize * 1.9);
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -334,12 +361,13 @@ function ExitList({ data, exits, sizes }: { data: ProductionData; exits: Product
       {height > 0 &&
         exits.slice(0, shown).map((exit, index) => {
           const color = typeColor(data, exit.type);
+          const key = exitKey(exit);
           return (
             <div
-              key={exit.id}
+              key={key}
               className={`shrink-0 grid items-center gap-2.5 px-3 rounded-xl border ${
                 index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_16px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
-              }`}
+              } ${fresh.has(key) ? "animate-exit-in" : ""}`}
               style={{ height: row, gridTemplateColumns: "auto auto minmax(0,1fr) auto" }}
             >
               <span className="prod-fs text-gray-100 font-bold tabular-nums" style={fs(sizes.exitTimeFontSize)}>
@@ -356,7 +384,7 @@ function ExitList({ data, exits, sizes }: { data: ProductionData; exits: Product
               </span>
               {exit.kg !== null ? (
                 <span className="prod-fs text-white font-bold whitespace-nowrap" style={fs(sizes.exitWeightFontSize)}>
-                  {num(formatKg(exit.kg))} <span className="text-gray-500 font-semibold text-[0.7em]">كجم</span>
+                  {num(formatKg(exit.kg))} <span className="text-gray-500 font-semibold text-[0.7em]">كجم صافي</span>
                 </span>
               ) : (
                 <span className="prod-fs text-gray-500 font-semibold whitespace-nowrap" style={fs(sizes.exitNoWeightFontSize)}>
@@ -442,7 +470,15 @@ function MonthTable({ title, rows, onOpen }: { title: string; rows: { key: strin
 type Sizes = typeof dashboardConfig.sizes.productionPage.compact;
 type LeftSizes = typeof dashboardConfig.sizes.production.compact;
 
-export default function ProductionPage({ data, onOpen }: { data: ProductionData | null; onOpen: (target: ProductionTarget) => void }) {
+export default function ProductionPage({
+  data,
+  lan = false,
+  onOpen,
+}: {
+  data: ProductionData | null;
+  lan?: boolean; // الإيجنت على الشبكة بيرد (الطرحات على طول) - the LAN agent answers (live exits)
+  onOpen: (target: ProductionTarget) => void;
+}) {
   const compact = useCompact();
   const page = dashboardConfig.sizes.productionPage;
   const sizes: Sizes = compact ? page.compact : page;
@@ -481,7 +517,16 @@ export default function ProductionPage({ data, onOpen }: { data: ProductionData 
         <Card
           title="طرحات النهارده"
           icon={<Factory className="text-brandOrange" size={compact ? 18 : 22} />}
-          extra={<span className="text-gray-400 whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">{num(formatNumber(s.today.count))} طرحة</span>}
+          extra={
+            <>
+              {lan && (
+                <span className="rounded-full bg-statusGreen/15 text-statusGreen px-2 font-bold whitespace-nowrap text-[12px] min-[1600px]:text-[14px] leading-[1.7]" title="الطرحات بتوصل على طول من الإيجنت">
+                  📡 مباشر
+                </span>
+              )}
+              <span className="text-gray-400 whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">{num(formatNumber(s.today.count))} طرحة</span>
+            </>
+          }
           className="flex-1"
         >
           <ExitList data={data} exits={s.todayExits} sizes={left} />

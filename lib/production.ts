@@ -15,7 +15,7 @@ type KilnExitRow = { name: string; kiln: string | null; exit_time: string | null
 
 // تعريف الـ DocType: خيارات حقل النوع، وهل حقل الوزن موجود (كاش optionsCacheMinutes، ولو فشل آخر نتيجة نجحت)
 // The DocType: the type field's options and whether the weight field exists (cached; on failure the last good one)
-type DoctypeInfo = { options: string[]; hasWeight: boolean };
+type DoctypeInfo = { options: string[]; hasWeight: boolean; fields: string[] };
 let doctypeCache: { at: number; info: DoctypeInfo } | null = null;
 export async function doctypeInfo(mapping: BatchesMapping): Promise<DoctypeInfo> {
   const maxAge = mapping.optionsCacheMinutes * 60_000;
@@ -30,12 +30,13 @@ export async function doctypeInfo(mapping: BatchesMapping): Promise<DoctypeInfo>
     const info = {
       options: (field?.options ?? "").split("\n").map((o) => o.trim()).filter(Boolean),
       hasWeight: fields.some((f) => f.fieldname === mapping.weightField),
+      fields: fields.map((f) => f.fieldname),
     };
     doctypeCache = { at: Date.now(), info };
     return info;
   } catch (error) {
     console.error("[erp] production: could not read the Kiln Exit DocType:", error instanceof Error ? error.message : error);
-    return doctypeCache?.info ?? { options: [], hasWeight: false };
+    return doctypeCache?.info ?? { options: [], hasWeight: false, fields: [] };
   }
 }
 
@@ -87,7 +88,10 @@ async function loadProduction(): Promise<ProductionData> {
   const [info, kilns] = await Promise.all([doctypeInfo(mapping), loadKilns()]);
   // حقل الوزن بيتطلب بس لو موجود في الـ DocType (السجلات القديمة من غير وزن = null)
   // The weight field is requested only when the DocType has it (old records without a weight = null)
-  const fields = ["name", mapping.typeField, "kiln", "exit_time", ...(info.hasWeight ? [mapping.weightField] : [])];
+  // ممتلئ / فاضي / الترول / الغرفة: بس اللي موجود في الـ DocType - full / empty / trolley / room: only those the DocType has
+  const has = (field: string) => info.fields.includes(field);
+  const extra = [mapping.fullWeightField, mapping.emptyWeightField, mapping.trolleyField, mapping.roomField].filter(has);
+  const fields = ["name", mapping.typeField, "kiln", "exit_time", ...(info.hasWeight ? [mapping.weightField] : []), ...extra];
   const { data: rows } = await erpGet<{ data: KilnExitRow[] }>(`/api/resource/${encodeURIComponent(mapping.exitsDoctype)}`, {
     fields: JSON.stringify(fields),
     filters: JSON.stringify([
@@ -110,6 +114,10 @@ async function loadProduction(): Promise<ProductionData> {
       kiln: (row.kiln ?? "").trim(),
       type: type?.label ?? "",
       kg: info.hasWeight ? kgOf(row[mapping.weightField]) : null,
+      fullKg: has(mapping.fullWeightField) ? kgOf(row[mapping.fullWeightField]) : null,
+      emptyKg: has(mapping.emptyWeightField) ? kgOf(row[mapping.emptyWeightField]) : null,
+      trolley: has(mapping.trolleyField) ? String(row[mapping.trolleyField] ?? "").trim() : "",
+      room: has(mapping.roomField) ? String(row[mapping.roomField] ?? "").trim() : "",
     };
   });
   return {

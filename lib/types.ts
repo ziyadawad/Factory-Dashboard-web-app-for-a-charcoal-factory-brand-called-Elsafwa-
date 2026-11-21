@@ -340,7 +340,13 @@ export interface ProductionExit {
   time: string; // "10:45"
   kiln: string; // "فرن 3"
   type: string; // اسم النوع (زي ProductionType.label)، "" = فاضي - the type label, "" = empty
-  kg: number | null; // الوزن بالكيلو، null = بدون وزن (سجل قديم) - weight in kg, null = no weight (old record)
+  kg: number | null; // الوزن الصافي بالكيلو، null = بدون وزن (سجل قديم) - net weight in kg, null = no weight (old record)
+  fullKg: number | null; // الوزن ممتلئ (الترول بالفحم) - full weight (trolley with charcoal)
+  emptyKg: number | null; // الوزن فاضي (الترول لوحده) - empty weight (the trolley alone)
+  trolley: string; // رقم / اسم الترول، "" = مش معروف - the trolley number / name, "" = unknown
+  room: string; // الغرفة، "" = مش معروفة - the room, "" = unknown
+  live?: boolean; // جاية من الإيجنت على الشبكة ولسه مش في ERPNext - from the LAN agent, not in ERPNext yet
+  liveId?: string; // سجل ERPNext اللي اتشاف الأول كحدث مباشر (id الحدث) - an ERPNext record first seen as a live event (its id)
 }
 
 // exits = من monthStart (أو امبارح لو النهارده أول الشهر) لحد النهارده، الأحدث الأول
@@ -682,7 +688,12 @@ export type ConfigErpBatches = (
       source: "erp";
       exitsDoctype: string;
       typeField: string; // حقل النوع (Select) - the type field (Select)
-      weightField: string; // حقل الوزن بالكيلو (Float) - the weight field in kg (Float)
+      weightField: string; // حقل الوزن الصافي بالكيلو (Float) - the net weight field in kg (Float)
+      // حقول اختيارية: بتتقري بس لو موجودة في الـ DocType - optional fields, read only when the DocType has them
+      fullWeightField: string; // ممتلئ بالكيلو (Float) - full weight in kg (Float)
+      emptyWeightField: string; // فاضي بالكيلو (Float) - empty weight in kg (Float)
+      trolleyField: string; // الترول - the trolley
+      roomField: string; // الغرفة - the room
     }
 ) & { types: ConfigBatchType[]; defaultTypeColor: string; optionsCacheMinutes: number };
 

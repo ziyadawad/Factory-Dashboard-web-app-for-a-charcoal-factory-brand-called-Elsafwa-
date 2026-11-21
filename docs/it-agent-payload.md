@@ -139,6 +139,51 @@ Cameras never pass through the dashboard or Vercel: the browser loads them strai
   Full page: WebRTC → MSE → a snapshot every second. Grid: sub-stream every 4 s, staggered, visible tiles only.
 - **الباسورد عمره ما بيتبعت للداشبورد ولا بيتكتب في الكونفج.** No camera / NVR password ever reaches the dashboard or the config.
 
+## طرحات الأفران على طول (Live kiln exits): `kiln_exit`
+
+صفحة "الإنتاج والأفران" جوه المصنع بتقرا `{cameraBaseUrl}/status.json` كل 5 ثواني (مهلة 2 ثانية) وبتدور على أحداث `kiln_exit`،
+فالطرحة اللي الأوبريتر وزنها بتظهر في "آخر وزنة" و"طرحات النهارده" على طول من غير ما تستنى ERPNext. برا المصنع = التحديث العادي.
+Inside the factory the production page reads `{cameraBaseUrl}/status.json` every 5 s (2 s timeout) and picks up `kiln_exit`
+events, so a weighed exit shows at once. Outside the factory it uses the normal refresh.
+
+الأحداث بتتحط في `events` (جنب أحداث up/down) أو في ليستة `kilnExits` — الاتنين شغالين. خلّي أحداث النهارده كلها في الملف (أو آخر 200).
+Put them in `events` (next to the up/down events) or in a `kilnExits` list — both work. Keep today's events in the file (or the last 200).
+
+```json
+{
+  "id": "kx-20261121-094548-4",
+  "kind": "kiln_exit",
+  "at": "2026-11-21T07:45:48Z",
+  "kiln": "فرن 4",
+  "type": "برتقال",
+  "netKg": 812.5,
+  "fullKg": 1062.5,
+  "emptyKg": 250,
+  "trolley": "7",
+  "room": "2",
+  "erpName": "ugmjfqjt36"
+}
+```
+
+| الحقل | معناه |
+|---|---|
+| `id` | ثابت ومش بيتكرر لكل طرحة. Stable and unique per exit. |
+| `at` | وقت الوزن ISO. Weighing time, ISO. |
+| `kiln` / `type` | زي ERPNext بالظبط (`فرن 4`، `برتقال`). Spelled exactly like ERPNext. |
+| `netKg` | الصافي = ممتلئ − فاضي (لو مش موجود بيتحسب). Net = full − empty (computed when missing). |
+| `fullKg` / `emptyKg` | ممتلئ / فاضي بالكيلو. Full / empty in kg. |
+| `trolley` / `room` | الترول / الغرفة. |
+| `erpName` | اختياري: اسم سجل Kiln Exit بعد ما يتعمل في ERPNext. Optional: the Kiln Exit record name once created. |
+
+- من غير `erpName` الداشبورد بيربط الحدث بسجل ERPNext لو نفس الفرن وفرق الوقت ≤ 3 دقايق، والناقص في السجل (الوزن، ممتلئ، فاضي، الترول، الغرفة) بيتكمّل من الحدث.
+  Without `erpName` the event is matched to the ERPNext record with the same kiln within 3 minutes; the record's missing values are filled from the event.
+- **ERPNext**: لو عايز الأرقام دي تفضل بعد ما الحدث يتمسح، ضيف في Kiln Exit الحقول `weight_kg` (الصافي) و`full_weight_kg` و`empty_weight_kg` و`trolley` و`room` (الأسامي في `erp.batches` في الكونفج). أي حقل موجود بيتقري لوحده.
+  To keep the numbers in ERPNext add those fields to Kiln Exit (names in `erp.batches`); any that exist are read automatically.
+- **WebSocket (اختياري)**: لو الإيجنت عنده WebSocket بيبعت كل `kiln_exit` أول ما يحصل (حدث واحد، أو `{events:[…]}`)، حط مساره في `production.liveWsPath` (مثلا `"/ws"`). لو وقع الصفحة بترجع لـ status.json.
+  Optional: an agent WebSocket pushing each `kiln_exit`; set its path in `production.liveWsPath`. If it drops the page falls back to status.json.
+- نفس شروط `status.json` اللي فوق: CORS و`Access-Control-Allow-Private-Network: true`. Same CORS / PNA headers as above.
+- شاشة الأوبريتر: `it.operatorUrl` = `https://192.168.1.200:8443/operator` (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها).
+
 ## على السيرفر (Server setup, Vercel)
 
 1. **`IT_AGENT_SECRET`**: سر طويل عشوائي (مثلا 40 حرف) في Vercel → Settings → Environment Variables، ونفس القيمة في الإيجنت.

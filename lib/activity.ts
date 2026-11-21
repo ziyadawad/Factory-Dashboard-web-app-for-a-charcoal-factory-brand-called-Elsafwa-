@@ -156,7 +156,7 @@ async function kilnEvents(since: string): Promise<ActivityEvent[]> {
       title: "طرحة خرجت",
       details: [String(row.kiln ?? "").trim(), String(row[mapping.typeField] ?? "").trim()].filter(Boolean).join(" · "),
       amount: null,
-      extra: Number.isFinite(kg) && kg > 0 ? `${qtyText(kg)} كجم` : "بدون وزن",
+      extra: Number.isFinite(kg) && kg > 0 ? `${qtyText(kg)} كجم صافي` : "بدون وزن",
       badge: null,
       doctype: mapping.exitsDoctype,
       docname: String(row.name),
