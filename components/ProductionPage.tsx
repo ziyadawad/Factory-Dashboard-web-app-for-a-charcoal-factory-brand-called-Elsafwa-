@@ -20,6 +20,7 @@ import {
 } from "@/lib/production-stats";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
+import { sameExit } from "@/lib/kiln-alert";
 
 // صفحة الإنتاج والأفران: الأرقام فوق، آخر وزنة، الأفران، الأنواع، بالساعة، طرحات النهارده، ملخص الشهر
 // The production page: KPIs, the last weighing, kilns, types, hourly, today's exits, the month summary
@@ -299,7 +300,7 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
 // من غير scroll ولا قص: لو أكتر من اللي ياخد مكانه، الأحدث اللي ياخدوا مكانهم وتحتهم "+N طرحة تانية"
 // Today's exits: rows fill the card (grow up to exitRowMax with few exits, shrink to exitRowMin with many);
 // never scroll, never cut: when more than fit, the newest that fit and a "+N طرحة تانية" line under them
-function ExitList({ data, exits, sizes }: { data: ProductionData; exits: ProductionExit[]; sizes: LeftSizes }) {
+function ExitList({ data, exits, sizes, alertExit }: { data: ProductionData; exits: ProductionExit[]; sizes: LeftSizes; alertExit?: ProductionExit | null }) {
   const gap = 6;
   // الطرحات الجديدة (بعد أول عرض) بتدخل بحركة ولمعة قصيرة - new exits (after the first render) slide in with a short flash
   const seen = useRef<Set<string> | null>(null);
@@ -367,7 +368,7 @@ function ExitList({ data, exits, sizes }: { data: ProductionData; exits: Product
               key={key}
               className={`shrink-0 grid items-center gap-2.5 px-3 rounded-xl border ${
                 index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_16px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
-              } ${fresh.has(key) ? "animate-exit-in" : ""}`}
+              } ${fresh.has(key) ? "animate-exit-in" : ""} ${alertExit && sameExit(exit, alertExit) ? "exit-alert-row" : ""}`}
               style={{ height: row, gridTemplateColumns: "auto auto minmax(0,1fr) auto" }}
             >
               <span className="prod-fs text-gray-100 font-bold tabular-nums" style={fs(sizes.exitTimeFontSize)}>
@@ -467,6 +468,70 @@ function MonthTable({ title, rows, onOpen }: { title: string; rows: { key: strin
   );
 }
 
+// كارت "🔥 طرحة جديدة" الكبير وقت التنبيه (المقاسات ثابتة من production.alertCard) - the big new-exit card during the alert
+function NewExitCard({ data, exit, pending, onDismiss }: { data: ProductionData; exit: ProductionExit; pending: number; onDismiss: () => void }) {
+  const c = dashboardConfig.production.alertCard;
+  const color = typeColor(data, exit.type);
+  const field = (label: string, value: ReactNode, style?: CSSProperties) => (
+    <div className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2 flex flex-col items-center gap-1">
+      <span className="text-gray-400 font-semibold whitespace-nowrap" style={{ fontSize: c.labelFontSize }}>
+        {label}
+      </span>
+      <span className="font-extrabold text-white truncate max-w-full leading-tight" style={{ fontSize: c.chipFontSize, ...style }}>
+        {value}
+      </span>
+    </div>
+  );
+  return (
+    <div
+      key={exit.liveId ?? exit.id}
+      role="alert"
+      onClick={onDismiss}
+      title="اضغط للإغلاق"
+      className="exit-alert-card pointer-events-auto cursor-pointer rounded-3xl border-2 border-brandOrange bg-card/95 px-8 py-6 flex flex-col items-center gap-4"
+      style={{ width: c.width, maxWidth: "100%" }}
+    >
+      <div className="flex items-center gap-3 whitespace-nowrap">
+        <span className="font-extrabold text-brandOrange leading-none" style={{ fontSize: c.titleFontSize }}>
+          🔥 طرحة جديدة
+        </span>
+        <span className="text-gray-300 font-bold inline-flex items-center gap-1.5" style={{ fontSize: c.labelFontSize * 1.4 }}>
+          <Clock size={c.labelFontSize * 1.3} />
+          {num(exit.time)}
+        </span>
+      </div>
+      <p className="leading-none whitespace-nowrap">
+        {exit.kg !== null ? (
+          <>
+            <span className="font-extrabold text-white" style={{ fontSize: c.weightFontSize }}>
+              {num(formatKg(exit.kg))}
+            </span>
+            <span className="text-gray-400 font-bold" style={{ fontSize: c.unitFontSize }}>
+              {" "}
+              كجم صافي
+            </span>
+          </>
+        ) : (
+          <span className="font-extrabold text-gray-500" style={{ fontSize: c.unitFontSize * 1.6 }}>
+            بدون وزن
+          </span>
+        )}
+      </p>
+      <div className="grid grid-cols-4 gap-3 w-full">
+        {field("الفرن", toEnglishDigits(exit.kiln || "—"))}
+        {field("الغرفة", toEnglishDigits(exit.room || "—"))}
+        {field("النوع", exit.type || "غير محدد", { color })}
+        {field("الترول", toEnglishDigits(exit.trolley || "—"))}
+      </div>
+      {pending > 0 && (
+        <span className="text-gray-300 font-bold" style={{ fontSize: c.labelFontSize }}>
+          {num(`+${formatNumber(pending)}`)} طرحة جديدة كمان
+        </span>
+      )}
+    </div>
+  );
+}
+
 type Sizes = typeof dashboardConfig.sizes.productionPage.compact;
 type LeftSizes = typeof dashboardConfig.sizes.production.compact;
 
@@ -474,10 +539,16 @@ export default function ProductionPage({
   data,
   lan = false,
   onOpen,
+  alertExit = null,
+  alertPending = 0,
+  onDismissAlert,
 }: {
   data: ProductionData | null;
   lan?: boolean; // الإيجنت على الشبكة بيرد (الطرحات على طول) - the LAN agent answers (live exits)
   onOpen: (target: ProductionTarget) => void;
+  alertExit?: ProductionExit | null; // طرحة جديدة وقت التنبيه - the new exit during the alert
+  alertPending?: number;
+  onDismissAlert?: () => void;
 }) {
   const compact = useCompact();
   const page = dashboardConfig.sizes.productionPage;
@@ -529,7 +600,7 @@ export default function ProductionPage({
           }
           className="flex-1"
         >
-          <ExitList data={data} exits={s.todayExits} sizes={left} />
+          <ExitList data={data} exits={s.todayExits} sizes={left} alertExit={alertExit} />
         </Card>
       </div>
 
@@ -597,6 +668,13 @@ export default function ProductionPage({
           />
         </div>
       </Card>
+
+      {/* التنبيه: الكارت الكبير فوق الأفران والنص (القايمة الشمال باينة وسطرها منور) - the alert card over the kilns and middle */}
+      {alertExit && (
+        <div className="relative z-20 min-w-0 min-h-0 flex items-center justify-center pointer-events-none" style={{ gridColumn: "1 / span 2", gridRow: "1 / span 3" }}>
+          <NewExitCard data={data} exit={alertExit} pending={alertPending} onDismiss={() => onDismissAlert?.()} />
+        </div>
+      )}
     </div>
   );
 }

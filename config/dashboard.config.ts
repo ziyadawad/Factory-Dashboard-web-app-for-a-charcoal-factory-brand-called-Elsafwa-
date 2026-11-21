@@ -469,6 +469,21 @@ export const dashboardConfig = {
     liveSeconds: 5,
     liveTimeoutMs: 2000,
     liveWsPath: null as string | null,
+    // ===== تنبيه طرحة جديدة (على كل الصفحات) =====
+    // طرحة جديدة (من الإيجنت على الشبكة، أو التحديث العادي برا المصنع): صوت قصير (public/sounds/kiln-exit.wav)،
+    // والشاشة بتروح لصفحة "الإنتاج والأفران" وتقف عليها alertHoldSeconds مع كارت كبير للطرحة، وبعدين التقليب بيكمل
+    // (ولو كانت صفحة تانية متثبتة بترجعلها). كذا طرحة مع بعض = ورا بعض alertQueueSeconds لكل واحدة وصوت لكل طرحة.
+    // مش بيشتغل أول ما الصفحة تفتح (الطرحات اللي بعد كده بس)، ولو لوحة تفاصيل مفتوحة بيستنى لحد ما تتقفل
+    // New kiln exit alert (all pages): a chime, jump to the production page and hold it alertHoldSeconds with a big
+    // card, then rotation resumes (or returns to the pinned page). Several at once = one after another,
+    // alertQueueSeconds each, one chime per exit. Never on first load; waits while a details panel is open
+    alertEnabled: true,
+    alertVolume: 0.8, // 0 - 1
+    alertHoldSeconds: 30,
+    alertQueueSeconds: 5,
+    alertSound: "/sounds/kiln-exit.wav",
+    // مقاسات الكارت بالبكسل (ثابتة) - the card's sizes in px (fixed)
+    alertCard: { width: 860, titleFontSize: 54, weightFontSize: 120, unitFontSize: 34, chipFontSize: 32, labelFontSize: 18 },
   },
 
   // ============================================================

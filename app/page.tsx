@@ -22,6 +22,7 @@ import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPa
 import ItPage from "@/components/ItPage";
 import OperatorQrButton from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
+import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -102,12 +103,13 @@ export default function Dashboard() {
     "/api/production",
     fetcher,
     PRODUCTION_REFRESH_MS,
-    pageId === "production" || productionTarget !== null,
+    // تنبيه الطرحة الجديدة شغال = بيسأل على كل الصفحات - the new-exit alert on = polled on every page
+    ALERTS_ENABLED || pageId === "production" || productionTarget !== null,
     { revalidateOnReconnect: true, refreshWhenOffline: true }
   );
   // جوه المصنع: الطرحات على طول من الإيجنت بتتدمج فوق بيانات ERPNext (برا المصنع = زي ما هي)
   // Inside the factory: live exits from the agent merged over the ERPNext data (outside = unchanged)
-  const liveExits = useLiveKilnExits(pageId === "production" || productionTarget !== null);
+  const liveExits = useLiveKilnExits(ALERTS_ENABLED || pageId === "production" || productionTarget !== null);
   const production = useMemo(() => {
     if (!productionRaw) return null;
     const base = productionError ? { ...productionRaw, offline: true } : productionRaw;
@@ -174,6 +176,17 @@ export default function Dashboard() {
   const paused =
     salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen || operatorQrOpen;
 
+  // تنبيه طرحة جديدة: بيستنى لو لوحة تفاصيل مفتوحة - the new kiln exit alert; waits while a details panel is open
+  const chime = useChime();
+  const alert = useKilnExitAlerts(production, paused, chime.play);
+  const alertOn = alert.current !== null;
+  // الطرحة بآخر بياناتها (الوزن ممكن يوصل بعدين من ERPNext) - the exit with its latest values (ERPNext may add the weight later)
+  const alertExit = useMemo(() => {
+    const cur = alert.current;
+    if (!cur) return null;
+    return production?.exits.find((e) => sameExit(e, cur)) ?? cur;
+  }, [alert.current, production]);
+
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
     setDirection(dir);
     setPageIndex(index);
@@ -184,6 +197,26 @@ export default function Dashboard() {
     url.searchParams.set("page", PAGES[index]?.id ?? String(index + 1));
     window.history.replaceState(null, "", url);
   }, []);
+
+  // التنبيه: يروح لصفحة الإنتاج (حتى لو صفحة تانية متثبتة)، ولما يخلص يرجع للمتثبتة - the alert jumps to production
+  // (even over a pinned page) and returns to the pinned page afterwards
+  const productionIndex = PAGES.findIndex((p) => p.id === "production");
+  const returnPageRef = useRef<number | null>(null);
+  const wasAlertOn = useRef(false);
+  useEffect(() => {
+    if (productionIndex < 0) return;
+    if (alertOn) {
+      if (!wasAlertOn.current) returnPageRef.current = pinned && pageIndex !== productionIndex ? pageIndex : null;
+      wasAlertOn.current = true;
+      if (pageIndex !== productionIndex) changePage(productionIndex, 1);
+    } else if (wasAlertOn.current) {
+      wasAlertOn.current = false;
+      const back = returnPageRef.current;
+      returnPageRef.current = null;
+      if (back !== null && pinned) changePage(back, -1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertOn, alert.current]);
 
   // الكيبورد: تحت / PageDown / الشمال = الجاية، فوق / PageUp / اليمين = اللي فاتت (وبتلف)
   // Keyboard: ArrowDown / PageDown / ArrowLeft = next, ArrowUp / PageUp / ArrowRight = previous (wraps around)
@@ -208,10 +241,11 @@ export default function Dashboard() {
   useEffect(() => {
     const seconds = PAGES[pageIndex]?.durationSeconds;
     const next = nextInRotation(pageIndex);
-    if (paused || pinned || !autoRotate || next === pageIndex || !(seconds > 0)) return;
+    // التنبيه شغال = التقليب واقف، ولما يخلص العداد بيبدأ من الأول - alert on = rotation held; afterwards the timer restarts
+    if (paused || pinned || alertOn || !autoRotate || next === pageIndex || !(seconds > 0)) return;
     const timer = setTimeout(() => changePage(next, 1), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [pageIndex, switchCount, paused, pinned, autoRotate, changePage]);
+  }, [pageIndex, switchCount, paused, pinned, alertOn, autoRotate, changePage]);
 
   // حركة التقليب: الجديدة بتدخل من تحت (الجاية) أو من فوق (اللي فاتت)، والقديمة بتخرج عكسها وهي بتختفي.
   // "حركة أقل" في الجهاز: من غير حركة، ظهور تدريجي بس
@@ -330,7 +364,16 @@ export default function Dashboard() {
           </div>
         );
       case "production":
-        return <ProductionPage data={production} lan={liveExits.lan} onOpen={setProductionTarget} />;
+        return (
+          <ProductionPage
+            data={production}
+            lan={liveExits.lan}
+            onOpen={setProductionTarget}
+            alertExit={alertExit}
+            alertPending={alert.pending}
+            onDismissAlert={alert.dismiss}
+          />
+        );
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" onOpenItem={setStockItem} />;
       case "sales":
@@ -400,7 +443,22 @@ export default function Dashboard() {
         pageNumber={pageIndex + 1}
         pageCount={PAGES.length}
         pageTitles={PAGES.map((p) => p.title)}
-        actions={pageId === "production" ? <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} /> : undefined}
+        actions={
+          <>
+            {/* المتصفح مانع الصوت: ضغطة واحدة بتفعله - the browser blocks sound: one click enables it */}
+            {chime.needsUnlock && (
+              <button
+                type="button"
+                onClick={chime.unlock}
+                className="px-3 py-1.5 rounded-xl border border-brandOrange/60 bg-brandOrange/10 text-brandOrange text-sm font-bold whitespace-nowrap hover:bg-brandOrange/20 transition-colors"
+                title="المتصفح مانع الصوت - اضغط عشان صوت الطرحة الجديدة يشتغل"
+              >
+                🔔 فعّل الصوت
+              </button>
+            )}
+            {pageId === "production" && <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />}
+          </>
+        }
         onPageChange={changePage}
         nav={<PageNav pages={PAGES} current={pageIndex} onChange={changePage} pinned={pinned} onTogglePin={togglePin} />}
       />
