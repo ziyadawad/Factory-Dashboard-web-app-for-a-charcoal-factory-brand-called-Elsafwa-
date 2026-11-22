@@ -9,11 +9,28 @@ import { useIdleClose } from "@/lib/useIdleClose";
 // زرار "📱 شاشة الأوبريتر" في هيدر صفحة الإنتاج: بيفتح QR كبير لـ it.operatorUrl والرابط مكتوب تحته
 // The "📱 شاشة الأوبريتر" button in the production page header: opens a big QR code for it.operatorUrl with the link under it
 
-const OPERATOR_URL = dashboardConfig.it.operatorUrl;
+// الزرار دايما ظاهر: لو operatorUrl فاضي بناخد {cameraBaseUrl}/operator - always shown: empty operatorUrl = {cameraBaseUrl}/operator
+const AGENT_BASE = dashboardConfig.it.cameraBaseUrl.replace(/\/+$/, "");
+const OPERATOR_URL = dashboardConfig.it.operatorUrl || `${AGENT_BASE}/operator`;
+// بنسأل الإيجنت لما الـ popup يفتح عشان نعرف هو بيرد ولا لأ - probe the agent when the popup opens
+const PROBE_URL = AGENT_BASE ? `${AGENT_BASE}/status.json` : OPERATOR_URL;
+const PROBE_TIMEOUT_MS = dashboardConfig.it.localStatusTimeoutMs || 2000;
 
 function OperatorQrPopup({ onClose }: { onClose: () => void }) {
   useIdleClose(onClose);
   const [svg, setSvg] = useState("");
+  // null = لسه بنسأل، true = الإيجنت رد، false = مش بيرد (برا المصنع أو كمبيوتر الـ IT مقفول)
+  // null = still probing, true = the agent answered, false = unreachable (outside the factory or the IT PC is off)
+  const [reachable, setReachable] = useState<boolean | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    fetch(PROBE_URL, { cache: "no-store", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+      .then((res) => !stopped && setReachable(res.ok))
+      .catch(() => !stopped && setReachable(false));
+    return () => {
+      stopped = true;
+    };
+  }, []);
   useEffect(() => {
     let stopped = false;
     QRCode.toString(OPERATOR_URL, { type: "svg", errorCorrectionLevel: "M", margin: 2, color: { dark: "#000000", light: "#FFFFFF" } })
@@ -54,6 +71,12 @@ function OperatorQrPopup({ onClose }: { onClose: () => void }) {
         <a href={OPERATOR_URL} target="_blank" rel="noreferrer" dir="ltr" className="font-numbers text-[22px] font-bold text-brandOrange hover:underline break-all text-center">
           {OPERATOR_URL}
         </a>
+        {/* الـ QR والرابط بيظهروا دايما، والملاحظة لو الإيجنت مش بيرد - QR and link always shown; the note when the agent is unreachable */}
+        {reachable === false && (
+          <p className="max-w-[520px] text-center text-[17px] font-bold text-statusAmber bg-statusAmber/10 border border-statusAmber/40 rounded-xl px-4 py-2">
+            ⚠️ متاحة جوه المصنع بس، ولما كمبيوتر الـ IT يكون شغال
+          </p>
+        )}
       </div>
     </div>
   );
@@ -61,7 +84,6 @@ function OperatorQrPopup({ onClose }: { onClose: () => void }) {
 
 // open بيتمسك في الصفحة عشان التقليب يقف والـ QR مفتوح - open lives in the page so rotation pauses while the QR is shown
 export default function OperatorQrButton({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
-  if (!OPERATOR_URL) return null;
   return (
     <>
       <button
