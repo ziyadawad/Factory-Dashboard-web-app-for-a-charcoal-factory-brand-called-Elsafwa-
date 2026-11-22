@@ -339,10 +339,22 @@ export const dashboardConfig = {
         fundWords: {
           "خزينة حصة الانتاج": ["انتاج"], // خزينة حصة الانتاج
           "خزينة حصة التعبئة": ["تعبئه", "تعبيه"], // خزينة حصة التعبئة
-          "خزينة خارجية 1": ["خارجيه 1"], // خزينة خارجية 1 (خارجية١ / خارجيه1 كمان)
-          "خزينة خارجية 2": ["خارجيه 2"], // خزينة خارجية 2 (خارجية٢ / خارجيه2 كمان)
+          // خارجية 1 / خارجيه1 / خارجيه١ / خارجي 1 كلهم واحد (المسافة والأرقام العربي مش بيفرقوا)
+          "خزينة خارجية 1": ["خارجيه 1", "خارجي 1"], // خزينة خارجية 1
+          "خزينة خارجية 2": ["خارجيه 2", "خارجي 2"], // خزينة خارجية 2
         } as Record<string, string[]>,
       },
+      // ===== صدقات مصروفات الموظفين (Expense Claim) =====
+      // كل سطر في جدول expenses نوعه من الأنواع دي في Expense Claim متسجل (docstatus = 1) = صرف صدقة:
+      // التاريخ = expense_date، المبلغ = sanctioned_amount (أو amount)، التفاصيل = description، والصندوق من الـ description
+      // بنفس كلمات fundWords فوق. لو مفيش صندوق بيظهر في "⚠ صدقة من غير صندوق" (من auto.since)
+      // لو فيه Charity Transaction بنفس الصندوق والمبلغ والتاريخ ±1 يوم بيتحسب مرة واحدة (سجل الصدقات) و"⚠ متسجلة مرتين"
+      // Expense Claim charity: each submitted "expenses" row of these types is one صرف (fund from its description).
+      // No fund = listed under "صدقة من غير صندوق"; a matching Charity Transaction (fund, amount, date ±1) counts once
+      expenseClaimTypes: ["صدقات"] as string[],
+      // من التاريخ ده بس بيتحسب في الأرصدة: اللي قبله داخل في الرصيد الافتتاحي (1/10/2026)
+      // Counted in the balances from this date only: anything earlier is inside the opening balance (1 Oct 2026)
+      expenseClaimSince: "2026-10-01",
     } as ConfigErpCharity,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)

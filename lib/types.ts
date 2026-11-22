@@ -407,6 +407,7 @@ export interface CharitySource {
   type: string; // Payment Entry / Journal Entry / Expense Claim
   name: string;
   url: string;
+  label?: string; // "مصروف موظف HR-EXP-… · اسم الموظف" لسطر صدقات في Expense Claim - for an Expense Claim row
 }
 
 // عملية صدقات متسجلة مرتين: يدوي + تلقائي (بيتحسبوا مرة واحدة: التلقائي) - recorded twice (counted once: the automatic)
@@ -416,6 +417,9 @@ export interface CharityDuplicatePair {
   amount: number;
   manual: { id: string; date: string; url: string };
   auto: { id: string; date: string; url: string; source: CharitySource };
+  // claim = سطر مصروف موظف (auto) + سجل صدقات (manual، يدوي أو تلقائي): اللي بيتحسب سجل الصدقات
+  // claim = an Expense Claim row (auto) + a Charity Transaction (manual: hand-made or automatic); the record counts
+  kind?: "claim";
 }
 
 // صدقة على الخزنة من غير صندوق (أو أكتر من صندوق): مش بتتسجل لوحدها - treasury charity without a (single) fund
@@ -703,6 +707,8 @@ export type ConfigErpCharity = {
   funds: string[];
   // صدقات الخزنة التلقائية - treasury charity recorded automatically
   auto: { treasuryAccounts: string[]; since: string; fundWords: Record<string, string[]> };
+  expenseClaimTypes: string[]; // أنواع مصروفات الموظفين اللي بتتحسب صدقة - Expense Claim Types counted as charity
+  expenseClaimSince: string; // من التاريخ ده بس في الأرصدة - counted in the balances from this date
 };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)

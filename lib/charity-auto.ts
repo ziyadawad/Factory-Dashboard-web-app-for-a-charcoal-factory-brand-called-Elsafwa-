@@ -81,26 +81,151 @@ export type CharityRaw = {
   creation: string;
   source_voucher_type: string | null;
   source_voucher: string | null;
+  // سطر صدقات من Expense Claim (مش سجل Charity Transaction) - an Expense Claim charity row (not a Charity Transaction)
+  claim?: ClaimCharity;
 };
 
-// كل عمليات الصدقات بمستند الخزنة بتاعها (لو فيه) - every charity operation with its treasury voucher (if any)
+// كل عمليات الصدقات بمستند الخزنة بتاعها (لو فيه) + سطور صدقات مصروفات الموظفين اللي ليها صندوق
+// Every charity operation with its treasury voucher (if any) + the funded Expense Claim charity rows
 export async function loadCharityRaw(order: "asc" | "desc"): Promise<CharityRaw[]> {
-  const { doctype } = dashboardConfig.erp.charity;
+  const { doctype, expenseClaimSince } = dashboardConfig.erp.charity;
   const src = await sourceFields();
   const fields = ["name", "fund", "txn_type", "amount", "txn_date", "beneficiary", "details", "owner", "creation"];
   if (src.type) fields.push(`${src.type} as source_voucher_type`);
   if (src.voucher) fields.push(`${src.voucher} as source_voucher`);
-  const { message } = await erpPost<{ message: CharityRaw[] }>("/api/method/frappe.client.get_list", {
-    doctype,
-    fields,
-    order_by: `txn_date ${order}, creation ${order}`,
-    limit_page_length: 0,
-  });
-  return message.map((r) => ({ ...r, source_voucher_type: r.source_voucher_type ?? null, source_voucher: r.source_voucher ?? null }));
+  const [{ message }, claims] = await Promise.all([
+    erpPost<{ message: CharityRaw[] }>("/api/method/frappe.client.get_list", {
+      doctype,
+      fields,
+      order_by: `txn_date ${order}, creation ${order}`,
+      limit_page_length: 0,
+    }),
+    claimCharity(),
+  ]);
+  const records = message.map((r) => ({ ...r, source_voucher_type: r.source_voucher_type ?? null, source_voucher: r.source_voucher ?? null }));
+  // السكربت عمل سجل للمصروف ده خلاص (نفس المستند والمبلغ) = نفس العملية، مش بنعدها تاني
+  // A Server Script already made a record for this claim (same voucher and amount) = the same operation, not added again
+  const fromScript = new Set(records.filter((r) => r.source_voucher).map((r) => `${String(r.source_voucher).trim()}|${cents(r.amount)}`));
+  const extra = claims
+    .filter((c) => c.fund && c.date >= expenseClaimSince && !fromScript.has(`${c.claim}|${cents(c.amount)}`))
+    .map(claimRow);
+  const sign = order === "asc" ? 1 : -1;
+  return [...records, ...extra].sort(
+    (a, b) => sign * (String(a.txn_date).localeCompare(String(b.txn_date)) || String(a.creation).localeCompare(String(b.creation)))
+  );
+}
+
+// ===== صدقات مصروفات الموظفين (Expense Claim، جدول expenses) - Expense Claim charity rows =====
+
+export type ClaimCharity = {
+  id: string; // "HR-EXP-2026-00803-1 #7"
+  claim: string;
+  row: number;
+  employee: string;
+  employeeName: string;
+  date: string;
+  amount: number;
+  text: string;
+  funds: string[];
+  fund: string | null;
+  creation: string;
+  owner: string;
+};
+
+const cents = (v: unknown) => Math.round((Number(v) || 0) * 100);
+
+type ClaimRowRaw = {
+  name: string; employee: string | null; employee_name: string | null; posting_date: string | null; owner: string | null; creation: string;
+  row_idx: number; expense_date: string | null; description: string | null; amount: number | null; sanctioned_amount: number | null;
+};
+
+// كاش دقيقة، ولو فشل آخر نتيجة نجحت (ولو مفيش بيرمي) - 1 min cache; on failure the last good result (else throws)
+let claimCache: { at: number; value: ClaimCharity[] } | null = null;
+let claimInFlight: Promise<ClaimCharity[]> | null = null;
+export async function claimCharity(): Promise<ClaimCharity[]> {
+  const { expenseClaimTypes } = dashboardConfig.erp.charity;
+  if (expenseClaimTypes.length === 0) return [];
+  if (claimCache && Date.now() - claimCache.at < 60_000) return claimCache.value;
+  if (claimInFlight) return claimInFlight;
+  const child = "`tabExpense Claim Detail`";
+  claimInFlight = (async () => {
+    try {
+      const { message } = await erpPost<{ message: ClaimRowRaw[] }>("/api/method/frappe.client.get_list", {
+        doctype: "Expense Claim",
+        filters: [["docstatus", "=", 1], ["Expense Claim Detail", "expense_type", "in", expenseClaimTypes]],
+        fields: [
+          "name", "employee", "employee_name", "posting_date", "owner", "creation",
+          `${child}.idx as row_idx`, `${child}.expense_date as expense_date`, `${child}.description as description`,
+          `${child}.amount as amount`, `${child}.sanctioned_amount as sanctioned_amount`,
+        ],
+        limit_page_length: 0,
+      });
+      const value = message
+        .map((r): ClaimCharity => {
+          const text = plain(r.description);
+          const funds = detectFunds(text);
+          return {
+            id: `${r.name} #${r.row_idx}`,
+            claim: r.name,
+            row: Number(r.row_idx) || 0,
+            employee: str(r.employee),
+            employeeName: plain(r.employee_name) || str(r.employee),
+            date: str(r.expense_date || r.posting_date).slice(0, 10),
+            amount: round(Number(r.sanctioned_amount) || Number(r.amount) || 0),
+            text,
+            funds,
+            fund: funds.length === 1 ? funds[0] : null,
+            creation: str(r.creation),
+            owner: str(r.owner),
+          };
+        })
+        .filter((c) => c.amount > 0 && c.date)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.claim.localeCompare(b.claim) || a.row - b.row);
+      claimCache = { at: Date.now(), value };
+      return value;
+    } catch (error) {
+      console.error("[erp] expense claim charity failed:", error instanceof Error ? error.message : error);
+      if (claimCache) return claimCache.value;
+      throw error;
+    }
+  })();
+  try {
+    return await claimInFlight;
+  } finally {
+    claimInFlight = null;
+  }
+}
+
+function claimSource(c: ClaimCharity): CharitySource {
+  return { type: "Expense Claim", name: c.claim, url: erpDocUrl("Expense Claim", c.claim), label: `مصروف موظف ${c.claim} · ${c.employeeName}` };
+}
+
+// سطر مصروف موظف كعملية صرف في صندوقه - an Expense Claim row as a صرف in its fund
+function claimRow(c: ClaimCharity): CharityRaw {
+  return {
+    name: c.id,
+    fund: c.fund,
+    txn_type: "صرف",
+    amount: c.amount,
+    txn_date: c.date,
+    beneficiary: "",
+    details: c.text,
+    owner: c.owner,
+    creation: c.creation,
+    source_voucher_type: "Expense Claim",
+    source_voucher: c.claim,
+    claim: c,
+  };
+}
+
+// رابط العملية في ERPNext - the operation's ERPNext link
+export function charityRowUrl(row: CharityRaw): string {
+  return row.claim ? erpDocUrl("Expense Claim", row.claim.claim) : erpDocUrl(dashboardConfig.erp.charity.doctype, String(row.name));
 }
 
 // مستند الخزنة بتاع عملية (null = اتسجلت بإيدها) - the operation's treasury voucher (null = entered by hand)
 export function sourceOf(row: CharityRaw): CharitySource | null {
+  if (row.claim) return claimSource(row.claim);
   const name = String(row.source_voucher ?? "").trim();
   if (!name) return null;
   const type = String(row.source_voucher_type ?? "").trim() || guessDoctype(name);
@@ -117,42 +242,64 @@ function guessDoctype(name: string) {
 const TYPE_OF: Record<string, "out" | "in"> = { صرف: "out", إيداع: "in" };
 const dayNum = (date: string) => Math.round(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 86_400_000);
 
-export function charityDuplicates(rows: CharityRaw[]): { pairs: CharityDuplicatePair[]; skip: Set<string>; partner: Map<string, string> } {
-  const { doctype } = dashboardConfig.erp.charity;
+// + سطر مصروف موظف = أي سجل صدقات لسه بيتحسب (يدوي أو تلقائي) بنفس الصندوق والمبلغ والتاريخ ±1 يوم: بيتحسب السجل
+// + An Expense Claim row matching any still-counted Charity Transaction (fund, amount, date ±1 day): the record counts
+
+export type CharityPartner = { id: string; url: string };
+
+export function charityDuplicates(rows: CharityRaw[]): { pairs: CharityDuplicatePair[]; skip: Set<string>; partner: Map<string, CharityPartner> } {
   const typeOf = (r: CharityRaw) => TYPE_OF[(r.txn_type ?? "").trim()];
-  const amountOf = (r: CharityRaw) => Math.round((Number(r.amount) || 0) * 100);
-  const autos = rows.filter((r) => sourceOf(r) && typeOf(r)).sort((a, b) => String(a.txn_date).localeCompare(String(b.txn_date)));
-  const manuals = rows.filter((r) => !sourceOf(r) && typeOf(r));
+  const fundOf = (r: CharityRaw) => (r.fund ?? "").trim();
+  const byDate = (a: CharityRaw, b: CharityRaw) => String(a.txn_date).localeCompare(String(b.txn_date));
+  const records = rows.filter((r) => !r.claim && typeOf(r));
+  const autos = records.filter((r) => sourceOf(r)).sort(byDate);
+  const manuals = records.filter((r) => !sourceOf(r));
+  const claims = rows.filter((r) => r.claim && typeOf(r)).sort(byDate);
   const used = new Set<string>();
+  const skip = new Set<string>();
   const pairs: CharityDuplicatePair[] = [];
-  for (const auto of autos) {
+  const info = (r: CharityRaw) => ({ id: String(r.name), date: String(r.txn_date).slice(0, 10), url: charityRowUrl(r) });
+
+  // أقرب واحد مش مستخدم (±1 يوم) بنفس الصندوق والنوع والمبلغ - the nearest unused match within ±1 day
+  const nearest = (target: CharityRaw, pool: CharityRaw[]) => {
     let best: CharityRaw | null = null;
     let bestGap = 2;
-    for (const m of manuals) {
-      const id = String(m.name);
-      if (used.has(id) || (m.fund ?? "").trim() !== (auto.fund ?? "").trim() || typeOf(m) !== typeOf(auto) || amountOf(m) !== amountOf(auto)) continue;
-      const gap = Math.abs(dayNum(String(m.txn_date)) - dayNum(String(auto.txn_date)));
+    for (const m of pool) {
+      if (used.has(String(m.name)) || fundOf(m) !== fundOf(target) || typeOf(m) !== typeOf(target) || cents(m.amount) !== cents(target.amount)) continue;
+      const gap = Math.abs(dayNum(String(m.txn_date)) - dayNum(String(target.txn_date)));
       if (gap <= 1 && gap < bestGap) {
         best = m;
         bestGap = gap;
       }
     }
+    return best;
+  };
+
+  for (const auto of autos) {
+    const best = nearest(auto, manuals);
     if (!best) continue;
     used.add(String(best.name));
+    skip.add(String(best.name));
+    pairs.push({ fund: fundOf(auto), type: typeOf(auto), amount: cents(auto.amount) / 100, manual: info(best), auto: { ...info(auto), source: sourceOf(auto)! } });
+  }
+  // سطور المصروفات قصاد السجلات اللي لسه بتتحسب - claim rows against the records still counted
+  const counted = records.filter((r) => !skip.has(String(r.name)));
+  for (const claim of claims) {
+    const best = nearest(claim, counted);
+    if (!best) continue;
+    used.add(String(best.name));
+    skip.add(String(claim.name));
     pairs.push({
-      fund: (auto.fund ?? "").trim(),
-      type: typeOf(auto),
-      amount: Math.round((Number(auto.amount) || 0) * 100) / 100,
-      manual: { id: String(best.name), date: String(best.txn_date).slice(0, 10), url: erpDocUrl(doctype, String(best.name)) },
-      auto: { id: String(auto.name), date: String(auto.txn_date).slice(0, 10), url: erpDocUrl(doctype, String(auto.name)), source: sourceOf(auto)! },
+      fund: fundOf(claim), type: typeOf(claim), amount: cents(claim.amount) / 100, kind: "claim",
+      manual: info(best), auto: { ...info(claim), source: sourceOf(claim)! },
     });
   }
-  const partner = new Map<string, string>();
+  const partner = new Map<string, CharityPartner>();
   for (const p of pairs) {
-    partner.set(p.manual.id, p.auto.id);
-    partner.set(p.auto.id, p.manual.id);
+    partner.set(p.manual.id, { id: p.auto.id, url: p.auto.url });
+    partner.set(p.auto.id, { id: p.manual.id, url: p.manual.url });
   }
-  return { pairs, skip: new Set(pairs.map((p) => p.manual.id)), partner };
+  return { pairs, skip, partner };
 }
 
 // ===== صدقات الخزنة من المستندات (نفس شغل السكربتات) - treasury charity from the vouchers (same as the scripts) =====
@@ -270,10 +417,31 @@ export async function unfundedCharity(): Promise<UnfundedCharity[] | null> {
   unfundedInFlight = (async () => {
     let value: UnfundedCharity[] | null = null;
     try {
-      const all = await treasuryCharity(dashboardConfig.erp.charity.auto.since);
-      value = all
-        .filter((x) => !x.fund)
+      const { since } = dashboardConfig.erp.charity.auto;
+      const [all, claims, rows] = await Promise.all([treasuryCharity(since), claimCharity(), loadCharityRaw("asc")]);
+      // مصروفات الموظفين من claimCharity (كل السطور، مش بس اللي على الخزنة) - Expense Claims come from claimCharity
+      const treasury = all
+        .filter((x) => !x.fund && x.voucherType !== "Expense Claim")
         .map((x) => ({ voucherType: x.voucherType, voucherNo: x.voucherNo, url: x.url, date: x.date, type: x.type, amount: x.amount, text: x.text, funds: x.funds, reason: x.reason }));
+      // سطر من غير صندوق ومتسجل بإيده في أي صندوق (نفس المبلغ والتاريخ ±1 يوم) = اتسجل خلاص، مش بيظهر
+      // A fundless row already entered by hand in some fund (same amount, date ±1 day) is recorded: not listed
+      const spent = rows.filter((r) => !r.claim && TYPE_OF[(r.txn_type ?? "").trim()] === "out");
+      const recorded = (c: ClaimCharity) =>
+        spent.some((r) => cents(r.amount) === cents(c.amount) && Math.abs(dayNum(String(r.txn_date)) - dayNum(c.date)) <= 1);
+      const fromClaims = claims
+        .filter((c) => !c.fund && c.date >= since && !recorded(c))
+        .map((c): UnfundedCharity => ({
+          voucherType: "Expense Claim",
+          voucherNo: c.claim,
+          url: erpDocUrl("Expense Claim", c.claim),
+          date: c.date,
+          type: "out",
+          amount: c.amount,
+          text: `${c.text || "مفيش بيان"} (مصروف موظف · ${c.employeeName} · سطر ${c.row})`,
+          funds: c.funds,
+          reason: c.funds.length === 0 ? "none" : "many",
+        }));
+      value = [...treasury, ...fromClaims].sort((a, b) => b.date.localeCompare(a.date) || b.voucherNo.localeCompare(a.voucherNo));
     } catch (error) {
       console.error("[erp] unfunded charity failed:", error instanceof Error ? error.message : error);
       value = unfundedCache?.value ?? null;

@@ -3,9 +3,9 @@
 // بتتجاب بس لما اللوحة تتفتح، كاش 30 ثانية، قراية بس من ERPNext
 // Fetched only when a panel opens, 30 s cache, read-only from ERPNext
 import { dashboardConfig } from "@/config/dashboard.config";
-import { erpDocUrl, erpToday } from "./erp";
+import { erpToday } from "./erp";
 import { fullNames } from "./account-details";
-import { charityDuplicates, loadCharityRaw, sourceOf, unfundedCharity } from "./charity-auto";
+import { charityDuplicates, charityRowUrl, loadCharityRaw, sourceOf, unfundedCharity } from "./charity-auto";
 import { CharityDetailOp, CharityDetails, CharityDuplicatePair } from "./types";
 
 const CACHE_MS = 30_000;
@@ -40,7 +40,7 @@ async function loadAll(): Promise<Loaded> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.value;
   if (inFlight) return inFlight;
   inFlight = (async () => {
-    const { doctype, funds } = dashboardConfig.erp.charity;
+    const { funds } = dashboardConfig.erp.charity;
     const rows = await loadCharityRaw("asc");
     // المتسجلة مرتين: اليدوية بتظهر بس مش بتتحسب في الرصيد - recorded twice: the manual copy shows but is not counted
     const dups = charityDuplicates(rows);
@@ -69,9 +69,9 @@ async function loadAll(): Promise<Loaded> {
         beneficiary: (r.beneficiary ?? "").trim(), details: (r.details ?? "").trim(),
         owner: names.get(r.owner ?? "") ?? r.owner ?? "",
         creation: creation.slice(0, 16), lateDays: date ? Math.max(0, dayDiff(date, creation.slice(0, 10))) : 0,
-        url: erpDocUrl(doctype, id),
+        url: charityRowUrl(r),
         source: sourceOf(r),
-        duplicate: other ? { id: other, url: erpDocUrl(doctype, other), uncounted } : null,
+        duplicate: other ? { id: other.id, url: other.url, uncounted } : null,
       });
     }
     const value = { ops, pairs: dups.pairs };

@@ -115,7 +115,7 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
             )}
             {op.source && (
               <span className="shrink-0 rounded-full bg-sky-400/15 text-sky-300 font-semibold px-2 text-[0.85em] leading-[1.8]" title={op.source.type}>
-                🔗 من الخزنة <span dir="ltr" className="font-numbers">{op.source.name}</span>
+                🔗 {op.source.label ? "مصروف موظف" : "من الخزنة"} <span dir="ltr" className="font-numbers">{op.source.name}</span>
               </span>
             )}
             <span className={`min-w-0 truncate ${op.duplicate?.uncounted ? "line-through decoration-statusRed/70" : ""}`} title={toEnglishDigits(text)}>
@@ -153,11 +153,11 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
                 </p>
                 {op.source && (
                   <p className="text-sky-300">
-                    🔗 اتسجلت لوحدها من مستند الخزنة{" "}
+                    🔗 {op.source.label ? "من مصروفات الموظفين:" : "اتسجلت لوحدها من مستند الخزنة"}{" "}
                     <a href={op.source.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold underline underline-offset-2">
                       <span dir="ltr" className="font-numbers">{op.source.name}</span>
                     </a>{" "}
-                    <span className="text-gray-500">({op.source.type})</span>
+                    <span className="text-gray-500">({op.source.label ? op.source.label.replace(`مصروف موظف ${op.source.name} · `, "") : op.source.type})</span>
                   </p>
                 )}
                 {op.duplicate && (
@@ -219,22 +219,38 @@ function IssuesBox({ duplicates, unfunded, startOpen }: { duplicates: CharityDup
       {open && (
         <div className="mt-2 flex flex-col gap-1.5 leading-[1.8]">
           {duplicates.map((p) => (
-            <p key={p.manual.id} className="rounded-lg border border-statusRed/40 bg-statusRed/[0.06] px-3 py-1 flex flex-wrap items-center gap-x-3">
+            <p key={`${p.manual.id}|${p.auto.id}`} className="rounded-lg border border-statusRed/40 bg-statusRed/[0.06] px-3 py-1 flex flex-wrap items-center gap-x-3">
               <b className="text-statusRed">⚠ متسجلة مرتين</b>
               <span className="text-gray-200">{toEnglishDigits(p.fund)}</span>
               <span className={p.type === "in" ? "text-statusGreen" : "text-statusRed"}>
                 {p.type === "in" ? "إيداع" : "صرف"} {n(p.amount)} ج.م
               </span>
-              <span className="text-gray-400">اتحسبت مرة واحدة (التلقائية)</span>
-              <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
-                <ExternalLink size={14} /> اليدوية <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)} (ألغيها)
-              </a>
-              <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
-                <ExternalLink size={14} /> التلقائية <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
-              </a>
-              <a href={p.auto.source.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
-                🔗 <span dir="ltr" className="font-numbers">{p.auto.source.name}</span>
-              </a>
+              {p.kind === "claim" ? (
+                <>
+                  {/* سطر مصروف موظف + سجل صدقات: اللي بيتحسب السجل - an Expense Claim row + a record: the record counts */}
+                  <span className="text-gray-400">اتحسبت مرة واحدة (سجل الصدقات)</span>
+                  <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
+                    <ExternalLink size={14} /> سجل الصدقات <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)}
+                  </a>
+                  <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
+                    <ExternalLink size={14} /> مصروف موظف <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
+                  </a>
+                  {p.auto.source.label && <span className="text-sky-300">{p.auto.source.label.replace(`مصروف موظف ${p.auto.source.name} · `, "")}</span>}
+                </>
+              ) : (
+                <>
+                  <span className="text-gray-400">اتحسبت مرة واحدة (التلقائية)</span>
+                  <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
+                    <ExternalLink size={14} /> اليدوية <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)} (ألغيها)
+                  </a>
+                  <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
+                    <ExternalLink size={14} /> التلقائية <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
+                  </a>
+                  <a href={p.auto.source.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+                    🔗 <span dir="ltr" className="font-numbers">{p.auto.source.name}</span>
+                  </a>
+                </>
+              )}
             </p>
           ))}
           {noFund.map((u, i) => (
