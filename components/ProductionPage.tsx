@@ -21,6 +21,7 @@ import {
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import { sameExit } from "@/lib/kiln-alert";
+import { useLiveScale } from "@/lib/useLiveScale";
 
 // صفحة الإنتاج والأفران: الأرقام فوق، آخر وزنة، الأفران، الأنواع، بالساعة، طرحات النهارده، ملخص الشهر
 // The production page: KPIs, the last weighing, kilns, types, hourly, today's exits, the month summary
@@ -159,8 +160,11 @@ const fs = (px: number) => ({ "--fs": `${px}px` }) as CSSProperties;
 
 // آخر وزنة: بتنور شوية لما طرحة جديدة توصل - the last weighing; glows briefly when a new exit arrives
 // فوق: الميزان والعنوان، في النص: الوزن الكبير، تحت: الفرن · النوع · الساعة - top: icon + title, center: weight, bottom: kiln · type · time
-function LastExitCard({ data, last, sizes }: { data: ProductionData; last: ProductionExit | null; sizes: LeftSizes }) {
+function LastExitCard({ data, last, sizes, active }: { data: ProductionData; last: ProductionExit | null; sizes: LeftSizes; active: boolean }) {
   const minutes = useMinutesSince(last);
+  // الميزان دلوقتي من /api/scale/live (نفس شاشة الأوبريتر، مفيش طلب على الشبكة المحلية) - والصفحة ظاهرة بس
+  // The scale right now from /api/scale/live (same as the operator screen, no LAN request) - only while on screen
+  const scale = useLiveScale(active);
   const [glow, setGlow] = useState(false);
   const seen = useRef<string | null | undefined>(undefined);
   // نفس الطرحة لما تيجي من الإيجنت وبعدين من ERPNext مش بتنور مرتين - the same exit seen live then from ERPNext glows once
@@ -192,6 +196,16 @@ function LastExitCard({ data, last, sizes }: { data: ProductionData; last: Produ
           آخر وزنة
         </span>
         {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[14px] font-extrabold">جديدة</span>}
+        {/* الميزان دلوقتي (بس لو متصل) - the scale right now (only when connected) */}
+        {scale.online && scale.weightKg !== null && (
+          <span
+            className={`prod-fs shrink-0 rounded-full px-2 font-bold ${scale.stable ? "bg-statusGreen/15 text-statusGreen" : "bg-statusAmber/15 text-statusAmber"}`}
+            style={fs(sizes.lastAgoFontSize)}
+            title="الميزان دلوقتي"
+          >
+            الميزان {num(formatKg(scale.weightKg))} · {scale.stable ? "ثابت" : "بيتحرك"}
+          </span>
+        )}
         {last && (
           <span className="prod-fs ms-auto text-gray-300 font-semibold truncate" style={fs(sizes.lastAgoFontSize)}>
             {agoText(minutes)}
@@ -542,8 +556,10 @@ export default function ProductionPage({
   alertExit = null,
   alertPending = 0,
   onDismissAlert,
+  active = true,
 }: {
   data: ProductionData | null;
+  active?: boolean; // الصفحة دي اللي على الشاشة (الميزان بيتسأل بس ساعتها) - this page is on screen (scale polled only then)
   lan?: boolean; // الإيجنت على الشبكة بيرد (الطرحات على طول) - the LAN agent answers (live exits)
   onOpen: (target: ProductionTarget) => void;
   alertExit?: ProductionExit | null; // طرحة جديدة وقت التنبيه - the new exit during the alert
@@ -584,7 +600,7 @@ export default function ProductionPage({
       </div>
       {/* العمود الشمال كله: "آخر وزنة" فوق والقايمة باقي الطول - the whole left column: "آخر وزنة" on top, the list fills the rest */}
       <div className="prod-left min-h-0 min-w-0 flex flex-col" style={{ gridColumn: 3, gridRow: "1 / span 3", gap }}>
-        <LastExitCard data={data} last={s.last} sizes={left} />
+        <LastExitCard data={data} last={s.last} sizes={left} active={active} />
         <Card
           title="طرحات النهارده"
           icon={<Factory className="text-brandOrange" size={compact ? 18 : 22} />}

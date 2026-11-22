@@ -1340,10 +1340,10 @@ export const dashboardConfig = {
   // ============================================================
   // - الدخول برقم سري 4 أرقام في متغير البيئة OPERATOR_PIN (بيتشيك على السيرفر)، والكوكي 30 يوم
   // - الوزنات المستنية: الإيجنت بيبعت POST /api/scale/pending (x-it-secret) وبتتخزن في Upstash Redis 24 ساعة
-  // - الوزن المباشر من {it.cameraBaseUrl}{scalePath} جوه المصنع بس (المتصفح بيسأل الإيجنت على طول، مش Vercel)
+  // - الوزن المباشر: الإيجنت بيبعته لـ POST /api/scale/live والموبايل بيقراه من Vercel (من أي مكان، من غير الشبكة المحلية)
   // - Login with the 4-digit OPERATOR_PIN env var (checked on the server), cookie for 30 days
   // - Pending weighings: the agent POSTs /api/scale/pending (x-it-secret), kept in Upstash Redis for 24 h
-  // - Live weight from {it.cameraBaseUrl}{scalePath} on the factory LAN only (browser -> agent, never Vercel)
+  // - Live weight: the agent POSTs /api/scale/live and phones read it from Vercel (anywhere, no LAN)
   operator: {
     // الأفران بالترتيب: الزرار بيكتب الرقم، والقيمة اسم الـ Workstation في ERPNext بالظبط
     // Kilns in order: the button shows the number, the value is the exact ERPNext Workstation name
@@ -1358,10 +1358,10 @@ export const dashboardConfig = {
     todayPollSeconds: 30, // "آخر الطرحات" - the today list
     pendingTtlHours: 24, // الوزنة المستنية بتتمسح لوحدها بعد كده - a pending weighing expires after this
     duplicateTrolleyMinutes: 10, // تحذير لو نفس الترول اتسجل في آخر كام دقيقة - warn if the trolley was saved this recently
-    scalePath: "/scale.json", // على الإيجنت: { weight_kg, stable } - on the agent
-    scalePollMs: 1000,
-    scaleTimeoutMs: 1500,
-    scaleRetrySeconds: 15, // برا المصنع: بيجرب تاني كل 15 ثانية - outside the factory: retry every 15 s
+    // الوزن المباشر من /api/scale/live (الإيجنت بيبعته لـ Vercel) - مفيش أي طلب على شبكة المصنع من الموبايل
+    // Live weight from /api/scale/live (the agent posts it to Vercel) - the phone never calls the factory LAN
+    livePollSeconds: 2, // كل قد ايه والصفحة ظاهرة - how often, while the page is visible
+    liveStaleSeconds: 60, // مفيش تحديث من الإيجنت من المدة دي = "الميزان مش متصل" - no update for this long = disconnected
     maxKg: 5000, // أكبر وزن مقبول - the largest accepted weight
     pinMaxTries: 5, // غلطات الرقم السري المسموحة لكل جهاز (IP)… - wrong PINs allowed per IP…
     pinLockMinutes: 15, // …في الوقت ده، وبعدها بيتقفل لحد ما يخلص - …within this window, then locked until it ends

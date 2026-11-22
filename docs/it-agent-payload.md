@@ -214,20 +214,31 @@ Content-Type: application/json
   Saved or dismissed weighings are removed; re-posting the same id answers `"added": false`.
 - `GET /api/scale/pending` بنفس الهيدر بيرجع الليستة (للتجربة). The same header lists them (for testing).
 
-### 2) الوزن المباشر (Live weight): `GET {cameraBaseUrl}/scale.json`
+### 2) الوزن المباشر (Live weight): `POST /api/scale/live`
 
-جوه المصنع المتصفح بيسأل الإيجنت على طول كل ثانية (مش Vercel)، وبرا المصنع بيجرب كل 15 ثانية بس:
-Inside the factory the browser polls the agent directly every second (never Vercel); outside it retries every 15 s:
+الموبايل والداشبورد مش بيكلموا الشبكة المحلية خالص: الإيجنت بيبعت قراية الميزان لـ Vercel، وهما بيقروها من هناك
+(كل 2 ثانية والصفحة ظاهرة). The phone and the dashboard never call the LAN: the agent posts the reading to Vercel.
 
-```json
-{ "weight_kg": 1193, "stable": true }
+```
+POST https://elsafwadashboard.vercel.app/api/scale/live
+x-it-secret: <IT_AGENT_SECRET>
+Content-Type: application/json
+
+{ "weight_kg": 1193, "stable": true, "online": true, "at": "2026-11-22T07:31:20+02:00" }
 ```
 
-- `weight_kg` (أو `weight` / `gross_kg`) رقم، و`stable` = الوزن ثابت. `"online": false` = الميزان مش متصل.
-  `weight_kg` (or `weight` / `gross_kg`) and `stable`; `"online": false` means the scale is disconnected.
-- نفس شروط `status.json`: HTTPS بشهادة elsafwa-ca، CORS من `https://elsafwadashboard.vercel.app`،
-  و`Access-Control-Allow-Private-Network: true`. Same CORS / PNA headers as `status.json`.
-- لو الإيجنت مش بيرد الصفحة بتكتب "الميزان مش متصل — اكتب الوزن بإيدك" والأوبريتر بيكتب الوزن.
+| الحقل | المعنى |
+|---|---|
+| `weight_kg` | الوزن دلوقتي (مطلوب لو `online`). Current weight (required while online). |
+| `stable` | الوزن ثابت. The reading is steady. |
+| `online` | الميزان متوصل بالإيجنت (`false` = "الميزان مش متصل"). The scale is connected. Default `true`. |
+| `at` | وقت القراية ISO (اختياري). Reading time (optional). |
+
+- **امتى تبعت**: لما الوزن يتغير (مش أكتر من مرة كل ثانيتين)، ونبضة كل 30 ثانية حتى لو مفيش تغيير.
+  لو مفيش أي تحديث 60 ثانية (`operator.liveStaleSeconds`) الشاشة بتكتب "الميزان مش متصل — اكتب الوزن بإيدك".
+  **When to post**: on change (at most every 2 s) plus a heartbeat every 30 s; 60 s without an update = disconnected.
+- العمر بيتحسب بساعة السيرفر (وقت الوصول)، فساعة الإيجنت مش بتأثر. Age uses the server's receive time.
+- `GET /api/scale/live` (كوكي الأوبريتر أو الداشبورد) بيرجع `{connected, weightKg, stable, at, ageSeconds}`.
 
 ### 3) ERPNext
 

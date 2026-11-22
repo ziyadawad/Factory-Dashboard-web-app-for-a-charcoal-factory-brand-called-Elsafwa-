@@ -372,6 +372,7 @@ export default function Dashboard() {
             alertExit={alertExit}
             alertPending={alert.pending}
             onDismissAlert={alert.dismiss}
+            active={pageId === "production"}
           />
         );
       case "stock":

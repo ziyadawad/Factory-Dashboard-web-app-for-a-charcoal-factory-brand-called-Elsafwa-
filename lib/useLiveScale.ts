@@ -1,67 +1,57 @@
 "use client";
 
-// الوزن المباشر من الميزان: المتصفح بيسأل الإيجنت على شبكة المصنع على طول ({it.cameraBaseUrl}{operator.scalePath})
-// زي الكاميرات بالظبط، فمفيش أي طلب على Vercel. برا المصنع الإيجنت مش بيرد = "الميزان مش متصل" وبيجرب تاني كل شوية
-// والصفحة مستخبية = مفيش ولا طلب. الشكل المتوقع: { "weight_kg": 1193, "stable": true } (أو weight / gross_kg و is_stable)
-// Live scale weight: the browser asks the agent on the factory LAN directly, like the cameras, so Vercel is never
-// involved. Outside the factory the agent never answers ("الميزان مش متصل") and it retries now and then; a hidden
-// page sends nothing. Expected JSON: { "weight_kg": 1193, "stable": true } (or weight / gross_kg and is_stable)
+// الوزن المباشر من الميزان: من /api/scale/live بس (الإيجنت بيبعته لـ Vercel)، فبيشتغل من أي مكان ومفيش أي طلب على
+// شبكة المصنع. بيسأل كل operator.livePollSeconds والصفحة ظاهرة وactive بس. لو مفيش تحديث من liveStaleSeconds
+// (السيرفر بيحسبها بساعته هو) أو الطلب فشل = "الميزان مش متصل"
+// Live scale weight: only from /api/scale/live (the agent posts it to Vercel), so it works anywhere and never calls
+// the factory LAN. Polls every operator.livePollSeconds only while the page is visible and active. No update for
+// liveStaleSeconds (aged by the server's own clock) or a failed request = "الميزان مش متصل"
 
 import { useEffect, useState } from "react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePageVisible } from "./usePolling";
 
 const cfg = dashboardConfig.operator;
-const BASE = dashboardConfig.it.cameraBaseUrl.replace(/\/+$/, "");
-const URL_ = BASE ? `${BASE}${cfg.scalePath}` : "";
-const FAILS_TOLERATED = 2;
+const FAILS_TOLERATED = 2; // طلب واحد فاشل مش بيقلب الكارت - one failed request does not flip the card
 
 export type LiveScale = { online: boolean; weightKg: number | null; stable: boolean };
 
-function parse(body: unknown): { weightKg: number; stable: boolean } | null {
-  if (!body || typeof body !== "object") return null;
-  const b = body as Record<string, unknown>;
-  if (b.online === false || b.connected === false) return null;
-  const raw = [b.weight_kg, b.weight, b.gross_kg, b.kg].find((v) => v !== undefined && v !== null && v !== "");
-  const kg = Number(raw);
-  if (!Number.isFinite(kg)) return null;
-  const stable = b.stable ?? b.is_stable ?? b.steady;
-  return { weightKg: Math.round(kg * 10) / 10, stable: stable === true || stable === 1 || stable === "true" };
-}
+const OFFLINE: LiveScale = { online: false, weightKg: null, stable: false };
 
-export function useLiveScale(): LiveScale {
+export function useLiveScale(active = true): LiveScale {
   const visible = usePageVisible();
-  const [state, setState] = useState<LiveScale>({ online: false, weightKg: null, stable: false });
+  const [state, setState] = useState<LiveScale>(OFFLINE);
+  const on = active && visible;
 
   useEffect(() => {
-    if (!URL_ || !visible) return;
+    if (!on) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let fails = FAILS_TOLERATED; // بيبدأ "مش متصل" لحد أول رد - starts offline until the first answer
+    let fails = 0;
     const tick = async () => {
-      let next: { weightKg: number; stable: boolean } | null = null;
       try {
-        const res = await fetch(URL_, { cache: "no-store", signal: AbortSignal.timeout(cfg.scaleTimeoutMs) });
-        if (res.ok) next = parse(await res.json());
-      } catch {
-        next = null;
-      }
-      if (stopped) return;
-      if (next) {
+        const res = await fetch("/api/scale/live", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { connected?: boolean; weightKg?: number | null; stable?: boolean };
+        if (stopped) return;
         fails = 0;
-        setState({ online: true, weightKg: next.weightKg, stable: next.stable });
-      } else if (++fails >= FAILS_TOLERATED) {
-        setState({ online: false, weightKg: null, stable: false });
+        setState(
+          body.connected && typeof body.weightKg === "number"
+            ? { online: true, weightKg: body.weightKg, stable: body.stable === true }
+            : OFFLINE
+        );
+      } catch {
+        if (stopped) return;
+        if (++fails >= FAILS_TOLERATED) setState(OFFLINE);
       }
-      // متصل: كل ثانية. مش متصل: كل scaleRetrySeconds - online: every second; offline: every scaleRetrySeconds
-      timer = setTimeout(tick, fails >= FAILS_TOLERATED ? cfg.scaleRetrySeconds * 1000 : cfg.scalePollMs);
+      if (!stopped) timer = setTimeout(tick, cfg.livePollSeconds * 1000);
     };
     tick();
     return () => {
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [visible]);
+  }, [on]);
 
   return state;
 }

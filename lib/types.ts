@@ -1204,3 +1204,12 @@ export interface OperatorSaveRequest {
   fromScale: boolean; // الوزن اتاخد من الميزان المباشر (مش متكتب بالإيد) - taken from the live scale, not typed
   confirmDuplicate: boolean; // الأوبريتر وافق رغم إن الترول اتسجل من شوية - confirmed despite a recent same trolley
 }
+
+// آخر قراية من الميزان (من /api/scale/live) - the latest scale reading
+export interface LiveScaleReading {
+  weightKg: number | null;
+  stable: boolean;
+  online: boolean; // الميزان نفسه متوصل بالإيجنت - the scale itself is connected to the agent
+  at: string; // ISO - وقت القراية - reading time
+  receivedAt: string; // ISO - وصلت السيرفر امتى - when the server got it
+}
