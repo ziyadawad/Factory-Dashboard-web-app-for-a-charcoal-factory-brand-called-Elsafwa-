@@ -51,6 +51,23 @@ export async function erpPost<T = unknown>(path: string, body: Record<string, un
   });
 }
 
+// إنشاء مستند في ERPNext - محاولة واحدة بس (الإعادة بعد timeout ممكن تعمل نسختين من نفس الطرحة)
+// Create a document in ERPNext - one attempt only (retrying after a timeout could create the same exit twice)
+export async function erpInsert<T = Record<string, unknown>>(doctype: string, doc: Record<string, unknown>): Promise<T> {
+  const { baseUrl } = erpSettings();
+  const path = `/api/resource/${encodeURIComponent(doctype)}`;
+  try {
+    const body = await erpAttempt<{ data: T }>(path, new URL(baseUrl + path), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(doc),
+    });
+    return body.data;
+  } catch (error) {
+    throw error instanceof ErpError ? error : new ErpError(String(error));
+  }
+}
+
 // الأخطاء اللي تستاهل إعادة: مفيش رد / timeout / 429 / 5xx. الـ 401 و403 مش بيتعادوا (المفتاح أو الصلاحية غلط)
 // Worth a retry: no answer / timeout / 429 / 5xx. 401 and 403 are never retried (bad key or missing permission)
 const RETRY_DELAYS_MS = [400, 1200];

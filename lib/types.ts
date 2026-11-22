@@ -1152,3 +1152,55 @@ export interface ItStatus {
   data: ItSnapshot | null; // null = الإيجنت عمره ما بعت - the agent never sent anything
   storage: "redis" | "memory";
 }
+
+// ===== شاشة الأوبريتر (/operator) - the operator screen =====
+
+// وزنة من الميزان مستنية الأوبريتر - a scale weighing waiting for the operator
+export interface PendingWeighing {
+  id: string;
+  grossKg: number;
+  time: string; // ISO - وقت الوزن - weighing time
+  receivedAt: string; // ISO - وصلت السيرفر امتى - when the server got it
+}
+
+export interface OperatorTrolley {
+  no: number;
+  emptyKg: number;
+}
+
+// اختيارات الفورم - the form's choices
+export interface OperatorOptions {
+  kilns: string[]; // "فرن 1"…
+  rooms: string[];
+  types: { label: string; color: string }[];
+  trolleys: OperatorTrolley[];
+  manualField: boolean; // حقل "يدوي" موجود في Kiln Exit؟ - does Kiln Exit have the manual field?
+}
+
+// طرحة النهارده في "آخر الطرحات" - a today exit in "آخر الطرحات"
+export interface OperatorExit {
+  name: string;
+  time: string; // "07:31"
+  kiln: string;
+  room: string;
+  type: string;
+  trolley: string;
+  grossKg: number | null;
+  tareKg: number | null;
+  netKg: number | null;
+  manual: boolean;
+}
+
+// اللي الفورم بيبعته للحفظ - what the form sends to save
+export interface OperatorSaveRequest {
+  kiln: string;
+  room: string;
+  type: string;
+  trolley: number;
+  tareKg: number | null; // للترول الجديد بس (المسجل وزنه من ERPNext) - only for an unknown trolley
+  saveTrolley: boolean;
+  grossKg: number; // لو من وزنة مستنية السيرفر بياخده منها - from the pending weighing when there is one
+  pendingId: string | null;
+  fromScale: boolean; // الوزن اتاخد من الميزان المباشر (مش متكتب بالإيد) - taken from the live scale, not typed
+  confirmDuplicate: boolean; // الأوبريتر وافق رغم إن الترول اتسجل من شوية - confirmed despite a recent same trolley
+}

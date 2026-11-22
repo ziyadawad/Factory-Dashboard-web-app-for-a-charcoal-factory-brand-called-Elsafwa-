@@ -288,8 +288,8 @@ export const dashboardConfig = {
       weightField: "weight_kg",
       // ممتلئ / فاضي / الترول / الغرفة (بتظهر في تفاصيل الطرحة). أي حقل مش موجود في الـ DocType بيتساب فاضي
       // Full / empty / trolley / room (shown in the exit details). A field the DocType lacks is simply left empty
-      fullWeightField: "full_weight_kg",
-      emptyWeightField: "empty_weight_kg",
+      fullWeightField: "gross_kg", // الوزن ممتلئ (كجم)
+      emptyWeightField: "وزن_الترول_الفاضي_كجم", // وزن الترول الفاضي (كجم) - اسم الحقل في ERPNext عربي
       trolleyField: "trolley",
       roomField: "room",
       // الأنواع بتتقري من خيارات charcoal_type في الـ DocType نفسه، فأي نوع جديد بيظهر لوحده بـ defaultTypeColor
@@ -576,7 +576,8 @@ export const dashboardConfig = {
     streamBaseUrl: "",
     // شاشة الأوبريتر على الإيجنت (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها)
     // The operator screen on the agent ("📱 شاشة الأوبريتر" on the production page opens a QR code for it)
-    operatorUrl: "https://192.168.1.200:8443/operator",
+    // دلوقتي صفحة /operator في الداشبورد نفسه (شغالة من أي مكان) - now the dashboard's own /operator page (works anywhere)
+    operatorUrl: "https://elsafwadashboard.vercel.app/operator",
     // الحالة من الشبكة المحلية الأول: المتصفح بيسأل {cameraBaseUrl}/status.json على طول كل localStatusSeconds (مهلة
     // localStatusTimeoutMs). لو رد = كل حاجة منه ("📡 مباشر من الشبكة")، ولو فشل (برا المصنع) = /api/it/status ("☁️ من السحابة")
     // LAN first: the browser asks {cameraBaseUrl}/status.json directly every localStatusSeconds (timeout localStatusTimeoutMs).
@@ -1331,6 +1332,40 @@ export const dashboardConfig = {
       // How many operations "آخر العمليات" shows (صرف / إيداع only, newest first) - check the TV still fits if raised
       recentOpsCount: 4,
     },
+  },
+
+  // ============================================================
+  // شاشة الأوبريتر (/operator): تسجيل الطرحات من الموبايل - من أي مكان
+  // The operator screen (/operator): registering kiln exits from a phone, from anywhere
+  // ============================================================
+  // - الدخول برقم سري 4 أرقام في متغير البيئة OPERATOR_PIN (بيتشيك على السيرفر)، والكوكي 30 يوم
+  // - الوزنات المستنية: الإيجنت بيبعت POST /api/scale/pending (x-it-secret) وبتتخزن في Upstash Redis 24 ساعة
+  // - الوزن المباشر من {it.cameraBaseUrl}{scalePath} جوه المصنع بس (المتصفح بيسأل الإيجنت على طول، مش Vercel)
+  // - Login with the 4-digit OPERATOR_PIN env var (checked on the server), cookie for 30 days
+  // - Pending weighings: the agent POSTs /api/scale/pending (x-it-secret), kept in Upstash Redis for 24 h
+  // - Live weight from {it.cameraBaseUrl}{scalePath} on the factory LAN only (browser -> agent, never Vercel)
+  operator: {
+    // الأفران بالترتيب: الزرار بيكتب الرقم، والقيمة اسم الـ Workstation في ERPNext بالظبط
+    // Kilns in order: the button shows the number, the value is the exact ERPNext Workstation name
+    kilns: ["فرن 1", "فرن 2", "فرن 3", "فرن 4", "فرن 5", "فرن 6"],
+    rooms: ["1", "2"], // نفس خيارات حقل room - same as the room Select options
+    // حقول Kiln Exit: الصافي من erp.batches.weightField، والممتلئ/الفاضي من fullWeightField/emptyWeightField
+    // manualField = Check "اتكتب بالإيد" (لو مش موجود في الـ DocType مش بيتكتب - ضيفه من Customize Form)
+    // Kiln Exit fields: net / gross / tare from erp.batches; manualField is a Check written only if the DocType has it
+    manualField: "manual_entry",
+    trolleyDoctype: "Trolley", // trolley_no (رقم) + empty_weight_kg (الوزن الفاضي)
+    pendingPollSeconds: 3, // كل قد ايه بنسأل على الوزنات المستنية والصفحة مفتوحة وظاهرة - while open and visible
+    todayPollSeconds: 30, // "آخر الطرحات" - the today list
+    pendingTtlHours: 24, // الوزنة المستنية بتتمسح لوحدها بعد كده - a pending weighing expires after this
+    duplicateTrolleyMinutes: 10, // تحذير لو نفس الترول اتسجل في آخر كام دقيقة - warn if the trolley was saved this recently
+    scalePath: "/scale.json", // على الإيجنت: { weight_kg, stable } - on the agent
+    scalePollMs: 1000,
+    scaleTimeoutMs: 1500,
+    scaleRetrySeconds: 15, // برا المصنع: بيجرب تاني كل 15 ثانية - outside the factory: retry every 15 s
+    maxKg: 5000, // أكبر وزن مقبول - the largest accepted weight
+    pinMaxTries: 5, // غلطات الرقم السري المسموحة لكل جهاز (IP)… - wrong PINs allowed per IP…
+    pinLockMinutes: 15, // …في الوقت ده، وبعدها بيتقفل لحد ما يخلص - …within this window, then locked until it ends
+    sessionDays: 30,
   },
 
   // ============================================================

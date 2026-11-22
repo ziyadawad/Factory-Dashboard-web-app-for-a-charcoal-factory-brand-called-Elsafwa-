@@ -45,5 +45,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|login|_next/static|_next/image|favicon.ico).*)"],
+  // operator = شاشة الأوبريتر ليها رقم سري لوحدها (OPERATOR_PIN) - the operator screen has its own PIN
+  matcher: ["/((?!api|login|operator|_next/static|_next/image|favicon.ico).*)"],
 };

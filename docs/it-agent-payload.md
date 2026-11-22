@@ -182,7 +182,60 @@ Put them in `events` (next to the up/down events) or in a `kilnExits` list — b
 - **WebSocket (اختياري)**: لو الإيجنت عنده WebSocket بيبعت كل `kiln_exit` أول ما يحصل (حدث واحد، أو `{events:[…]}`)، حط مساره في `production.liveWsPath` (مثلا `"/ws"`). لو وقع الصفحة بترجع لـ status.json.
   Optional: an agent WebSocket pushing each `kiln_exit`; set its path in `production.liveWsPath`. If it drops the page falls back to status.json.
 - نفس شروط `status.json` اللي فوق: CORS و`Access-Control-Allow-Private-Network: true`. Same CORS / PNA headers as above.
-- شاشة الأوبريتر: `it.operatorUrl` = `https://192.168.1.200:8443/operator` (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها).
+- شاشة الأوبريتر بقت في الداشبورد نفسه: `https://elsafwadashboard.vercel.app/operator` (شوف القسم اللي جاي).
+  The operator screen now lives in the dashboard itself (see the next section).
+
+## شاشة الأوبريتر والميزان (Operator screen and scale)
+
+صفحة `/operator` على Vercel (موبايل، PWA، رقم سري `OPERATOR_PIN`) بتسجل الطرحات في ERPNext من أي مكان.
+الإيجنت مش بيعمل Kiln Exit بنفسه تاني: بيبعت كل وزنة للسيرفر، والأوبريتر بيكمّل الفرن والغرفة والنوع والترول ويحفظ.
+The `/operator` page on Vercel (mobile PWA, PIN `OPERATOR_PIN`) records kiln exits in ERPNext from anywhere. The agent no
+longer creates Kiln Exits: it posts each weighing, and the operator adds kiln / room / type / trolley and saves.
+
+### 1) وزنة جديدة (Pending weighing): `POST /api/scale/pending`
+
+```
+POST https://elsafwadashboard.vercel.app/api/scale/pending
+x-it-secret: <IT_AGENT_SECRET>
+Content-Type: application/json
+
+{ "id": "w-20261122-073122", "gross_kg": 1193, "time": "2026-11-22T07:31:22+02:00" }
+```
+
+| الحقل | المعنى |
+|---|---|
+| `id` | فريد لكل وزنة (1–64 حرف: `A-Z a-z 0-9 _ . : -`). نفس الـ id تاني = نفس الوزنة (الـ retry آمن). Unique per weighing; resending is safe. |
+| `gross_kg` | الوزن الممتلئ (أكبر من 0 ولحد `operator.maxKg`). Gross weight. |
+| `time` | وقت الوزن ISO (اختياري، الافتراضي دلوقتي). ده اللي بيتسجل `exit_time`. Weighing time; becomes `exit_time`. |
+
+- بتتخزن في Upstash Redis 24 ساعة (`operator.pendingTtlHours`) وبتظهر في "وزنات مستنية" خلال 3 ثواني.
+  Kept in Redis for 24 h; shows in "وزنات مستنية" within 3 s.
+- لما تتسجل طرحة أو الأوبريتر يقول "مش طرحة" بتتشال، ولو الإيجنت بعتها تاني الرد `"added": false` (`already resolved`).
+  Saved or dismissed weighings are removed; re-posting the same id answers `"added": false`.
+- `GET /api/scale/pending` بنفس الهيدر بيرجع الليستة (للتجربة). The same header lists them (for testing).
+
+### 2) الوزن المباشر (Live weight): `GET {cameraBaseUrl}/scale.json`
+
+جوه المصنع المتصفح بيسأل الإيجنت على طول كل ثانية (مش Vercel)، وبرا المصنع بيجرب كل 15 ثانية بس:
+Inside the factory the browser polls the agent directly every second (never Vercel); outside it retries every 15 s:
+
+```json
+{ "weight_kg": 1193, "stable": true }
+```
+
+- `weight_kg` (أو `weight` / `gross_kg`) رقم، و`stable` = الوزن ثابت. `"online": false` = الميزان مش متصل.
+  `weight_kg` (or `weight` / `gross_kg`) and `stable`; `"online": false` means the scale is disconnected.
+- نفس شروط `status.json`: HTTPS بشهادة elsafwa-ca، CORS من `https://elsafwadashboard.vercel.app`،
+  و`Access-Control-Allow-Private-Network: true`. Same CORS / PNA headers as `status.json`.
+- لو الإيجنت مش بيرد الصفحة بتكتب "الميزان مش متصل — اكتب الوزن بإيدك" والأوبريتر بيكتب الوزن.
+
+### 3) ERPNext
+
+- الطرحة بتتسجل في `Kiln Exit`: `kiln`، `room`، `charcoal_type`، `trolley`، `gross_kg`، `وزن_الترول_الفاضي_كجم`،
+  `weight_kg` (الصافي)، `exit_time` (وقت الوزن أو دلوقتي).
+- **يدوي**: ضيف في Kiln Exit حقل Check اسمه `manual_entry` (Customize Form → Label "إدخال يدوي"). لو موجود بيتكتب 1 لما
+  الوزن يتكتب بالإيد، ولو مش موجود الطرحة بتتسجل عادي من غيره. Add a Check field `manual_entry`; written when present.
+- ترول مش متسجل: الأوبريتر بيكتب وزنه الفاضي، ولو علّم "احفظ الترول ده" بيتعمل `Trolley` جديد (`trolley_no`، `empty_weight_kg`).
 
 ## على السيرفر (Server setup, Vercel)
 

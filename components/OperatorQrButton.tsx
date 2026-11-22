@@ -6,31 +6,16 @@ import QRCode from "qrcode";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { useIdleClose } from "@/lib/useIdleClose";
 
-// زرار "📱 شاشة الأوبريتر" في هيدر صفحة الإنتاج: بيفتح QR كبير لـ it.operatorUrl والرابط مكتوب تحته
-// The "📱 شاشة الأوبريتر" button in the production page header: opens a big QR code for it.operatorUrl with the link under it
+// زرار "📱 شاشة الأوبريتر" في هيدر صفحة الإنتاج: QR كبير لصفحة /operator على Vercel (شغالة من أي مكان)
+// وزرار كبير "افتح شاشة الأوبريتر" بيفتحها في تاب جديد
+// The "📱 شاشة الأوبريتر" button in the production page header: a big QR for the /operator page on Vercel (works
+// anywhere) and a big "افتح شاشة الأوبريتر" button that opens it in a new tab
 
-// الزرار دايما ظاهر: لو operatorUrl فاضي بناخد {cameraBaseUrl}/operator - always shown: empty operatorUrl = {cameraBaseUrl}/operator
-const AGENT_BASE = dashboardConfig.it.cameraBaseUrl.replace(/\/+$/, "");
-const OPERATOR_URL = dashboardConfig.it.operatorUrl || `${AGENT_BASE}/operator`;
-// بنسأل الإيجنت لما الـ popup يفتح عشان نعرف هو بيرد ولا لأ - probe the agent when the popup opens
-const PROBE_URL = AGENT_BASE ? `${AGENT_BASE}/status.json` : OPERATOR_URL;
-const PROBE_TIMEOUT_MS = dashboardConfig.it.localStatusTimeoutMs || 2000;
+const OPERATOR_URL = dashboardConfig.it.operatorUrl || "/operator";
 
 function OperatorQrPopup({ onClose }: { onClose: () => void }) {
   useIdleClose(onClose);
   const [svg, setSvg] = useState("");
-  // null = لسه بنسأل، true = الإيجنت رد، false = مش بيرد (برا المصنع أو كمبيوتر الـ IT مقفول)
-  // null = still probing, true = the agent answered, false = unreachable (outside the factory or the IT PC is off)
-  const [reachable, setReachable] = useState<boolean | null>(null);
-  useEffect(() => {
-    let stopped = false;
-    fetch(PROBE_URL, { cache: "no-store", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
-      .then((res) => !stopped && setReachable(res.ok))
-      .catch(() => !stopped && setReachable(false));
-    return () => {
-      stopped = true;
-    };
-  }, []);
   useEffect(() => {
     let stopped = false;
     QRCode.toString(OPERATOR_URL, { type: "svg", errorCorrectionLevel: "M", margin: 2, color: { dark: "#000000", light: "#FFFFFF" } })
@@ -61,22 +46,25 @@ function OperatorQrPopup({ onClose }: { onClose: () => void }) {
           <X size={24} />
         </button>
         <h2 className="text-[26px] font-extrabold text-white">📱 شاشة الأوبريتر</h2>
-        <p className="text-gray-400 text-[16px] -mt-2">امسح الكود بالموبايل (على شبكة المصنع)</p>
+        <p className="text-gray-400 text-[16px] -mt-2">امسح الكود بالموبايل — شغالة من أي مكان بالرقم السري</p>
         {/* الـ QR على خلفية بيضا عشان يتقري بسهولة - the QR on white so it scans easily */}
         <div
           className="bg-white rounded-xl p-2 [&>svg]:w-full [&>svg]:h-full"
-          style={{ width: "min(62vh, 80vw, 520px)", height: "min(62vh, 80vw, 520px)" }}
+          style={{ width: "min(50vh, 80vw, 460px)", height: "min(50vh, 80vw, 460px)" }}
           dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
         />
         <a href={OPERATOR_URL} target="_blank" rel="noreferrer" dir="ltr" className="font-numbers text-[22px] font-bold text-brandOrange hover:underline break-all text-center">
           {OPERATOR_URL}
         </a>
-        {/* الـ QR والرابط بيظهروا دايما، والملاحظة لو الإيجنت مش بيرد - QR and link always shown; the note when the agent is unreachable */}
-        {reachable === false && (
-          <p className="max-w-[520px] text-center text-[17px] font-bold text-statusAmber bg-statusAmber/10 border border-statusAmber/40 rounded-xl px-4 py-2">
-            ⚠️ متاحة جوه المصنع بس، ولما كمبيوتر الـ IT يكون شغال
-          </p>
-        )}
+        {/* نفس الموقع (التلفزيون أو اللابتوب) في تاب جديد - same site, new tab */}
+        <a
+          href="/operator"
+          target="_blank"
+          rel="noopener"
+          className="w-full max-w-[460px] h-[64px] flex items-center justify-center rounded-2xl bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white text-[22px] font-extrabold shadow-[0_8px_30px_rgba(255,122,0,0.35)] hover:brightness-110"
+        >
+          افتح شاشة الأوبريتر
+        </a>
       </div>
     </div>
   );
