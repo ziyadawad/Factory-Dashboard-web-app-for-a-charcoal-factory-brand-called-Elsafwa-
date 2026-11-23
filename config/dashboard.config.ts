@@ -702,6 +702,10 @@ export const dashboardConfig = {
     payableAccounts: ["2110 - الموردين - AC"] as string[],
     // مورد رصيده صفر ومورّدش حاجة آخر activeDays يوم بيستخبى - a zero-balance supplier with no supply in this many days is hidden
     activeDays: 90,
+    // مورد رصيده أقل من كده في أي اتجاه (ليه أو علينا) = خالص: مش بيظهر في العمود ولا بيتحسب في الإجمالي والعدد،
+    // وبيظهر باهت تحت زرار "إظهار الخالصين" - a balance under this either way = settled: hidden from the column and
+    // its totals / counts, shown dimmed under "إظهار الخالصين"
+    settleThreshold: 100,
     // ===== التصنيف بالترتيب: overrides الأول، وبعدين البلاستيك (اسم أو مجموعة)، وبعدين الخشب (مجموعة أو ورّد أصناف خشب
     // من erp.stock.wood أو أي صنف أوله woodItemPrefix)، والباقي بيستخبى. الأسامي بتتقارن بعد التوحيد (ة = ه، أ = ا، من غير مسافات)
     // Classification order: overrides first, then plastic (name or group), then wood (group, or supplied wood items from

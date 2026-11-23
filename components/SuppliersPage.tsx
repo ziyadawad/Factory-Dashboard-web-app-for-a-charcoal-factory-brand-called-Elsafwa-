@@ -7,7 +7,7 @@
 // "لهم عندنا" (red) / "لينا عندهم" (green) and the count, then one box per supplier (biggest balance first) scrolling
 // inside the column. A supplier opens its details panel. Fetched only while the page is visible (60 s server cache)
 
-import { CSSProperties } from "react";
+import { CSSProperties, useState } from "react";
 import { Truck, Wallet } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { formatNumber } from "@/lib/format";
@@ -16,6 +16,9 @@ import { QtyByUnit, SupplierCard, SupplierCategory, SuppliersData } from "@/lib/
 import { OfflineBadge } from "./OfflineBadge";
 
 const cats = dashboardConfig.suppliers.categories;
+// خالص = الرصيد أقل من settleThreshold في أي اتجاه - settled = |balance| under settleThreshold
+const SETTLE = dashboardConfig.suppliers.settleThreshold;
+export const isSettled = (balance: number) => Math.abs(balance) < SETTLE;
 
 async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
@@ -45,13 +48,16 @@ export function balanceLabel(balance: number): { label: string; className: strin
 }
 
 function SupplierBox({ s, color, onOpen }: { s: SupplierCard; color: string; onOpen: () => void }) {
-  const b = balanceLabel(s.balance);
+  const settled = isSettled(s.balance);
+  const b = settled ? { label: "خالص ✓", className: "text-gray-400" } : balanceLabel(s.balance);
   const cat = cats[s.category];
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="text-start rounded-2xl border border-white/[0.08] bg-card/90 p-4 flex flex-col gap-2 min-w-0 hover:bg-white/[0.05] transition-colors"
+      className={`text-start rounded-2xl border border-white/[0.08] bg-card/90 p-4 flex flex-col gap-2 min-w-0 hover:bg-white/[0.05] transition-colors ${
+        settled ? "opacity-50 hover:opacity-80" : ""
+      }`}
       style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}
     >
       <div className="flex items-start gap-2 min-w-0">
@@ -63,12 +69,18 @@ function SupplierBox({ s, color, onOpen }: { s: SupplierCard; color: string; onO
       {/* الرصيد الكبير - the big balance */}
       <div className="flex items-baseline gap-2 min-w-0">
         <span className={`text-[15px] font-bold whitespace-nowrap ${b.className}`}>{b.label}</span>
-        {Math.abs(s.balance) > 0.5 && (
+        {/* خالص: الباقي الصغير بس رمادي - settled: just the small remainder in gray */}
+        {settled && Math.abs(s.balance) > 0.5 && (
+          <span className="font-numbers text-[14px] text-gray-500" dir="ltr">
+            ({money(s.balance)} ج.م)
+          </span>
+        )}
+        {!settled && Math.abs(s.balance) > 0.5 && (
           <span className={`font-numbers font-extrabold leading-none whitespace-nowrap text-[34px] min-[1600px]:text-[40px] ${b.className}`} dir="ltr">
             {money(s.balance)}
           </span>
         )}
-        {Math.abs(s.balance) > 0.5 && <span className="text-[14px] text-gray-400">ج.م</span>}
+        {!settled && Math.abs(s.balance) > 0.5 && <span className="text-[14px] text-gray-400">ج.م</span>}
       </div>
       {/* السطور الصغيرة - the small lines */}
       <div className="flex flex-col gap-0.5 text-[13px] min-[1600px]:text-[14px] text-gray-300 min-w-0">
@@ -110,8 +122,12 @@ function SupplierBox({ s, color, onOpen }: { s: SupplierCard; color: string; onO
   );
 }
 
-function SupplierColumn({ category, list, onOpen }: { category: SupplierCategory; list: SupplierCard[]; onOpen: (name: string) => void }) {
+function SupplierColumn({ category, list: all, onOpen }: { category: SupplierCategory; list: SupplierCard[]; onOpen: (name: string) => void }) {
   const cat = cats[category];
+  // الخالصين (أقل من settleThreshold) برّه العمود والإجمالي والعدد - the settled ones stay out of the column, totals and count
+  const list = all.filter((s) => !isSettled(s.balance));
+  const settled = all.filter((s) => isSettled(s.balance));
+  const [showSettled, setShowSettled] = useState(false);
   const owe = list.reduce((n, s) => n + (s.balance > 0 ? s.balance : 0), 0);
   const adv = list.reduce((n, s) => n + (s.balance < 0 ? -s.balance : 0), 0);
   return (
@@ -141,12 +157,31 @@ function SupplierColumn({ category, list, onOpen }: { category: SupplierCategory
       </header>
       <div className="wa-col-scroll relative flex-1 min-h-0 overflow-y-auto p-3">
         {list.length === 0 ? (
-          <p className="py-10 text-center text-gray-500 text-[16px]">مفيش موردين هنا</p>
+          <p className="py-10 text-center text-gray-500 text-[16px]">مفيش موردين عليهم حساب</p>
         ) : (
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
             {list.map((s) => (
               <SupplierBox key={s.name} s={s} color={cat.color} onOpen={() => onOpen(s.name)} />
             ))}
+          </div>
+        )}
+        {/* الخالصين: زرار صغير تحت، وبيظهروا باهتين - the settled ones: a small toggle at the bottom, shown dimmed */}
+        {settled.length > 0 && (
+          <div className="mt-3 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setShowSettled((v) => !v)}
+              className="self-center rounded-full border border-white/10 bg-background/60 px-4 py-1.5 text-[14px] font-bold text-gray-400 hover:text-gray-200"
+            >
+              {showSettled ? "إخفاء الخالصين" : "إظهار الخالصين"} (<span className="font-numbers">{settled.length}</span>)
+            </button>
+            {showSettled && (
+              <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+                {settled.map((s) => (
+                  <SupplierBox key={s.name} s={s} color={cat.color} onOpen={() => onOpen(s.name)} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
