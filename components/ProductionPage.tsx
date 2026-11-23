@@ -22,7 +22,7 @@ import {
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import { sameExit } from "@/lib/kiln-alert";
-import { useLiveScale } from "@/lib/useLiveScale";
+import TrolleyIllustration from "./TrolleyIllustration";
 import { progressText } from "@/lib/batches";
 
 // صفحة الإنتاج والأفران: الأفران (يمين)، طرحات النهارده (الكارت الكبير في النص)، آخر وزنة والأرقام (شمال).
@@ -50,8 +50,6 @@ const num = (text: string, className = "") => (
 const exitKey = (e: ProductionExit) => e.liveId ?? e.id;
 // مفتاح الطرحة: batch_id، أو مفتاح أول ترول فيها - a batch key: its batch_id, or its first trolley's key
 const batchKey = (b: ProductionBatch) => b.batchId || `auto:${exitKey(b.trolleys[0])}`;
-// "طرحة فرن 4 (2 من 3)" - the batch a trolley belongs to
-const batchLabel = (b: ProductionBatch) => `طرحة ${toEnglishDigits(b.kiln || "—")} (${toEnglishDigits(progressText(b))})`;
 
 // "12/11" - a short date
 export const shortDate = (date: string) => {
@@ -104,15 +102,26 @@ function Kpi({ label, children, sub, accent = false }: { label: string; children
   );
 }
 
-// الأرقام تحت "آخر وزنة" في عمود الشمال: "إنتاج النهارده" بعرض العمود، وتحته 2×2 - the KPIs under "آخر وزنة":
-// "إنتاج النهارده" full width, then a 2×2 grid
+// الأرقام تحت "آخر وزنة" في عمود الشمال: "إنتاج النهارده" كبير، وتحته صف واحد من 3 كروت صغيرة
+// (عدد الطرحات، متوسط وزن الطرحة، إنتاج الشهر) - the KPIs under "آخر وزنة": a big "إنتاج النهارده", then one row of 3
 function KpiStack({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
-  const { compare } = s;
-  const up = compare.pct !== null && compare.pct >= 0;
   const unweighed = s.today.count - s.today.weighed;
+  const small = (label: string, value: ReactNode, sub: ReactNode) => (
+    <div className="min-w-0 rounded-2xl border border-cardBorder bg-card px-2 py-2 flex flex-col items-center justify-center text-center gap-0.5">
+      <p className="text-gray-400 font-semibold leading-tight text-[13px] min-[1600px]:text-[16px]">{label}</p>
+      <div className="leading-[1.1] whitespace-nowrap">{value}</div>
+      <p className="text-gray-500 leading-tight truncate max-w-full text-[11px] min-[1600px]:text-[13px]">{sub}</p>
+    </div>
+  );
+  const big = (text: string) => (
+    <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
+      {num(text)}
+    </span>
+  );
+  const unit = <span className="text-gray-400 font-bold text-[13px] min-[1600px]:text-[17px]"> طن</span>;
   return (
-    <div className="flex-1 min-h-0 grid gap-3 min-[1600px]:gap-4" style={{ gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1.25fr 1fr 1fr" }}>
-      <div className="col-span-2 min-h-0 grid">
+    <>
+      <div className="flex-1 min-h-0 grid">
         <Kpi label="إنتاج النهارده" accent sub={unweighed > 0 ? `${unweighed} ترول بدون وزن` : undefined}>
           <span
             className="font-extrabold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent"
@@ -120,80 +129,70 @@ function KpiStack({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
           >
             {num(tons(s.today))}
           </span>
-          <span className="text-gray-300 font-bold text-[18px] min-[1600px]:text-[24px]"> طن</span>
+          <span className="text-gray-300 font-bold text-[22px] min-[1600px]:text-[30px]"> طن</span>
         </Kpi>
       </div>
-      <Kpi label="عدد الطرحات" sub={<>النهارده · {num(formatNumber(s.today.count))} ترول</>}>
-        <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
-          {num(formatNumber(s.today.batches))}
-        </span>
-      </Kpi>
-      <Kpi label="متوسط وزن الطرحة" sub={s.today.weighedBatches > 0 ? `من ${s.today.weighedBatches} طرحة متوزنة` : "مفيش أوزان النهارده"}>
-        {s.today.weighedBatches > 0 ? (
+      <div className="shrink-0 grid grid-cols-3 gap-2 min-[1600px]:gap-3" style={{ height: sizes.kpiSmallHeight }}>
+        {small("عدد الطرحات", big(formatNumber(s.today.batches)), `${formatNumber(s.today.count)} ترول`)}
+        {small(
+          "متوسط الطرحة",
+          s.today.weighedBatches > 0 ? (
+            <>
+              {big(formatTons(s.today.batchKg / s.today.weighedBatches))}
+              {unit}
+            </>
+          ) : (
+            <span className="font-extrabold text-gray-600" style={{ fontSize: sizes.kpiFontSize }}>—</span>
+          ),
+          "النهارده"
+        )}
+        {small(
+          "إنتاج الشهر",
           <>
-            <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
-              {num(formatTons(s.today.batchKg / s.today.weighedBatches))}
-            </span>
-            <span className="text-gray-400 font-bold text-[15px] min-[1600px]:text-[19px]"> طن</span>
-          </>
-        ) : (
-          <span className="font-extrabold text-gray-600" style={{ fontSize: sizes.kpiFontSize }}>—</span>
+            {big(tons(s.month))}
+            {unit}
+          </>,
+          `${formatNumber(s.month.batches)} طرحة`
         )}
-      </Kpi>
-      <Kpi
-        label="مقارنة بإمبارح"
-        sub={<>امبارح: {compare.by === "tons" ? `${formatTons(compare.yesterday)} طن` : `${formatNumber(compare.yesterday)} طرحة`}</>}
-      >
-        {compare.pct === null ? (
-          <span className="font-extrabold text-gray-600" style={{ fontSize: sizes.kpiFontSize }}>—</span>
-        ) : (
-          <span className={`inline-flex items-center gap-1 font-extrabold ${up ? "text-statusGreen" : "text-statusRed"}`} style={{ fontSize: sizes.kpiFontSize }}>
-            {up ? "▲" : "▼"}
-            {num(`${Math.abs(Math.round(compare.pct))}%`)}
-          </span>
-        )}
-      </Kpi>
-      <Kpi label="إنتاج الشهر" sub={`${formatNumber(s.month.batches)} طرحة · ${formatNumber(s.month.count)} ترول`}>
-        <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
-          {num(tons(s.month))}
-        </span>
-        <span className="text-gray-400 font-bold text-[15px] min-[1600px]:text-[19px]"> طن</span>
-      </Kpi>
-    </div>
+      </div>
+    </>
   );
 }
 
 // مقاس بالبكسل من الكونفج (بيصغر بس لو العمود ضيق، من globals.css) - a px size from config (steps down only in a narrow column)
 const fs = (px: number) => ({ "--fs": `${px}px` }) as CSSProperties;
 
-// آخر وزنة: بتنور شوية لما طرحة جديدة توصل - the last weighing; glows briefly when a new exit arrives
-// فوق: الميزان والعنوان، في النص: الوزن الكبير، تحت: الفرن · النوع · الساعة - top: icon + title, center: weight, bottom: kiln · type · time
+// "الطرحة التالتة": ترتيب الطرحة في يومها بالوقت (production.batchOrdinals) - a batch's order in its day, by time
+function batchOrdinal(batch: ProductionBatch, batches: ProductionBatch[]): string {
+  const sameDay = batches.filter((b) => b.date === batch.date); // الأحدث الأول - newest first
+  const i = sameDay.length - 1 - sameDay.indexOf(batch);
+  const words = dashboardConfig.production.batchOrdinals;
+  return `الطرحة ${words[i] ?? String(i + 1)}`;
+}
+
+// آخر وزنة (ترول): الوزن الكبير، وتحته سطور واضحة: ترول 24 · دخلت فرن 4 — غرفة 1 · برتقال · الساعة ومن قد ايه ·
+// ضمن الطرحة التالتة (ترول 3 من 3). بتنور شوية لما ترول جديد يوصل
+// The last weighing (a trolley): the big weight, then clear lines (trolley · kiln — room · type · time and ago ·
+// its batch). Glows briefly when a new trolley arrives
 function LastExitCard({
   data,
   last,
   batches,
   sizes,
-  active,
 }: {
   data: ProductionData;
   last: ProductionExit | null;
   batches: ProductionBatch[];
   sizes: LeftSizes;
-  active: boolean;
 }) {
   const minutes = useMinutesSince(last);
-  // الطرحة اللي الترول ده فيها - the batch this trolley belongs to
   const inBatch = last ? batchOfExit(batches, last) : null;
-  // الميزان دلوقتي من /api/scale/live (نفس شاشة الأوبريتر، مفيش طلب على الشبكة المحلية) - والصفحة ظاهرة بس
-  // The scale right now from /api/scale/live (same as the operator screen, no LAN request) - only while on screen
-  const scale = useLiveScale(active);
   const [glow, setGlow] = useState(false);
   const seen = useRef<string | null | undefined>(undefined);
-  // نفس الطرحة لما تيجي من الإيجنت وبعدين من ERPNext مش بتنور مرتين - the same exit seen live then from ERPNext glows once
+  // نفس الترول لما ييجي من الإيجنت وبعدين من ERPNext مش بينور مرتين - the same trolley seen live then from ERPNext glows once
   const lastKey = last ? exitKey(last) : null;
   useEffect(() => {
     const id = lastKey;
-    // أول مرة مش بتنور - no glow on the first render
     if (seen.current !== undefined && id && id !== seen.current) {
       setGlow(true);
       const timer = setTimeout(() => setGlow(false), dashboardConfig.production.glowSeconds * 1000);
@@ -204,83 +203,66 @@ function LastExitCard({
   }, [lastKey]);
 
   const color = last ? typeColor(data, last.type) : "#6B7280";
+  const line = "prod-fs font-bold whitespace-nowrap truncate max-w-full leading-[1.45]";
   return (
     <div
-      className={`shrink-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden transition-[box-shadow,border-color] duration-700 ${
+      className={`flex-[1.7] min-h-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden transition-[box-shadow,border-color] duration-700 ${
         glow ? "border-brandOrange shadow-[0_0_28px_6px_rgba(255,122,0,0.55)] animate-new-exit" : "border-cardBorder"
       }`}
-      style={{ height: sizes.lastCardHeight }}
     >
-      {/* فوق: الميزان والعنوان و"من X دقيقة" - top: icon, title, how long ago */}
       <div className="shrink-0 flex items-center gap-2 whitespace-nowrap min-w-0">
         <Scale className="text-brandOrange shrink-0" size={sizes.lastIconSize} />
         <span className="prod-fs text-gray-300 font-bold" style={fs(sizes.lastTitleFontSize)}>
           آخر وزنة
         </span>
         {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[14px] font-extrabold">جديدة</span>}
-        {/* الميزان دلوقتي (بس لو متصل) - the scale right now (only when connected) */}
-        {scale.online && scale.weightKg !== null && (
-          <span
-            className={`prod-fs shrink-0 rounded-full px-2 font-bold ${scale.stable ? "bg-statusGreen/15 text-statusGreen" : "bg-statusAmber/15 text-statusAmber"}`}
-            style={fs(sizes.lastAgoFontSize)}
-            title="الميزان دلوقتي"
-          >
-            الميزان {num(formatKg(scale.weightKg))} · {scale.stable ? "ثابت" : "بيتحرك"}
-          </span>
-        )}
-        {last && (
-          <span className="prod-fs ms-auto text-gray-300 font-semibold truncate" style={fs(sizes.lastAgoFontSize)}>
-            {agoText(minutes)}
-          </span>
-        )}
       </div>
       {last ? (
-        <>
-          {/* الوزن الكبير في النص (وزن الترول)، وتحته الطرحة - the big weight in the center (the trolley), its batch under it */}
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-center whitespace-nowrap">
-            {last.kg !== null ? (
-              <p className="leading-none">
-                <span className="prod-fs font-extrabold text-white" style={fs(sizes.lastWeightFontSize)}>
-                  {num(formatKg(last.kg))}
-                </span>
-                <span className="prod-fs text-gray-400 font-bold" style={fs(sizes.lastChipFontSize)}>
-                  {" "}
-                  كجم صافي
-                </span>
-              </p>
-            ) : (
-              <span className="prod-fs font-extrabold text-gray-500" style={fs(sizes.lastNoWeightFontSize)}>
-                بدون وزن
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-0.5">
+          {last.kg !== null ? (
+            <p className="leading-none whitespace-nowrap mb-1">
+              <span className="prod-fs font-extrabold text-white" style={fs(sizes.lastWeightFontSize)}>
+                {num(formatKg(last.kg))}
               </span>
-            )}
-            {inBatch && (
-              <p
-                className={`prod-fs font-bold truncate max-w-full ${inBatch.batch.complete ? "text-gray-300" : "text-statusAmber"}`}
-                style={fs(sizes.lastBatchFontSize)}
-              >
-                {last.trolley ? <>ترول {num(toEnglishDigits(last.trolley))} · </> : null}ضمن {batchLabel(inBatch.batch)}
-              </p>
-            )}
-          </div>
-          {/* الفرن · النوع · الساعة في سطر واحد - kiln · type · time in one row */}
-          <div className="shrink-0 flex items-center justify-center gap-3 min-w-0 whitespace-nowrap font-bold">
-            <span className="prod-fs rounded-lg bg-white/10 text-white px-2.5 leading-[1.5]" style={fs(sizes.lastChipFontSize)}>
-              {last.kiln ? <>دخلت {toEnglishDigits(last.kiln)}</> : "—"}
+              <span className="prod-fs text-gray-400 font-bold" style={fs(sizes.lastWeightFontSize * 0.4)}>
+                {" "}
+                كجم
+              </span>
+            </p>
+          ) : (
+            <span className="prod-fs font-extrabold text-gray-500 mb-1" style={fs(sizes.lastNoWeightFontSize)}>
+              بدون وزن
             </span>
-            <span className="prod-fs flex items-center gap-1.5 min-w-0" style={{ ...fs(sizes.lastChipFontSize), color }}>
-              <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
-              <span className="truncate">{last.type || "غير محدد"}</span>
-            </span>
-            <span className="prod-fs text-gray-200 inline-flex items-center gap-1" style={fs(sizes.lastTimeFontSize)}>
-              <Clock size={sizes.lastTimeFontSize * 0.85} />
-              {num(last.time)}
-              {last.date !== data.today && <span className="text-gray-500 font-semibold"> ({num(shortDate(last.date))})</span>}
-            </span>
-          </div>
-        </>
+          )}
+          {last.trolley && (
+            <p className={`${line} text-white`} style={fs(sizes.lastLineFontSize)}>
+              ترول {num(toEnglishDigits(last.trolley))}
+            </p>
+          )}
+          <p className={`${line} text-gray-100`} style={fs(sizes.lastLineFontSize)}>
+            {last.kiln ? <>دخلت {toEnglishDigits(last.kiln)}</> : "—"}
+            {last.room && <> — غرفة {num(toEnglishDigits(last.room))}</>}
+          </p>
+          <p className={`${line} inline-flex items-center justify-center gap-2`} style={{ ...fs(sizes.lastLineFontSize), color }}>
+            <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
+            {last.type || "غير محدد"}
+          </p>
+          <p className={`${line} text-gray-300 inline-flex items-center justify-center gap-1.5`} style={fs(sizes.lastLineFontSize)}>
+            <Clock size={sizes.lastLineFontSize * 0.85} />
+            {num(last.time)}
+            {last.date !== data.today && <span className="text-gray-500"> ({num(shortDate(last.date))})</span>}
+            <span className="text-gray-400 font-semibold"> · {agoText(minutes)}</span>
+          </p>
+          {inBatch && (
+            <p className={`${line} ${inBatch.batch.complete ? "text-brandOrange" : "text-statusAmber"}`} style={fs(sizes.lastLineFontSize)}>
+              ضمن {batchOrdinal(inBatch.batch, batches)} (ترول {num(String(inBatch.index))}
+              {inBatch.batch.size !== null && <> من {num(String(inBatch.batch.size))}</>})
+            </p>
+          )}
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
-          <p className="prod-fs text-gray-500 font-bold" style={fs(sizes.lastChipFontSize)}>
+          <p className="prod-fs text-gray-500 font-bold" style={fs(sizes.lastLineFontSize)}>
             لسه مفيش طرحات
           </p>
         </div>
@@ -340,21 +322,25 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
   );
 }
 
-/// طرحات النهارده (الكارت الكبير في النص): سطر لكل طرحة، كبير ويتقري من بعيد
-// - الراس: الساعة (كبيرة) · "فرن 4" · "غرفة 1" · النوع بنقطة لونه (الكلمة كاملة) · "3 ترول" · المجموع "1,715 كجم" على الشمال
-// - تحته مربع لكل ترول "ترول 6 — 610 كجم" في صف واحد. الطرحة الناقصة عليها "2 من 3" كهرماني
-// السطور بتملا الكارت (بين batchRowMin و batchRowMax) من غير scroll: لو أكتر، الأحدث وتحتهم "+N طرحة تانية"
-// Today's batches (the big middle card): one big row per batch, readable from a distance. Header: time · kiln ·
-// room · type (full word) · trolley count · total; under it one box per trolley in a single row. An incomplete batch
-// shows an amber "2 من 3". Rows fill the card (batchRowMin..batchRowMax), never scroll: the newest that fit + "+N"
+// طرحات النهارده (الكارت الكبير في النص): كارت لكل طرحة بيملا الارتفاع — طرحة واحدة = المساحة كلها، اتنين = النص لكل
+// واحدة، وهكذا (كل واحدة batchRowMin على الأقل، والزيادة "+N طرحة تانية"). في الكارت:
+// - سطر العنوان: "الطرحة الأولى" · الساعة · "فرن 4" · "غرفة 1" · النوع بنقطة لونه (الكلمة كاملة) · المجموع "1,715 كجم"
+// - رسمة لكل ترول (TrolleyIllustration) جنب بعض، وتحت كل واحدة "ترول 6" و"610 كجم". الترول اللي لسه مجاش = إطار
+//   متقطع "مستني". الرسومات بتكبر وتصغر مع ارتفاع الكارت، والكلام تحتها بيكبر معاه بين trolleyLabelMin و Max
+// Today's batches (the big middle card): one card per batch filling the height (1 = all of it, 2 = half each, ...;
+// each at least batchRowMin, the rest "+N"). Title line: ordinal · time · kiln · room · type · total; then one
+// trolley drawing per trolley with its number and weight (a missing one = a dashed "مستني"). Drawings scale with the
+// card height and the labels grow with it between trolleyLabelMin and trolleyLabelMax
 function BatchList({
   data,
   batches,
+  allBatches,
   sizes,
   alertExit,
 }: {
   data: ProductionData;
   batches: ProductionBatch[];
+  allBatches: ProductionBatch[];
   sizes: LeftSizes;
   alertExit?: ProductionExit | null;
 }) {
@@ -393,19 +379,21 @@ function BatchList({
     return () => observer.disconnect();
   }, []);
 
+  // كام كارت ياخد مكانه، وكل واحد بيملا نصيبه من الارتفاع - how many fit; each fills its share of the height
   const n = batches.length;
   let shown = n;
-  let row = sizes.batchRowMin;
+  let row = 0;
   if (height > 0 && n > 0) {
     if (n * sizes.batchRowMin + (n - 1) * gap <= height) {
-      row = Math.min(sizes.batchRowMax, Math.floor((height - (n - 1) * gap) / n));
+      row = Math.floor((height - (n - 1) * gap) / n);
     } else {
-      // اللي ياخد مكانه بأقل ارتفاع، وسطر "+N" تحت - as many as fit at the minimum height, plus the "+N" line
-      shown = Math.max(0, Math.floor((height - moreHeight) / (sizes.batchRowMin + gap)));
-      row = shown > 0 ? Math.min(sizes.batchRowMax, Math.floor((height - moreHeight - shown * gap) / shown)) : sizes.batchRowMin;
+      shown = Math.max(1, Math.floor((height - moreHeight + gap) / (sizes.batchRowMin + gap)));
+      row = Math.floor((height - moreHeight - shown * gap) / shown);
     }
   }
   const hidden = n - shown;
+  // كلام الترول بيكبر مع ارتفاع الكارت - the trolley labels grow with the card height
+  const label = Math.round(Math.min(sizes.trolleyLabelMax, Math.max(sizes.trolleyLabelMin, row * 0.06)));
   const px = (v: number) => ({ fontSize: v });
   return (
     <div ref={ref} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ gap }}>
@@ -421,16 +409,21 @@ function BatchList({
           const color = typeColor(data, batch.type);
           const key = batchKey(batch);
           const alerting = !!alertExit && batch.trolleys.some((t) => sameExit(t, alertExit));
+          const missing = batch.size !== null ? Math.max(0, batch.size - batch.count) : 0;
           return (
             <div
               key={key}
-              className={`shrink-0 flex flex-col justify-evenly px-4 rounded-2xl border-2 min-w-0 ${
+              className={`shrink-0 flex flex-col gap-1.5 px-4 py-2.5 rounded-2xl border-2 min-w-0 overflow-hidden ${
                 index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_18px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
               } ${fresh.has(key) ? "animate-exit-in" : ""} ${alerting ? "exit-alert-row" : ""}`}
               style={{ height: row }}
             >
-              {/* الراس - the header */}
-              <div className="flex items-center gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
+              {/* سطر العنوان - the title line */}
+              <div className="shrink-0 flex items-center gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
+                <span className={`font-extrabold ${batch.complete ? "text-brandOrange" : "text-statusAmber"}`} style={px(sizes.batchTitleFontSize)}>
+                  {batchOrdinal(batch, allBatches)}
+                  {!batch.complete && <span className="font-bold"> ({num(progressText(batch))})</span>}
+                </span>
                 <span className="text-white font-extrabold" style={px(sizes.batchTimeFontSize)}>
                   {num(batch.time)}
                 </span>
@@ -446,19 +439,6 @@ function BatchList({
                   <span className="rounded-full shrink-0" style={{ width: sizes.batchDotSize, height: sizes.batchDotSize, backgroundColor: color }} />
                   {batch.type || "غير محدد"}
                 </span>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 ${batch.complete ? "bg-white/10 text-gray-100" : "bg-statusAmber/20 text-statusAmber"}`}
-                  style={px(sizes.batchCountFontSize)}
-                  title={batch.complete ? "عدد الترولات" : "الطرحة لسه ناقصة"}
-                >
-                  {batch.complete ? (
-                    <>
-                      {num(String(batch.count))} ترول
-                    </>
-                  ) : (
-                    num(progressText(batch))
-                  )}
-                </span>
                 <span className="ms-auto shrink-0 font-extrabold text-white" style={px(sizes.batchTotalFontSize)}>
                   {batch.weighed > 0 ? (
                     <>
@@ -469,31 +449,33 @@ function BatchList({
                   )}
                 </span>
               </div>
-              {/* ترول ترول في صف واحد - the trolleys, one row */}
-              <div className="flex items-stretch gap-2 min-w-0">
-                {batch.trolleys.map((t, i) => (
-                  <span
-                    key={exitKey(t)}
-                    className={`flex-1 min-w-0 rounded-xl border px-2 py-1 text-center whitespace-nowrap overflow-hidden text-ellipsis font-bold ${
-                      alertExit && sameExit(t, alertExit) ? "border-brandOrange bg-brandOrange/25 text-white" : "border-white/10 bg-white/[0.06] text-gray-200"
-                    }`}
-                    style={px(sizes.batchTrolleyFontSize)}
-                  >
-                    ترول {num(toEnglishDigits(t.trolley || String(i + 1)))} — <span className="text-white">{num(t.kg !== null ? formatKg(t.kg) : "—")}</span>{" "}
-                    <span className="text-gray-400 font-semibold text-[0.8em]">كجم</span>
-                  </span>
+              {/* الترولات: رسمة لكل ترول وتحتها رقمه ووزنه - the trolleys: a drawing each, number and weight under it */}
+              <div className="flex-1 min-h-0 flex items-stretch justify-center gap-4 min-w-0">
+                {batch.trolleys.map((t, i) => {
+                  const isNew = !!alertExit && sameExit(t, alertExit);
+                  return (
+                    <div key={exitKey(t)} className="flex-1 min-w-0 min-h-0 flex flex-col items-center">
+                      <TrolleyIllustration highlight={isNew} className="flex-1 min-h-0 w-full" />
+                      <p className="shrink-0 font-bold text-gray-200 whitespace-nowrap leading-tight" style={px(label)}>
+                        ترول {num(toEnglishDigits(t.trolley || String(i + 1)))}
+                      </p>
+                      <p className="shrink-0 font-extrabold text-white whitespace-nowrap leading-tight" style={px(label * 1.1)}>
+                        {num(t.kg !== null ? formatKg(t.kg) : "—")} <span className="text-gray-400 font-bold text-[0.7em]">كجم</span>
+                      </p>
+                    </div>
+                  );
+                })}
+                {Array.from({ length: missing }, (_, i) => (
+                  <div key={`wait-${i}`} className="flex-1 min-w-0 min-h-0 flex flex-col items-center">
+                    <TrolleyIllustration waiting className="flex-1 min-h-0 w-full" />
+                    <p className="shrink-0 font-bold text-statusAmber whitespace-nowrap leading-tight" style={px(label)}>
+                      ترول {num(String(batch.count + i + 1))}
+                    </p>
+                    <p className="shrink-0 font-extrabold text-statusAmber/90 whitespace-nowrap leading-tight" style={px(label * 1.1)}>
+                      مستني
+                    </p>
+                  </div>
                 ))}
-                {/* أماكن الترولات اللي لسه مجاتش - slots for the trolleys still to come */}
-                {batch.size !== null &&
-                  Array.from({ length: Math.max(0, batch.size - batch.count) }, (_, i) => (
-                    <span
-                      key={`slot-${i}`}
-                      className="flex-1 min-w-0 rounded-xl border border-dashed border-statusAmber/50 px-2 py-1 text-center whitespace-nowrap text-statusAmber/80 font-bold"
-                      style={px(sizes.batchTrolleyFontSize)}
-                    >
-                      ترول {num(String(batch.count + i + 1))} …
-                    </span>
-                  ))}
               </div>
             </div>
           );
@@ -632,10 +614,9 @@ export default function ProductionPage({
   alertExit = null,
   alertPending = 0,
   onDismissAlert,
-  active = true,
 }: {
   data: ProductionData | null;
-  active?: boolean; // الصفحة دي اللي على الشاشة (الميزان بيتسأل بس ساعتها) - this page is on screen (scale polled only then)
+  active?: boolean; // الصفحة دي اللي على الشاشة (مش مستخدمة دلوقتي) - this page is on screen (currently unused)
   lan?: boolean; // الإيجنت على الشبكة بيرد (الطرحات على طول) - the LAN agent answers (live exits)
   onOpen: (target: ProductionTarget) => void;
   alertExit?: ProductionExit | null; // ترول جديد وقت التنبيه - the new trolley during the alert
@@ -709,12 +690,12 @@ export default function ProductionPage({
           </>
         }
       >
-        <BatchList data={data} batches={s.todayBatches} sizes={left} alertExit={alertExit} />
+        <BatchList data={data} batches={s.todayBatches} allBatches={s.batches} sizes={left} alertExit={alertExit} />
       </Card>
 
       {/* شمال: "آخر وزنة" صغيرة فوق، والأرقام تحتها - left: the small "آخر وزنة" on top, the KPIs under it */}
       <div className="prod-left min-h-0 min-w-0 flex flex-col" style={{ gridColumn: 3, gridRow: 1, gap }}>
-        <LastExitCard data={data} last={s.last} batches={s.batches} sizes={left} active={active} />
+        <LastExitCard data={data} last={s.last} batches={s.batches} sizes={left} />
         <KpiStack s={s} sizes={sizes} />
       </div>
 

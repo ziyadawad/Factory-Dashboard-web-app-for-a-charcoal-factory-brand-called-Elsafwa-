@@ -463,24 +463,44 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={chime.unlock}
-                className="px-3 py-1.5 rounded-xl border border-brandOrange/60 bg-brandOrange/10 text-brandOrange text-sm font-bold whitespace-nowrap hover:bg-brandOrange/20 transition-colors"
+                // صفحة الإنتاج على شاشة أضيق من 1600: الزرار ده بيستخبى وبيظهر 🔔 صغير جوه عمود الأزرار (عشان الساعة متتغطاش)
+                // On the production page under 1600 wide this one hides; a small 🔔 shows in the button stack instead
+                className={`px-3 py-1.5 rounded-xl border border-brandOrange/60 bg-brandOrange/10 text-brandOrange text-sm font-bold whitespace-nowrap hover:bg-brandOrange/20 transition-colors ${
+                  pageId === "production" ? "hidden min-[1600px]:inline-block" : ""
+                }`}
                 title="المتصفح مانع الصوت - اضغط عشان صوت الطرحة الجديدة يشتغل"
               >
                 🔔 فعّل الصوت
               </button>
             )}
+            {/* صفحة الإنتاج: "📱 شاشة الأوبريتر" وتحته "📊 ملخص الشهر" (فوق بعض، عشان الساعة والتاريخ يفضلوا باينين)
+                The production page: the operator button with the month summary under it (stacked, so the clock stays visible) */}
             {pageId === "production" && (
-              <button
-                type="button"
-                onClick={() => setMonthSummaryOpen(true)}
-                className="px-2.5 py-1.5 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[14px] min-[1600px]:text-[15px] font-bold text-gray-200 whitespace-nowrap"
-                title="ملخص الشهر والإنتاج بالساعة"
-              >
-                📊<span className="hidden min-[1600px]:inline"> ملخص الشهر</span>
-                <span className="min-[1600px]:hidden"> الشهر</span>
-              </button>
+              <div className="flex flex-col items-stretch gap-1">
+                <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />
+                <div className="flex items-stretch gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMonthSummaryOpen(true)}
+                    className="flex-1 px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap"
+                    title="ملخص الشهر والإنتاج بالساعة"
+                  >
+                    📊 ملخص الشهر
+                  </button>
+                  {chime.needsUnlock && (
+                    <button
+                      type="button"
+                      onClick={chime.unlock}
+                      className="min-[1600px]:hidden px-2 rounded-xl border border-brandOrange/60 bg-brandOrange/10 text-[14px] leading-tight hover:bg-brandOrange/20"
+                      title="فعّل الصوت — المتصفح مانع الصوت"
+                      aria-label="فعّل الصوت"
+                    >
+                      🔔
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-            {pageId === "production" && <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />}
           </>
         }
         onPageChange={changePage}

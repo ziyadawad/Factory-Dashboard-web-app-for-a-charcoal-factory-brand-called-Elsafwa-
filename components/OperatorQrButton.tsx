@@ -77,7 +77,7 @@ export default function OperatorQrButton({ open, setOpen }: { open: boolean; set
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="px-3 py-1.5 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[15px] font-bold text-gray-200 whitespace-nowrap"
+        className="px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap"
         title={OPERATOR_URL}
       >
         📱 شاشة الأوبريتر
