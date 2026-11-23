@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { StockDetails, StockGroup, StockMove } from "@/lib/types";
-import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatDayName, formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import DuplicatesTab from "./DuplicatesTab";
@@ -133,7 +133,7 @@ function MoveRow({
       <tr onClick={onToggle} className={`cursor-pointer hover:bg-white/5 ${open ? "bg-white/5" : ""} ${muted ? "opacity-60" : ""}`}>
         <td className={`${td} text-center text-gray-300 whitespace-nowrap`}>
           <span dir="ltr" className="font-numbers tabular-nums">
-            {shortDate(move.postingDate)} {move.postingTime}
+            {shortDate(move.postingDate)} {formatTime12(move.postingTime)}
           </span>
           {move.lateDays > 1 && (
             <span className="block mx-auto w-fit rounded-full bg-brandOrange/15 text-brandOrange text-[0.8em] font-bold px-2 leading-[1.7]">
@@ -195,8 +195,8 @@ function MoveRow({
                 <p><span className="text-gray-500">المخزن: </span>{move.warehouse}{move.retail ? <span className="text-teal-300"> (القطاعي)</span> : !move.inScope && <span className="text-gray-500"> (برّه رصيد الكارت)</span>}</p>
                 <p><span className="text-gray-500">الكمية: </span>{n(move.qty)} {unit}</p>
                 <p><span className="text-gray-500">{move.retail ? "رصيد القطاعي بعدها: " : "الرصيد بعدها: "}</span>{move.balanceAfter === null ? "—" : n(move.balanceAfter)}</p>
-                <p><span className="text-gray-500">تاريخ الحركة: </span>{formatDayName(move.postingDate)} <span dir="ltr" className="font-numbers">{move.postingTime}</span></p>
-                <p><span className="text-gray-500">وقت التسجيل: </span><span dir="ltr" className="font-numbers">{move.creation}</span> — {move.owner}</p>
+                <p><span className="text-gray-500">تاريخ الحركة: </span>{formatDayName(move.postingDate)} <span dir="ltr" className="font-numbers">{formatTime12(move.postingTime)}</span></p>
+                <p><span className="text-gray-500">وقت التسجيل: </span><span dir="ltr" className="font-numbers">{move.creation.slice(0, 10)} {formatTime12(move.creation)}</span> — {move.owner}</p>
                 <p><span className="text-gray-500">المستند: </span>{move.voucherType} <span dir="ltr" className="font-numbers">{move.voucherNo}</span>{move.voucherLabel && ` (${move.voucherLabel})`}</p>
                 <p><span className="text-gray-500">النوع: </span>{move.category}</p>
                 {move.party && <p><span className="text-gray-500">العميل / المورد: </span>{move.party}</p>}

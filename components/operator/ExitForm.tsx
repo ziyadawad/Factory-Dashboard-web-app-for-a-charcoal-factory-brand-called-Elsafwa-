@@ -16,6 +16,7 @@ import { LiveScale } from "@/lib/useLiveScale";
 import { OperatorBatchSummary, OperatorOptions, OperatorSaveRequest, PendingWeighing } from "@/lib/types";
 import { Batch, cairoNowMinutes, isOpen } from "@/lib/batches";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { formatTime12 } from "@/lib/format";
 import { TypeBadge, TypeIcon, typeStyle } from "../TypeBadge";
 
 const RULES = { windowMinutes: dashboardConfig.production.batchWindowMinutes, maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch };
@@ -37,8 +38,8 @@ const TITLES: Record<Step, string> = {
 };
 
 const kg = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
-const cairoTime = (iso: string) =>
-  new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+// الساعة بـ ص / م (lib/format) - the time with ص / م (lib/format)
+const cairoTime = (iso: string) => formatTime12(iso);
 const kilnNumber = (kiln: string) => kiln.replace(/^\D+/, "") || kiln;
 
 type Duplicate = { time: string; kiln: string; netKg: number | null };
@@ -478,7 +479,7 @@ export default function ExitForm({
             {duplicate && (
               <div className="flex flex-col gap-3 rounded-2xl border border-statusAmber/60 bg-statusAmber/10 p-4">
                 <p className="text-[18px] font-bold text-statusAmber">
-                  ⚠ الترول {trolley} اتسجل من شوية ({duplicate.time} — {duplicate.kiln}
+                  ⚠ الترول {trolley} اتسجل من شوية ({formatTime12(duplicate.time)} — {duplicate.kiln}
                   {duplicate.netKg ? ` — ${kg(duplicate.netKg)} كجم` : ""})
                 </p>
                 <p className="text-[15px] text-gray-300">لو ده ترول تاني فعلا احفظه، ولو نفس الوزنة ارجع.</p>

@@ -4,7 +4,7 @@ import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState 
 import { Clock, Factory, Flame, PowerOff, Scale, Wrench } from "lucide-react";
 import KilnIllustration, { type KilnState } from "./KilnIllustration";
 import { ProductionData, ProductionExit } from "@/lib/types";
-import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import {
   agoText,
   batchOfExit,
@@ -283,7 +283,7 @@ function LastExitCard({
           {/* الساعة ومن قد ايه - the time and how long ago */}
           <p className="prod-fs font-bold whitespace-nowrap text-gray-300 inline-flex items-center gap-1.5" style={fs(sizes.lastLineFontSize * 0.9)}>
             <Clock size={sizes.lastLineFontSize * 0.8} />
-            {num(last.time)}
+            {num(formatTime12(last.time))}
             {last.date !== data.today && <span className="text-gray-500"> ({num(shortDate(last.date))})</span>}
             <span className="text-gray-400 font-semibold"> — {agoText(minutes)}</span>
           </p>
@@ -343,7 +343,7 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
         <span className="ms-auto shrink-0" title="آخر طرحة دخلت">
           {kiln.last ? (
             <>
-              <Clock size={sizes.kilnStatFontSize * 0.85} className="inline align-[-2px]" /> {num(kiln.last.time)}
+              <Clock size={sizes.kilnStatFontSize * 0.85} className="inline align-[-2px]" /> {num(formatTime12(kiln.last.time))}
               {kiln.last.date !== today && <span className="kiln-date"> ({num(shortDate(kiln.last.date))})</span>}
             </>
           ) : (
@@ -462,7 +462,7 @@ function BatchList({
                     {!batch.complete && <span className="font-bold"> ({num(progressText(batch))})</span>}
                   </span>
                   <span className="cq-fs whitespace-nowrap text-white font-extrabold" style={cqf(sizes.batchTimeFontSize, sizes.batchTitleRowWidth)}>
-                    {num(batch.time)}
+                    {num(formatTime12(batch.time))}
                   </span>
                   {/* الفرن والغرفة: شرايح خضرا بنفس المقاس - kiln and room: green chips, same size */}
                   <span className={`cq-fs shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={cqf(sizes.batchKilnFontSize, sizes.batchTitleRowWidth)}>
@@ -576,7 +576,7 @@ function NewExitCard({
         </span>
         <span className="text-gray-300 font-bold inline-flex items-center gap-1.5" style={{ fontSize: c.labelFontSize * 1.4 }}>
           <Clock size={c.labelFontSize * 1.3} />
-          {num(exit.time)}
+          {num(formatTime12(exit.time))}
         </span>
       </div>
       <p className="leading-none whitespace-nowrap">

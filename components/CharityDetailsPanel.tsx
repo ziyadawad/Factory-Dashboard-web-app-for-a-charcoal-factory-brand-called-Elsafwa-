@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ExternalLink, HandHeart, Vault, X } from "lucide-react";
 import { CharityDetailOp, CharityDetails, CharityDuplicatePair, UnfundedCharity } from "@/lib/types";
-import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatDateTime12, formatDayName, formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 
@@ -174,7 +174,7 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
                 <p className="text-gray-400">
                   سجّلها: <span className="text-gray-200">{op.owner || "—"}</span>
                   <span className="text-gray-500"> · وقت التسجيل </span>
-                  <span dir="ltr" className="font-numbers text-gray-200">{op.creation}</span>
+                  <span dir="ltr" className="font-numbers text-gray-200">{formatDateTime12(op.creation)}</span>
                 </p>
               </div>
               <a
@@ -384,7 +384,7 @@ export default function CharityDetailsPanel({ target, onClose }: { target: Chari
                   <span className="font-semibold text-white">
                     {formatDayName(last.date)}{" "}
                     {last.creation.slice(0, 10) === last.date && (
-                      <span dir="ltr" className="font-numbers tabular-nums">{last.creation.slice(11, 16)}</span>
+                      <span dir="ltr" className="font-numbers tabular-nums">{formatTime12(last.creation.slice(11, 16))}</span>
                     )}
                   </span>
                   <span className="text-gray-200">{last.owner || "—"}</span>

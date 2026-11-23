@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LogOut, Plus, Scale } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { formatTime12 } from "@/lib/format";
 import { usePageVisible, usePolling } from "@/lib/usePolling";
 import { useLiveScale } from "@/lib/useLiveScale";
 import { OperatorExit, OperatorOptions, PendingWeighing } from "@/lib/types";
@@ -35,8 +36,8 @@ async function fetcher<T>(url: string): Promise<T> {
 }
 
 const kg = (n: number | null) => (n === null ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: 1 }));
-const cairoTime = (iso: string) =>
-  new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+// الساعة بـ ص / م (lib/format) - the time with ص / م (lib/format)
+const cairoTime = (iso: string) => formatTime12(iso);
 function ago(iso: string, now: number) {
   const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
   if (min < 1) return "دلوقتي";
@@ -141,7 +142,7 @@ export default function OperatorApp() {
               <p className="text-[22px] font-extrabold text-statusAmber">
                 طرحة فرن {kilnNumber(b.kiln)} — ترول <span className="font-numbers">{b.count + 1}</span> من <span className="font-numbers">{b.size}</span>
               </p>
-              <span className="font-numbers text-[16px] font-bold text-gray-300">{b.time}</span>
+              <span className="font-numbers text-[16px] font-bold text-gray-300">{formatTime12(b.time)}</span>
             </div>
             <p className="flex items-center gap-2 text-[15px] text-gray-300">
               {b.room && <span>غرفة {b.room} ·</span>}
@@ -262,7 +263,7 @@ export default function OperatorApp() {
             {batches.slice(0, 20).map((b) => (
               <div key={b.key} className="flex flex-col gap-2 rounded-2xl border border-cardBorder bg-card/80 px-4 py-3">
                 <div className="flex items-center gap-4">
-                  <span className="font-numbers text-[18px] font-bold text-gray-300">{b.time}</span>
+                  <span className="font-numbers text-[18px] font-bold text-gray-300">{formatTime12(b.time)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-x-2 text-[17px] font-bold text-white">
                       {b.kiln}

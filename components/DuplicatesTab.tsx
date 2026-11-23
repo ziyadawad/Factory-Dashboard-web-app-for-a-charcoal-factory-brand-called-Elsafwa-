@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { ExternalLink } from "lucide-react";
 import { DuplicatesReport, SuspectedDuplicate } from "@/lib/types";
-import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatDateTime12, formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
 
 // تاب "⚠ عمليات مكررة": بس اللي كل حاجة فيه زي بعض بعد مقارنة المستند كامل (قراية بس، آخر 60 يوم)
 // The "⚠ عمليات مكررة" tab: only groups identical in everything after a full-document comparison (read-only, last 60 days)
@@ -78,7 +78,7 @@ function Compare({ item }: { item: SuspectedDuplicate }) {
             <td className="px-2 align-top">سجّلها</td>
             {docs.map((d) => (
               <td key={d.name} className="px-2 align-top">
-                {d.owner || "—"} · <span dir="ltr" className="font-numbers">{d.creation}</span>
+                {d.owner || "—"} · <span dir="ltr" className="font-numbers">{formatDateTime12(d.creation)}</span>
               </td>
             ))}
           </tr>

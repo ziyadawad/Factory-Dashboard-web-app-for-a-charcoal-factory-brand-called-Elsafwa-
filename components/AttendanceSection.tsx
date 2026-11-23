@@ -5,7 +5,7 @@ import { AttendanceGroup } from "@/lib/types";
 import { PieChart, Pie, Cell } from "recharts";
 import { Check, Palmtree, X } from "lucide-react";
 import { useCountUp } from "@/lib/useCountUp";
-import { DATE_LOCALE, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 
@@ -28,12 +28,7 @@ const LIST_COLORS = {
 
 // "آخر تحديث: hh:mm" بتوقيت مصر - last update time in Egypt time
 function formatUpdatedAt(iso: string) {
-  return new Date(iso).toLocaleTimeString(DATE_LOCALE, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "Africa/Cairo",
-  });
+  return formatTime12(iso);
 }
 
 // قايمة أسامي: عنوان بأيقونة وتحته الأسامي كبسولات بتنزل سطر جديد (الاسم الطويل بيتقص بـ …)

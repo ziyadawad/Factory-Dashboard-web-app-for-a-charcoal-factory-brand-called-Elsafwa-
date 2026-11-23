@@ -3,6 +3,7 @@
 
 import { dashboardConfig } from "@/config/dashboard.config";
 import { WaGroup, WaMessage } from "@/lib/types";
+import { formatTime12 } from "@/lib/format";
 
 const cfg = dashboardConfig.whatsapp;
 
@@ -24,12 +25,12 @@ export async function waFetch<T>(url: string): Promise<T> {
   return body;
 }
 
-const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" });
 const dayLabelFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const shortDayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric" });
 
-export const cairoTime = (iso: string) => timeFmt.format(new Date(iso));
+// الساعة بـ ص / م (lib/format) - the time with ص / م (lib/format)
+export const cairoTime = (iso: string) => formatTime12(iso);
 export const cairoDay = (iso: string) => dayKeyFmt.format(new Date(iso));
 
 // "النهارده" / "امبارح" / "الأحد 22 نوفمبر 2026" - a day separator label

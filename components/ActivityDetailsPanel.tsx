@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { ExternalLink, X } from "lucide-react";
 import { ActivityDetails, ActivityEvent } from "@/lib/types";
-import { formatDayName } from "@/lib/format";
+import { formatDateTime12, formatDayName, formatTime12 } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import AdvanceDueBox from "./AdvanceDueBox";
 
@@ -57,7 +57,7 @@ export default function ActivityDetailsPanel({ event, icon, color, onClose }: { 
                   التاريخ: <span className="text-gray-200">{formatDayName(data.postingDate)}</span>
                   {data.postingTime && (
                     <span dir="ltr" className="font-numbers text-gray-200">
-                      {data.postingTime}
+                      {formatTime12(data.postingTime)}
                     </span>
                   )}
                 </span>
@@ -69,7 +69,7 @@ export default function ActivityDetailsPanel({ event, icon, color, onClose }: { 
               )}
               {data?.creation && (
                 <span>
-                  وقت التسجيل: <span dir="ltr" className="font-numbers text-gray-200">{data.creation}</span>
+                  وقت التسجيل: <span dir="ltr" className="font-numbers text-gray-200">{formatDateTime12(data.creation)}</span>
                 </span>
               )}
               {data && data.lateDays > 1 && (

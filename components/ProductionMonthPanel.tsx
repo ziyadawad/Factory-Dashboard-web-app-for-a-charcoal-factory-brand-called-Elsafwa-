@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from "react";
 import { BarChart3, Clock, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { ProductionData } from "@/lib/types";
-import { formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatNumber, hourLabel12, toEnglishDigits } from "@/lib/format";
 import { formatTons, ProductionSummary, summarize, Tally } from "@/lib/production-stats";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -75,7 +75,7 @@ function HourlyChart({ s }: { s: ProductionSummary }) {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 22, right: 6, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#232B40" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 13 }} tickLine={false} axisLine={{ stroke: "#232B40" }} interval={0} />
+          <XAxis dataKey="hour" tick={{ fill: "#9CA3AF", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "#232B40" }} interval={0} tickFormatter={(h: number) => hourLabel12(h)} />
           <YAxis
             tick={{ fill: "#9CA3AF", fontSize: 12 }}
             tickLine={false}

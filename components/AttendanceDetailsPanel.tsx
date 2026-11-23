@@ -20,7 +20,7 @@ import {
   SalaryValue,
   SectionSalaries,
 } from "@/lib/types";
-import { formatDayName, formatNumber } from "@/lib/format";
+import { formatDayName, formatNumber, formatTime12 } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import AdvanceDueBox from "./AdvanceDueBox";
@@ -57,7 +57,7 @@ function TodayPill({ status, punch }: { status: PersonStatus; punch: string | nu
         حاضر
         {punch && (
           <span dir="ltr" className="font-numbers tabular-nums text-gray-200 font-semibold">
-            {punch}
+            {formatTime12(punch)}
           </span>
         )}
       </span>
@@ -215,7 +215,7 @@ function MonthCalendar({ person, openToday }: { person: EmployeeAttendance; open
               <span className="text-[12px] text-sky-200 font-semibold">جمعة شغل</span>
             ) : day.firstPunch && day.status !== "future" ? (
               <span dir="ltr" className="font-numbers tabular-nums text-[13px] text-gray-300">
-                {day.firstPunch}
+                {formatTime12(day.firstPunch)}
               </span>
             ) : open ? (
               <span className="text-[12px] text-gray-300">النهارده</span>

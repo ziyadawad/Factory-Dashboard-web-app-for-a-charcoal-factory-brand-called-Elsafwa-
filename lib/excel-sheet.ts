@@ -3,6 +3,7 @@
 // الشكل: شريط علوي كحلي باللوجوهات، خط برتقالي→دهبي، كروت معلومات، جدول بصفوف متبادلة، إجمالي كحلي، وتوقيعات
 // Look: a navy header band with the logos, an orange→gold accent line, info cards, a zebra table, a navy totals
 // row and signature boxes
+import { formatTime12 } from "./format";
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
@@ -412,7 +413,8 @@ export function styledSheet(workbook: ExcelJS.Workbook, logos: Logos, spec: Shee
 export function issuedAt(): { date: string; dateTime: string } {
   const now = new Date();
   const date = now.toLocaleDateString("en-GB", { timeZone: "Africa/Cairo" });
-  const time = now.toLocaleTimeString("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
+  // الساعة بـ ص / م من غير علامات اتجاه (نص الإكسيل) - 12-hour with ص / م, no direction marks (Excel text)
+  const time = formatTime12(now, true);
   return { date, dateTime: `${date} ${time}` };
 }
 

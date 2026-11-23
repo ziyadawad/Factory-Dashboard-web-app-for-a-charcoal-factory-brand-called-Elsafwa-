@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { Flame, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ProductionData } from "@/lib/types";
-import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatDayName, formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import { formatKg, formatTons, monthDays, typeColor } from "@/lib/production-stats";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
@@ -144,7 +144,7 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                       {day.exits.map((e) => {
                         return (
                           <tr key={e.liveId ?? e.id} className="hover:bg-white/5">
-                            <td className={`${td} text-center text-gray-300`}>{n(e.time)}</td>
+                            <td className={`${td} text-center text-gray-300`}>{n(formatTime12(e.time))}</td>
                             <td className={`${td} font-semibold`}>
                               {isKiln ? (
                                 <TypeBadge label={e.type} iconSize={20} />

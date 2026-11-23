@@ -1,6 +1,7 @@
 // فحص العمليات المكررة الموجودة فعلا في ERPNext (قراية بس، آخر 60 يوم)، بنفس قواعد سكريبتات منع التكرار
 // Suspected duplicates already in ERPNext (read-only, last 60 days), same rules as the duplicate-guard client scripts
 // money = الخزنة (سندات، قيود، فواتير، مطالبات، صدقات، تسويات مرتب)، stock = المخازن (أذون، فواتير مبيعات، طرحات)
+import { formatTime12 } from "./format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { erpDocUrl, erpGet, erpPost, erpToday } from "./erp";
 import { compareView, differences, fingerprint } from "./dup-fingerprint";
@@ -222,7 +223,7 @@ async function kilnGroups(from: string): Promise<{ group: Candidate[] }[]> {
         out.push({
           group: run.map((r) => ({
             key: "", doc: r, date: day(r.exit_time), amount: null,
-            summary: `${str(r.kiln) || "بدون فرن"} · ${str(r[mapping.typeField])} · ${run.map((x) => str(x.exit_time).slice(11, 16)).join("، ")}`,
+            summary: `${str(r.kiln) || "بدون فرن"} · ${str(r[mapping.typeField])} · ${run.map((x) => formatTime12(str(x.exit_time).slice(11, 16), true)).join("، ")}`,
           })),
         });
       }

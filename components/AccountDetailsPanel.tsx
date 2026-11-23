@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, ExternalLink, Landmark, Wallet, X } from "lucide-react";
 import { AccountDetails, AccountMove, MoveOut } from "@/lib/types";
-import { formatDayName, formatNumber } from "@/lib/format";
+import { formatDayName, formatNumber, formatTime12 } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import DuplicatesTab from "./DuplicatesTab";
@@ -43,11 +43,11 @@ function addDays(date: string, days: number): string {
 // الشهر ده بتوقيت مصر - this month in Cairo time
 const cairoMonth = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date()).slice(0, 7);
 
-// "2026-11-07" -> "7/11" ، "2026-11-07 14:45" -> "7/11 14:45"
+// "2026-11-07" -> "7/11" ، "2026-11-07 14:45" -> "7/11 2:45 م"
 function shortDate(text: string): string {
   const [date, time] = text.split(" ");
   const [, month, day] = date.split("-").map(Number);
-  return `${day}/${month}${time ? ` ${time}` : ""}`;
+  return `${day}/${month}${time ? ` ${formatTime12(time)}` : ""}`;
 }
 
 // من قد إيه بالمصري - how long ago, in Egyptian Arabic
@@ -475,7 +475,7 @@ export default function AccountDetailsPanel({ accountNumber, title, mode, onClos
                 <>
                   <span className={`font-semibold ${noEntryToday ? "text-brandOrange" : "text-white"}`}>
                     {formatDayName(last.creation.slice(0, 10))}{" "}
-                    <span dir="ltr" className="font-numbers tabular-nums">{last.creation.slice(11, 16)}</span>
+                    <span dir="ltr" className="font-numbers tabular-nums">{formatTime12(last.creation.slice(11, 16))}</span>
                   </span>
                   <span className="text-gray-200">{last.owner}</span>
                   <span className={noEntryToday ? "text-brandOrange" : "text-gray-400"}>({ago(now - last.createdAt)})</span>

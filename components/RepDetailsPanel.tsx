@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Truck, X } from "lucide-react";
 import { RepDay, RepDebt, RepDetails, RepInvoice, RepSales, RepYear } from "@/lib/types";
 import ActivityDetailsPanel from "./ActivityDetailsPanel";
-import { formatDayName, formatNumber, toEnglishDigits } from "@/lib/format";
+import { formatDayName, formatNumber, formatTime12, toEnglishDigits } from "@/lib/format";
 import { daysAgoText, monthName, Num, Percent } from "./SalesCommon";
 
 // لو محدش لمس اللوحة دقيقة تقفل لوحدها - closes by itself after 60 s without any touch
@@ -841,7 +841,7 @@ function YearTable({ year, onOpenMonth }: { year: RepYear; onOpenMonth: (month: 
 function enteredAt(creation: string): string {
   const [date, time = ""] = creation.split(" ");
   const [, m, d] = date.split("-").map(Number);
-  return d && m ? `${d}/${m} ${time}` : creation;
+  return d && m ? `${d}/${m} ${formatTime12(time)}` : creation;
 }
 
 // اتسجلت (والتأخير) - entered at (and the late badge)
@@ -877,7 +877,7 @@ const distinct = (list: string[]) => Array.from(new Set(list.filter(Boolean)));
 function DayEntered({ invoices, date }: { invoices: RepInvoice[]; date: string }) {
   const times = invoices.map((i) => i.creation).filter(Boolean).sort();
   if (times.length === 0) return null;
-  const show = (c: string) => (c.slice(0, 10) === date ? c.slice(11, 16) : enteredAt(c));
+  const show = (c: string) => (c.slice(0, 10) === date ? formatTime12(c.slice(11, 16)) : enteredAt(c));
   const first = show(times[0]);
   const last = show(times[times.length - 1]);
   const who = distinct(invoices.map((i) => i.owner)).join("، ");
