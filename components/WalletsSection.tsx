@@ -47,6 +47,27 @@ function TerminalArt({ size }: { size: number }) {
   );
 }
 
+// رسمة موبايل بأسهم تحويل (حساب بنك / InstaPay، من غير لوجو حقيقي) - a phone with transfer arrows (bank / InstaPay, no real logo)
+function BankTransferArt({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className="shrink-0">
+      <rect x="18" y="4" width="28" height="56" rx="6" fill="#2E1065" stroke="#A78BFA" strokeOpacity="0.8" strokeWidth="1.5" />
+      <rect x="22" y="11" width="20" height="38" rx="2.5" fill="#4C1D95" />
+      <rect x="28" y="7" width="8" height="1.8" rx="0.9" fill="#A78BFA" opacity="0.7" />
+      <circle cx="32" cy="54.5" r="2" fill="#A78BFA" opacity="0.8" />
+      {/* أسهم التحويل - the transfer arrows */}
+      <path d="M25 22h12" stroke="#C4B5FD" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M34 18.5l3.5 3.5-3.5 3.5" fill="none" stroke="#C4B5FD" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M39 33H27" stroke="#22C55E" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M30 29.5L26.5 33l3.5 3.5" fill="none" stroke="#22C55E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="25" y="40" width="14" height="4" rx="2" fill="#7C3AED" />
+      {/* كارت بنك صغير ورا الموبايل - a small bank card behind the phone */}
+      <rect x="40" y="30" width="20" height="13" rx="2.5" fill="#7C3AED" transform="rotate(-12 50 36)" />
+      <rect x="41" y="33" width="18" height="2.5" fill="#2E1065" transform="rotate(-12 50 36)" />
+    </svg>
+  );
+}
+
 // سطر وارد/منصرف اليوم - one "today in / out" row
 function FlowRow({ label, value, kind, sizes }: { label: string; value: number; kind: "in" | "out"; sizes: Sizes }) {
   const isIn = kind === "in";
@@ -81,6 +102,7 @@ function FlowRow({ label, value, kind, sizes }: { label: string; value: number; 
 // كارت محفظة - one wallet card (container-type على الكارت نفسه عشان cqi = عرضه) - cqi = this card's width
 function WalletCardView({ card, sizes, onOpen }: { card: WalletCard; sizes: Sizes; onOpen?: () => void }) {
   const fawry = card.kind === "fawry";
+  const bank = card.kind === "bank";
   const n = card.numbers;
   const balanceText = n ? formatNumber(n.balance) : "";
   const negative = !!n && n.balance < 0;
@@ -89,19 +111,35 @@ function WalletCardView({ card, sizes, onOpen }: { card: WalletCard; sizes: Size
     <div
       onClick={onOpen}
       className={`bg-card border rounded-2xl p-4 h-full min-h-0 min-w-0 flex flex-col overflow-hidden ${
-        fawry ? "border-amber-400/30" : "border-statusGreen/25"
+        bank ? "border-violet-400/50" : fawry ? "border-amber-400/30" : "border-statusGreen/25"
       } ${onOpen ? "cursor-pointer" : ""}`}
-      style={{ containerType: "inline-size", gap: sizes.cardGap }}
+      style={{
+        containerType: "inline-size",
+        gap: sizes.cardGap,
+        // حساب البنك: لمعة بنفسجي خفيفة عشان يبان إنه مش كاش - the bank card: a soft violet glow so it reads as "not cash"
+        ...(bank ? { backgroundImage: "linear-gradient(160deg, rgba(139,92,246,0.18), rgba(139,92,246,0) 55%)" } : {}),
+      }}
     >
       {/* الاسم والرسمة - name and picture */}
       <div className="shrink-0 flex items-center gap-3 min-w-0">
-        {fawry ? <TerminalArt size={sizes.iconSize} /> : <CashWalletArt size={sizes.iconSize} />}
-        <h3
-          className="font-extrabold text-white truncate leading-[1.75]"
-          style={{ fontSize: `min(${sizes.nameMaxSize}px, ${sizes.nameScale}cqi)` }}
-        >
-          {toEnglishDigits(card.name)}
-        </h3>
+        {bank ? <BankTransferArt size={sizes.iconSize} /> : fawry ? <TerminalArt size={sizes.iconSize} /> : <CashWalletArt size={sizes.iconSize} />}
+        <div className="min-w-0 flex flex-col">
+          <h3
+            className={`font-extrabold text-white leading-[1.35] ${bank ? "line-clamp-2" : "truncate leading-[1.75]"}`}
+            style={{ fontSize: `min(${sizes.nameMaxSize}px, ${bank ? sizes.nameScale * 0.82 : sizes.nameScale}cqi)` }}
+            title={card.name}
+          >
+            {toEnglishDigits(card.name)}
+          </h3>
+          {bank && card.bankChip && (
+            <span
+              className="mt-1 self-start rounded-full border border-violet-400/50 bg-violet-500/15 px-2 font-bold text-violet-200 whitespace-nowrap leading-[1.6]"
+              style={{ fontSize: `min(${sizes.flowLabelFontSize - 2}px, 3.6cqi)` }}
+            >
+              {card.bankChip}
+            </span>
+          )}
+        </div>
         {card.offline && (
           <div className="ms-auto">
             <OfflineBadge />
@@ -233,8 +271,8 @@ export default function WalletsSection({ data, onOpenWallet }: { data: Wallets |
         </div>
       </SummaryStrip>
 
-      {/* 6 كروت 3×2 - six equal cards */}
-      <div ref={ref} className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-4">
+      {/* 8 كروت 4×2 - eight equal cards, 4 per row */}
+      <div ref={ref} className="flex-1 min-h-0 grid grid-cols-4 grid-rows-2 gap-4">
         {data.list.map((card) => (
           <WalletCardView
             key={card.name}

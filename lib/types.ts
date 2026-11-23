@@ -647,7 +647,8 @@ export interface WalletNumbers {
 export interface WalletCard {
   name: string;
   accountNumber: string; // رقم الحساب (للوحة التفاصيل) - account number (for the details panel)
-  kind: "cash" | "fawry";
+  kind: "cash" | "fawry" | "bank"; // bank = حساب بنك (InstaPay) - a bank account (InstaPay)
+  bankChip?: string; // "InstaPay · الأهلي" تحت الاسم (bank بس) - the chip under the name (bank only)
   linked: boolean; // false = مفيش حساب في الكونفج - no account in the config
   offline: boolean; // true = ERPNext فشل ودي آخر أرقام نجحت (أو مفيش أرقام) - failed: last good numbers (or none)
   numbers: WalletNumbers | null; // null = فشل ومفيش أرقام قديمة - failed with no last good numbers

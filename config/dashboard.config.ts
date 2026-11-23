@@ -701,10 +701,13 @@ export const dashboardConfig = {
   wallets: {
     cacheSeconds: 60, // السيرفر بيكلم ERPNext مرة كل 60 ثانية بالكتير - ERPNext is asked at most once per 60 s
     company: "ALSafwa Coal", // الشركة اللي بندوّر فيها على أرقام الحسابات - the company whose account numbers are used
-    // بالترتيب اللي بتظهر بيه: 1 يمين فوق، 2 النص فوق، 3 شمال فوق، 4 يمين تحت، 5 النص تحت، 6 شمال تحت
-    // Display order (RTL): 1 top-right, 2 top-middle, 3 top-left, 4 bottom-right, 5 bottom-middle, 6 bottom-left
+    // 8 كروت، 4 في الصف، بالترتيب ده (من اليمين): الصف الأول 1-4، والتاني 5-8
+    // 8 cards, 4 per row, in this order (from the right): row 1 = 1-4, row 2 = 5-8
     // label = الاسم اللي بيظهر على الشاشة بالظبط، accountNumber = رقم الحساب في دليل الحسابات
-    // label = the name shown on screen exactly, accountNumber = the account number in the Chart of Accounts
+    // kind = cash (محفظة كاش، أخضر) / fawry (ماكينة فوري) / bank (حساب بنك عليه InstaPay، بنفسجي)
+    // bankChip = الكلمة الصغيرة تحت اسم حساب البنك
+    // label = the name shown on screen exactly, accountNumber = the account number in the Chart of Accounts,
+    // kind = cash / fawry / bank (a bank account used for InstaPay, violet); bankChip = the small chip under a bank name
     accounts: [
       { label: "كاش الحاج أشرف", accountNumber: "1112", kind: "cash" }, // 1112 - كاش الحاج اشرف - AC
       { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash" }, // 1111 - كاش حمادة شاهين - AC
@@ -713,7 +716,10 @@ export const dashboardConfig = {
       { label: "كاش يوسف عاطف", accountNumber: "1120", kind: "cash" },
       { label: "كاش كريم عوض", accountNumber: "1113", kind: "cash" }, // 1113 - كاش كريم عوض - AC (اسمه في ERPNext "كاش محمود عوض")
       { label: "فوري", accountNumber: "1114", kind: "fawry" }, // 1114 - ماكينة فوري - AC
-    ] as { label: string; accountNumber: string; kind: "cash" | "fawry" }[],
+      // حسابات البنك الأهلي (تحت 1200 - البنوك) اللي عليها InstaPay - the Al Ahly accounts (under 1200) used for InstaPay
+      { label: "انستاباي الحاج أشرف — الأساسية", accountNumber: "1206", kind: "bank", bankChip: "InstaPay · الأهلي" }, // 1206 - الاهلي بلاتنيوم - AC
+      { label: "انستاباي الحاج أشرف — العائد اليومي", accountNumber: "1202", kind: "bank", bankChip: "InstaPay · الأهلي" }, // 1202 - الاهلى العائد اليومى - AC
+    ] as { label: string; accountNumber: string; kind: "cash" | "fawry" | "bank"; bankChip?: string }[],
   },
 
   // ============================================================

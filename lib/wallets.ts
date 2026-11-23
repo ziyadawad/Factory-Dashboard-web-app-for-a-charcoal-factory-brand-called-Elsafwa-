@@ -111,17 +111,17 @@ async function load(): Promise<{ value: Wallets; errors: string[] }> {
   totals.catch(() => undefined); // الغلط بيتسجل مع كل كارت - the error is reported per card
 
   const list = await Promise.all(
-    config.accounts.map(async ({ label: name, accountNumber, kind }): Promise<WalletCard> => {
+    config.accounts.map(async ({ label: name, accountNumber, kind, bankChip }): Promise<WalletCard> => {
       // مفيش رقم، أو الرقم مش موجود في ERPNext (لسه متعملش) - no number, or the account doesn't exist yet
       if (!accountNumber || (resolved && !resolved.has(accountNumber))) {
-        return { name, accountNumber, kind, linked: false, offline: false, numbers: null };
+        return { name, accountNumber, kind, bankChip, linked: false, offline: false, numbers: null };
       }
       try {
         const account = resolved?.get(accountNumber);
         if (!account) throw new Error(`Account ${accountNumber}: could not be looked up`);
         const numbers = await loadWallet(account, today, totals);
         lastGood.set(accountNumber, { day: today, numbers });
-        return { name, accountNumber, kind, linked: true, offline: false, numbers };
+        return { name, accountNumber, kind, bankChip, linked: true, offline: false, numbers };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(message);
@@ -129,7 +129,7 @@ async function load(): Promise<{ value: Wallets; errors: string[] }> {
         const fallback = lastGood.get(accountNumber);
         const numbers = fallback?.day === today ? fallback.numbers : null;
         console.error(`[erp] wallet ${accountNumber} failed, showing ${numbers ? "last good value" : '"غير متصل"'}:`, message);
-        return { name, accountNumber, kind, linked: true, offline: true, numbers };
+        return { name, accountNumber, kind, bankChip, linked: true, offline: true, numbers };
       }
     })
   );
