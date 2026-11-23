@@ -702,9 +702,8 @@ export const dashboardConfig = {
     payableAccounts: ["2110 - الموردين - AC"] as string[],
     // مورد رصيده صفر ومورّدش حاجة آخر activeDays يوم بيستخبى - a zero-balance supplier with no supply in this many days is hidden
     activeDays: 90,
-    // مورد رصيده أقل من كده في أي اتجاه (ليه أو علينا) = خالص: مش بيظهر في العمود ولا بيتحسب في الإجمالي والعدد،
-    // وبيظهر باهت تحت زرار "إظهار الخالصين" - a balance under this either way = settled: hidden from the column and
-    // its totals / counts, shown dimmed under "إظهار الخالصين"
+    // مورد رصيده أقل من كده في أي اتجاه (ليه أو علينا) = خالص: مش بيظهر خالص ولا بيتحسب في الإجمالي والعدد
+    // A balance under this either way = settled: not shown at all and not counted in the totals / counts
     settleThreshold: 100,
     // ===== التصنيف بالترتيب: overrides الأول، وبعدين البلاستيك (اسم أو مجموعة)، وبعدين الخشب (مجموعة أو ورّد أصناف خشب
     // من erp.stock.wood أو أي صنف أوله woodItemPrefix)، والباقي بيستخبى. الأسامي بتتقارن بعد التوحيد (ة = ه، أ = ا، من غير مسافات)
@@ -713,7 +712,7 @@ export const dashboardConfig = {
     categories: {
       plastic: {
         title: "موردين البلاستيك",
-        icon: "🧴",
+        icon: "roll", // رسمة رول بلاستيك (SVG في SuppliersPage) - a plastic film roll drawing (SVG in SuppliersPage)
         color: "#14B8A6", // تيل - teal
         // القادسية + باك فور + أي اسم فيه "بلاستيك" - القادسية + باك فور + any name with "بلاستيك"
         nameKeywords: ["القادسية", "باك فور", "باكفور", "back for", "بلاستيك"],

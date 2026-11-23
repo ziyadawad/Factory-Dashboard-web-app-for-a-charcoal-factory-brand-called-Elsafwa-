@@ -15,7 +15,7 @@ import { formatDayName, formatNumber, formatTime12 } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { SupplierDetails, SupplyDoc } from "@/lib/types";
 import { monthName } from "./SalesCommon";
-import { balanceLabel } from "./SuppliersPage";
+import { balanceLabel, CategoryIcon } from "./SuppliersPage";
 
 const cats = dashboardConfig.suppliers.categories;
 
@@ -127,7 +127,7 @@ export default function SupplierDetailsPanel({ name, onClose }: { name: string; 
           <h2 className="font-extrabold text-white text-[24px] min-[1600px]:text-[26px] leading-[1.5]">{name}</h2>
           {cat && (
             <span className="rounded-full px-2.5 py-0.5 text-[13px] font-bold" style={{ color, background: `${color}22`, border: `1px solid ${color}55` }}>
-              {cat.icon} {data?.category === "wood" ? "خشب" : "بلاستيك"}
+              {data?.category && <CategoryIcon category={data.category} size={16} />} {data?.category === "wood" ? "خشب" : "بلاستيك"}
             </span>
           )}
           {data?.group && <span className="text-gray-400 text-[14px]">{data.group}</span>}
