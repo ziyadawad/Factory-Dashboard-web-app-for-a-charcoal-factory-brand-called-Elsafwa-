@@ -480,15 +480,46 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
   }
 }
 
-/* مشهد الميزان في "آخر وزنة": الترول بينزل على البسكول، البسكول بينزل شوية، الأرقام بترمش، والكارت بينبض 5 مرات
-   The "آخر وزنة" scale scene: the trolley drops onto the platform, the platform dips, the digits blink, the card pulses 5x */
-.scale-trolley-drop {
-  transform-box: view-box;
-  animation: scale-trolley-drop 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* خط بيصغر مع عرض الكارت (container queries): --px = المقاس العادي، --cq = نفس المقاس بالنسبة لعرض الكارت.
+   متصفح من غير cqi بياخد --px بس (مش بيصغر)، فالشاشة عمرها ما تطلع خط صغير بالغلط
+   A font that shrinks with its card's width: --px = the normal size, --cq = the same relative to the card width.
+   A browser without cqi keeps --px (never shrinks), so the TV never gets a wrongly tiny font */
+.cq-fs {
+  font-size: var(--px);
 }
-.scale-platform-dip {
+@supports (font-size: 1cqi) {
+  .cq-fs {
+    font-size: min(var(--px), var(--cq));
+  }
+}
+.cq-box {
+  container-type: inline-size;
+}
+/* كارت الفرن: التاريخ جنب الساعة بيظهر بس لو فيه مكان - the kiln tile: the date next to the time only when it fits */
+.kiln-tile {
+  container-type: inline-size;
+  container-name: kilntile;
+}
+.kiln-date {
+  display: none;
+}
+@container kilntile (min-width: 330px) {
+  .kiln-date {
+    display: inline;
+  }
+}
+
+/* مشهد الميزان في "آخر وزنة" (لفة كل --scale-loop): الترول بينزل على البسكول، البسكول بينزل شوية، الأرقام بتعد وبترمش
+   (من الـ JS)، ثانيتين واقف، وبعدين الترول بيطلع واللفة بتتعاد. الكارت بينبض 5 مرات مع كل وزنة جديدة
+   The "آخر وزنة" scale scene (one loop every --scale-loop): the trolley drops onto the platform, the platform dips, the
+   digits count and blink (JS), a 2 s hold, then the trolley lifts off and it repeats. The card pulses 5x on a new weighing */
+.scale-trolley-loop {
   transform-box: view-box;
-  animation: scale-platform-dip 0.45s ease-out 0.62s both;
+  animation: scale-trolley-loop var(--scale-loop, 6.5s) linear infinite;
+}
+.scale-platform-loop {
+  transform-box: view-box;
+  animation: scale-platform-loop var(--scale-loop, 6.5s) linear infinite;
 }
 .scale-digits-blink {
   animation: scale-digits-blink 0.7s steps(1) both;
@@ -499,29 +530,50 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
 .scale-card-pulse {
   animation: scale-card-pulse 1.1s ease-in-out 2.4s 5 both;
 }
-@keyframes scale-trolley-drop {
+/* 0–12%: بينزل بنطة، لحد 74% واقف، 74–86% بيطلع، وبعدين البسكول فاضي - drop with a bounce, hold, lift off, empty */
+@keyframes scale-trolley-loop {
   0% {
     transform: translateY(-70px);
     opacity: 0;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
-  60% {
+  7.5% {
     transform: translateY(3px);
     opacity: 1;
   }
-  80% {
+  10% {
     transform: translateY(-4px);
   }
-  100% {
+  12.3%,
+  73.8% {
     transform: translateY(0);
+    opacity: 1;
+    animation-timing-function: ease-in;
+  }
+  86%,
+  100% {
+    transform: translateY(-70px);
+    opacity: 0;
   }
 }
-@keyframes scale-platform-dip {
+@keyframes scale-platform-loop {
   0%,
-  100% {
+  9.5% {
     transform: translateY(0);
   }
-  35% {
+  12% {
     transform: translateY(3.5px);
+  }
+  16.5%,
+  73.8% {
+    transform: translateY(0);
+  }
+  77% {
+    transform: translateY(-1.5px);
+  }
+  81%,
+  100% {
+    transform: translateY(0);
   }
 }
 @keyframes scale-digits-blink {
@@ -555,8 +607,8 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scale-trolley-drop,
-  .scale-platform-dip,
+  .scale-trolley-loop,
+  .scale-platform-loop,
   .scale-digits-blink,
   .scale-screen-idle,
   .scale-card-pulse {

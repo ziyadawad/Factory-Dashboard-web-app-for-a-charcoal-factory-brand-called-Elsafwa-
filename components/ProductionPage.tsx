@@ -163,6 +163,9 @@ function KpiStack({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
 
 // مقاس بالبكسل من الكونفج (بيصغر بس لو العمود ضيق، من globals.css) - a px size from config (steps down only in a narrow column)
 const fs = (px: number) => ({ "--fs": `${px}px` }) as CSSProperties;
+// خط بيصغر مع عرض الكارت (كلاس cq-fs + cq-box على الكارت): base = العرض اللي المقاس ده معمول عليه
+// A font that shrinks with its card (cq-fs class + cq-box on the card): base = the width this size is made for
+const cqf = (px: number, base: number) => ({ "--px": `${px}px`, "--cq": `${((px * 100) / base).toFixed(3)}cqi` }) as CSSProperties;
 
 // "الطرحة التالتة": ترتيب الطرحة في يومها بالوقت (production.batchOrdinals) - a batch's order in its day, by time
 function batchOrdinal(batch: ProductionBatch, batches: ProductionBatch[]): string {
@@ -306,7 +309,7 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
     <button
       type="button"
       onClick={onOpen}
-      className={`relative min-h-0 min-w-0 rounded-xl border-2 ${st.border} bg-background/60 px-3 py-2 flex flex-col text-start hover:bg-white/5 overflow-hidden`}
+      className={`kiln-tile relative min-h-0 min-w-0 rounded-xl border-2 ${st.border} bg-background/60 px-3 py-2 flex flex-col text-start hover:bg-white/5 overflow-hidden`}
     >
       {/* الحالة فوق الرسمة في الركن (عشان الرسمة تاخد الطول كله) - the status over the drawing's corner (so the drawing gets the full height) */}
       <span
@@ -324,19 +327,24 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
         <KilnIllustration state={state} label={toEnglishDigits(kiln.name)} className="w-full h-full" />
       </div>
       {/* أطنان النهارده · الطرحات · ساعة آخر طرحة - today tons · batches · last batch time */}
-      <p className="shrink-0 flex items-baseline gap-2 min-[1600px]:gap-3 whitespace-nowrap min-w-0 text-gray-400" style={{ fontSize: sizes.kilnStatFontSize }}>
-        <span>
-          <span className={`font-extrabold ${active ? "text-white" : "text-gray-600"}`} style={{ fontSize: sizes.kilnTonsFontSize }}>
+      {/* الخط بيصغر مع عرض الكارت، والساعة عمرها ما تتقص (التاريخ جنبها بيظهر بس لو فيه مكان)
+          Fonts shrink with the tile width; the time is never cut (the date next to it shows only when it fits) */}
+      <p
+        className="cq-fs shrink-0 flex items-baseline gap-2 min-[1600px]:gap-3 whitespace-nowrap min-w-0 text-gray-400"
+        style={cqf(sizes.kilnStatFontSize, sizes.kilnRowWidth)}
+      >
+        <span className="shrink-0">
+          <span className={`cq-fs font-extrabold ${active ? "text-white" : "text-gray-600"}`} style={cqf(sizes.kilnTonsFontSize, sizes.kilnRowWidth)}>
             {num(tons(kiln.today))}
           </span>{" "}
           طن
         </span>
-        <span className={active ? "text-gray-100 font-bold" : ""}>{num(formatNumber(kiln.today.batches))} طرحة</span>
-        <span className="ms-auto truncate" title="آخر طرحة دخلت">
+        <span className={`shrink-0 ${active ? "text-gray-100 font-bold" : ""}`}>{num(formatNumber(kiln.today.batches))} طرحة</span>
+        <span className="ms-auto shrink-0" title="آخر طرحة دخلت">
           {kiln.last ? (
             <>
               <Clock size={sizes.kilnStatFontSize * 0.85} className="inline align-[-2px]" /> {num(kiln.last.time)}
-              {kiln.last.date !== today && <span className="hidden min-[1600px]:inline"> ({num(shortDate(kiln.last.date))})</span>}
+              {kiln.last.date !== today && <span className="kiln-date"> ({num(shortDate(kiln.last.date))})</span>}
             </>
           ) : (
             "—"
@@ -435,31 +443,44 @@ function BatchList({
           return (
             <div
               key={key}
-              className={`shrink-0 flex flex-col gap-1.5 px-4 py-2.5 rounded-2xl border-2 min-w-0 overflow-hidden ${
+              className={`cq-box shrink-0 flex flex-col gap-1.5 px-4 py-2.5 rounded-2xl border-2 min-w-0 overflow-hidden ${
                 index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_18px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
               } ${fresh.has(key) ? "animate-exit-in" : ""} ${alerting ? "exit-alert-row" : ""}`}
               style={{ height: row }}
             >
               {/* سطر العنوان - the title line */}
-              <div className="shrink-0 flex items-center gap-2 min-[1600px]:gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
-                <span className={`font-extrabold ${batch.complete ? "text-brandOrange" : "text-statusAmber"}`} style={px(sizes.batchTitleFontSize)}>
-                  {batchOrdinal(batch, allBatches)}
-                  {!batch.complete && <span className="font-bold"> ({num(progressText(batch))})</span>}
-                </span>
-                <span className="text-white font-extrabold" style={px(sizes.batchTimeFontSize)}>
-                  {num(batch.time)}
-                </span>
-                {/* الفرن والغرفة: شرايح خضرا بنفس المقاس - kiln and room: green chips, same size */}
-                <span className={`shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={px(sizes.batchKilnFontSize)}>
-                  {toEnglishDigits(batch.kiln || "—")}
-                </span>
-                {batch.room && (
-                  <span className={`shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={px(sizes.batchKilnFontSize)}>
-                    غرفة {num(toEnglishDigits(batch.room))}
+              {/* الشرايح على اليمين (بتصغر مع عرض الكارت، ولو مش واخدة بتنزل سطر تاني)، والمجموع في مكانه لوحده على الشمال
+                  (عمره ما يتقص) - chips on the right (shrink with the card, wrap when needed); the total in its own area on the
+                  left (never cut) */}
+              <div className="shrink-0 flex items-center gap-3 min-w-0 font-bold leading-none">
+                <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1.5 min-[1600px]:gap-x-3">
+                  <span
+                    className={`cq-fs whitespace-nowrap font-extrabold ${batch.complete ? "text-brandOrange" : "text-statusAmber"}`}
+                    style={cqf(sizes.batchTitleFontSize, sizes.batchTitleRowWidth)}
+                  >
+                    {batchOrdinal(batch, allBatches)}
+                    {!batch.complete && <span className="font-bold"> ({num(progressText(batch))})</span>}
                   </span>
-                )}
-                <TypeBadge label={batch.type} iconSize={Math.round(sizes.batchTypeFontSize * 1.1)} className="shrink-0 font-extrabold" style={px(sizes.batchTypeFontSize)} />
-                <span className="ms-auto shrink-0 font-extrabold text-white" style={px(sizes.batchTotalFontSize)}>
+                  <span className="cq-fs whitespace-nowrap text-white font-extrabold" style={cqf(sizes.batchTimeFontSize, sizes.batchTitleRowWidth)}>
+                    {num(batch.time)}
+                  </span>
+                  {/* الفرن والغرفة: شرايح خضرا بنفس المقاس - kiln and room: green chips, same size */}
+                  <span className={`cq-fs shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={cqf(sizes.batchKilnFontSize, sizes.batchTitleRowWidth)}>
+                    {toEnglishDigits(batch.kiln || "—")}
+                  </span>
+                  {batch.room && (
+                    <span className={`cq-fs shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={cqf(sizes.batchKilnFontSize, sizes.batchTitleRowWidth)}>
+                      غرفة {num(toEnglishDigits(batch.room))}
+                    </span>
+                  )}
+                  <TypeBadge
+                    label={batch.type}
+                    iconSize={Math.round(sizes.batchTypeFontSize * 1.1)}
+                    className="cq-fs shrink-0 font-extrabold"
+                    style={cqf(sizes.batchTypeFontSize, sizes.batchTitleRowWidth)}
+                  />
+                </div>
+                <span className="cq-fs shrink-0 whitespace-nowrap font-extrabold text-white" style={cqf(sizes.batchTotalFontSize, sizes.batchTitleRowWidth)}>
                   {batch.weighed > 0 ? (
                     <>
                       {num(formatKg(batch.kg))} <span className="text-gray-400 font-bold text-[0.55em]">كجم</span>

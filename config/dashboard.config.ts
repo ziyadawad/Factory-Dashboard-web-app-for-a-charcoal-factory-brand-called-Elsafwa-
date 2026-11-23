@@ -502,6 +502,9 @@ export const dashboardConfig = {
     defaultTypeColor: DEFAULT_TYPE_COLOR,
     batchOrdinals: ["الأولى", "التانية", "التالتة", "الرابعة", "الخامسة", "السادسة", "السابعة", "التامنة", "التاسعة", "العاشرة"],
     maxTrolleysPerBatch: 3, // أكبر عدد ترولات في الطرحة (الأوبريتر بيختار من 2 لحد كده) - most trolleys per batch (operator picks 2..this)
+    // مشهد الميزان في "آخر وزنة": اللفة كلها (الترول ينزل، العد، الرمش، ثانيتين واقف، يطلع) بالثواني
+    // The "آخر وزنة" scale scene: one full loop (drop, count, blink, 2 s hold, lift off) in seconds
+    scaleLoopSeconds: 6.5,
     glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
     // جوه المصنع: أحداث "kiln_exit" على طول من الإيجنت ({it.cameraBaseUrl}/status.json كل liveSeconds، مهلة liveTimeoutMs)
     // فالطرحة الجديدة بتظهر في "آخر وزنة" و"طرحات النهارده" على طول. برا المصنع = التحديث العادي (refreshSeconds)
@@ -1050,6 +1053,9 @@ export const dashboardConfig = {
       kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
       kilnStatFontSize: 18, // عدد الطرحات وساعة آخر خروج تحت رسمة الفرن - exits count and last exit time under the kiln drawing
       kilnChipFontSize: 15, // شارة الحالة (شغالة / صيانة / متوقفة) - the status chip
+      // عرض سطر الأرقام تحت رسمة الفرن اللي المقاسات معمولة عليه (أضيق = الخط بيصغر بنفس النسبة)
+      // The kiln tile stats row width these sizes are made for (narrower = fonts shrink by the same ratio)
+      kilnRowWidth: 270,
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس المقاسات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
         kpiTonsFontSize: 68,
@@ -1058,6 +1064,7 @@ export const dashboardConfig = {
         kilnTonsFontSize: 20,
         kilnStatFontSize: 13,
         kilnChipFontSize: 12,
+        kilnRowWidth: 190,
       },
     },
 
@@ -1079,6 +1086,11 @@ export const dashboardConfig = {
       // Today's batches: one card per batch filling the height (1 batch = the whole area, 2 = half each, ...) with a
       // title line and one drawing per trolley with its number and weight. More than fit (batchRowMin each): newest + "+N"
       batchRowMin: 190, // أقل ارتفاع لكارت الطرحة - minimum batch card height
+      // عرض سطر العنوان اللي المقاسات دي معمولة عليه: لو الكارت أضيق (شاشة أصغر) الخط بيصغر بنفس النسبة، ولو لسه مش واخد
+      // الشرايح بتنزل سطر تاني، والمجموع على الشمال عمره ما يتقص
+      // The title row width these sizes are made for: a narrower card shrinks the fonts by the same ratio; if it still
+      // doesn't fit the chips wrap to a second line, and the total on the left is never cut
+      batchTitleRowWidth: 720,
       batchTitleFontSize: 26, // "الطرحة الأولى"
       batchTimeFontSize: 30, // الساعة - the time
       batchKilnFontSize: 24, // شرايح "فرن 4" و"غرفة 1" الخضرا (نفس المقاس) - the green kiln and room chips (same size)
@@ -1097,6 +1109,7 @@ export const dashboardConfig = {
         lastNoWeightFontSize: 26,
         lastLineFontSize: 17,
         batchRowMin: 140,
+        batchTitleRowWidth: 500,
         batchTitleFontSize: 16,
         batchTimeFontSize: 19,
         batchKilnFontSize: 15,

@@ -3,16 +3,16 @@
 // مشهد الميزان في "آخر وزنة" (SVG مسطح زي رسمة الفرن والترول): بسكول أرضي واطي بلوح أحمر وإطار أصفر ورجول
 // صغيرة، وجنبه عمود أصفر عليه شاشة "VS VENESIA SCALE" سودا بأرقام حمرا (7 segments) ولمبات صغيرة، والترول واقف
 // على البسكول ومكتوب عليه رقمه.
-// الحركة (كل وزنة جديدة، ومرة أول ما الصفحة تفتح): الترول بينزل على البسكول (0.8 ثانية بنطة صغيرة)، والبسكول بينزل
-// شوية، وبعدين الأرقام بتعد من 0 للوزن (ثانية) وبترمش مرتين. وهو واقف: الشاشة بتنور نور خفيف.
-// prefers-reduced-motion = من غير حركة (الوزن بيظهر على طول)
-// The scale scene in "آخر وزنة" (flat SVG like the kiln and trolley drawings): a low platform scale (red plate,
-// yellow frame, small feet), a yellow pole with the black "VS VENESIA SCALE" indicator (red 7-segment digits, small
-// lights), and the trolley standing on the platform with its number. Animation (each new weighing, and once on load):
-// the trolley drops onto the platform (0.8 s, small bounce), the platform dips, the digits count up from 0 (1 s) and
-// blink twice. Idle: a soft glow on the screen. prefers-reduced-motion = no motion (the weight shows at once)
-
-import { useEffect, useState } from "react";
+// الحركة لفة ورا لفة على طول (production.scaleLoopSeconds): الترول بينزل على البسكول بنطة صغيرة، البسكول بينزل شوية،
+// الأرقام بتعد من 0 للوزن وبترمش مرتين، ثانيتين واقف، وبعدين الترول بيطلع والشاشة ترجع 0 واللفة تتعاد. وزنة جديدة =
+// اللفة بتبدأ من الأول على طول بالترول والوزن الجديد. الحركة من CSS، والأرقام ماشية مع كل لفة (animationiteration).
+// prefers-reduced-motion = مشهد ثابت (الترول على البسكول والوزن ظاهر)
+// The animation loops all the time (production.scaleLoopSeconds): the trolley drops onto the platform, the platform
+// dips, the digits count 0 -> weight and blink twice, a 2 s hold, then the trolley lifts off, the screen returns to 0
+// and it repeats. A new weighing restarts the loop at once. Motion is CSS; the digits follow each loop
+// (animationiteration). prefers-reduced-motion = a static scene (trolley on the platform, weight shown)
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { dashboardConfig } from "@/config/dashboard.config";
 import TrolleyIllustration from "./TrolleyIllustration";
 
 // الـ 7 segments لكل رقم - the 7 segments of each digit
@@ -60,43 +60,70 @@ export default function ScaleScene({
   className?: string;
 }) {
   const target = weightKg === null ? null : Math.round(weightKg);
+  const loopMs = dashboardConfig.production.scaleLoopSeconds * 1000;
   const [shown, setShown] = useState<number | null>(target);
   const [blink, setBlink] = useState(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const frame = useRef(0);
 
-  // الأرقام: بعد ما الترول ينزل بتعد من 0 للوزن وبعدين بترمش مرتين - the digits count up after the drop, then blink twice
-  useEffect(() => {
+  const stop = useCallback(() => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    cancelAnimationFrame(frame.current);
+  }, []);
+
+  // لفة واحدة للأرقام (بتبدأ مع كل لفة للترول): 0، وبعد ما ينزل بتعد للوزن (ثانية) وبترمش، وتفضل لحد ما يطلع وترجع 0
+  // One digits loop (started with each trolley loop): 0, count up to the weight after the drop (1 s), blink, hold,
+  // back to 0 when the trolley lifts off. Fractions of the loop match the CSS keyframes
+  const runLoop = useCallback(() => {
+    stop();
     setBlink(false);
-    if (target === null || reducedMotion()) {
-      setShown(target);
+    if (target === null) {
+      setShown(null);
       return;
     }
     setShown(0);
-    let frame = 0;
-    let start = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const step = (now: number) => {
-      if (!start) start = now;
-      const p = Math.min(1, (now - start) / 1000);
-      setShown(Math.round(target * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) frame = requestAnimationFrame(step);
-      else {
-        setBlink(true);
-        timers.push(setTimeout(() => setBlink(false), 700));
-      }
-    };
-    timers.push(setTimeout(() => (frame = requestAnimationFrame(step)), 1100));
-    return () => {
-      cancelAnimationFrame(frame);
-      timers.forEach(clearTimeout);
-    };
-  }, [playKey, target]);
+    const at = (fraction: number, fn: () => void) => timers.current.push(setTimeout(fn, fraction * loopMs));
+    at(1.1 / 6.5, () => {
+      let start = 0;
+      const countMs = Math.min(1000, loopMs * 0.15);
+      const step = (now: number) => {
+        if (!start) start = now;
+        const p = Math.min(1, (now - start) / countMs);
+        setShown(Math.round(target * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) frame.current = requestAnimationFrame(step);
+      };
+      frame.current = requestAnimationFrame(step);
+    });
+    at(2.15 / 6.5, () => setBlink(true));
+    at(2.85 / 6.5, () => setBlink(false));
+    at(4.9 / 6.5, () => setShown(0));
+  }, [target, loopMs, stop]);
+
+  // وزنة جديدة: اللفة بتبدأ من الأول (الـ key بيعيد الـ CSS، والأرقام من onAnimationStart). من غير حركة: الوزن ثابت
+  // A new weighing restarts the loop (the key restarts the CSS; digits via onAnimationStart). Reduced motion: static weight
+  useEffect(() => {
+    if (reducedMotion()) {
+      stop();
+      setBlink(false);
+      setShown(target);
+    }
+    return stop;
+  }, [playKey, target, stop]);
 
   // 4 خانات من اليمين، والفاضي مطفي - 4 cells right-aligned, empty ones dark
   const text = shown === null ? "" : String(Math.min(9999, shown));
   const cells = Array.from({ length: 4 }, (_, i) => text[text.length - 4 + i] ?? null);
 
   return (
-    <svg viewBox="0 0 300 190" className={className} preserveAspectRatio="xMidYMax meet" role="img" aria-label={`الميزان: ${text || "—"} كجم`}>
+    <svg
+      viewBox="0 0 300 190"
+      className={className}
+      preserveAspectRatio="xMidYMax meet"
+      role="img"
+      aria-label={`الميزان: ${target ?? "—"} كجم`}
+      style={{ "--scale-loop": `${dashboardConfig.production.scaleLoopSeconds}s` } as CSSProperties}
+    >
       {/* ضل على الأرض - floor shadow */}
       <ellipse cx="150" cy="182" rx="140" ry="6" fill="#000" opacity="0.35" />
 
@@ -134,8 +161,8 @@ export default function ScaleScene({
       </defs>
 
       {/* البسكول (بينزل شوية لما الترول يقع عليه) والترول عليه - the platform (dips when the trolley lands) with the trolley */}
-      <g key={`dip-${playKey}`} className="scale-platform-dip">
-        <g key={`drop-${playKey}`} className="scale-trolley-drop">
+      <g key={`dip-${playKey}`} className="scale-platform-loop">
+        <g key={`drop-${playKey}`} className="scale-trolley-loop" onAnimationStart={runLoop} onAnimationIteration={runLoop}>
           <TrolleyIllustration place={{ x: 64, y: 31, width: 94, height: 118 }} />
           {trolley && (
             <g>
