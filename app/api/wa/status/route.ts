@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NO_STORE, salaryAuthError } from "@/lib/api-auth";
 import { secretMatches } from "@/lib/it-store";
-import { waStatus } from "@/lib/wa-store";
+import { listGroups, waStatus } from "@/lib/wa-store";
 import { waErrorResponse } from "@/lib/wa-http";
+import { sectionOf } from "@/lib/wa-sections";
 
 export const dynamic = "force-dynamic";
 // مفيش كاش خالص - no cache at all
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
     if (denied) return denied;
   }
   try {
-    return NextResponse.json(await waStatus(), { headers: NO_STORE });
+    const [status, groups] = await Promise.all([waStatus(), listGroups({})]);
+    // كل جروب في أنهي قسم (نفس قواعد الصفحة) - which section each group is in (the page's rules)
+    const sections = groups.map((g) => ({ id: g.id, name: g.name, section: sectionOf(g).title })).sort((a, b) => a.section.localeCompare(b.section));
+    return NextResponse.json({ ...status, sections }, { headers: NO_STORE });
   } catch (error) {
     return waErrorResponse(error, "status");
   }

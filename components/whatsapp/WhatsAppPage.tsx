@@ -11,6 +11,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
+import { sectionOf } from "@/lib/wa-sections";
 import {
   cairoTime,
   groupColor,
@@ -126,6 +127,59 @@ function GroupBlock({ group, onOpen }: { group: WaGroup; onOpen: () => void }) {
   );
 }
 
+const COLLAPSED_KEY = "elsafwa:wa:collapsed";
+
+// قسم: عنوان بيتقفل ويتفتح ("▾ الإنتاج · 14 جروب") بلونه، وتحته الجروبات 4 في الصف (3 على شاشة أصغر من 1600)
+// A section: a collapsible header in its color ("▾ الإنتاج · 14 جروب"), then its groups, 4 per row (3 under 1600 wide)
+function GroupSection({
+  section,
+  groups,
+  collapsed,
+  onToggle,
+  onOpen,
+}: {
+  section: (typeof cfg.sections)[number];
+  groups: WaGroup[];
+  collapsed: boolean;
+  onToggle: () => void;
+  onOpen: (g: WaGroup) => void;
+}) {
+  const unread = groups.reduce((n, g) => n + g.unread, 0);
+  return (
+    <section className="flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="flex items-center gap-3 rounded-xl border px-4 py-2.5 text-start"
+        style={{ borderColor: `${section.color}66`, background: `linear-gradient(90deg, ${section.color}1f, transparent 70%)` }}
+      >
+        <span className="text-[18px] text-gray-300 transition-transform" style={{ transform: collapsed ? "rotate(90deg)" : "none" }}>
+          ▾
+        </span>
+        <span className="text-[22px] font-extrabold" style={{ color: section.color }}>
+          {section.icon} {section.title}
+        </span>
+        <span className="text-[16px] text-gray-300">
+          · <span className="font-numbers font-bold">{groups.length}</span> جروب
+        </span>
+        {unread > 0 && (
+          <span className="rounded-full px-2.5 py-0.5 font-numbers text-[14px] font-extrabold text-black" style={{ background: section.color }}>
+            {unread > 99 ? "99+" : unread} جديدة
+          </span>
+        )}
+      </button>
+      {!collapsed && (
+        <div className="grid grid-cols-3 min-[1600px]:grid-cols-4 gap-4">
+          {groups.map((g) => (
+            <GroupBlock key={g.id} group={g} onOpen={() => onOpen(g)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function WhatsAppPage({ active, onOverlayChange }: { active: boolean; onOverlayChange: (open: boolean) => void }) {
   const [open, setOpen] = useState<WaGroup | null>(null);
   const [seenState, setSeenState] = useState<{ seen: Record<string, string>; baseline: string } | null>(null);
@@ -151,6 +205,31 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
   }, [groupIds]);
 
   const groups = useMemo(() => sortGroups(data?.groups ?? []), [data]);
+  // الأقسام بترتيب الكونفج، وكل قسم بنفس ترتيب الجروبات (الصورة الأول وبعدين رسالة/يوم). قسم فاضي مش بيظهر
+  // Sections in config order, each keeping the group sort (picture first, then messages/day). Empty sections are hidden
+  const sections = useMemo(
+    () =>
+      cfg.sections
+        .map((section) => ({ section, list: groups.filter((g) => sectionOf(g).id === section.id) }))
+        .filter((s) => s.list.length > 0),
+    [groups]
+  );
+  // الأقسام المقفولة (بتتفتكر في المتصفح) - collapsed sections (remembered in this browser)
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      setCollapsed(JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
+    } catch {}
+  }, []);
+  const toggleSection = useCallback((id: string) => {
+    setCollapsed((list) => {
+      const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      try {
+        window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
   const openGroup = useCallback((g: WaGroup) => {
     setSeenState((s) => (s ? { ...s, seen: markSeen(g.id) } : s));
     setOpen(g);
@@ -204,9 +283,16 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
         ) : groups.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-500 text-[18px]">لسه مفيش جروبات وصلت من كمبيوتر الـ IT</div>
         ) : (
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
-            {groups.map((g) => (
-              <GroupBlock key={g.id} group={g} onOpen={() => openGroup(g)} />
+          <div className="flex flex-col gap-5">
+            {sections.map(({ section, list }) => (
+              <GroupSection
+                key={section.id}
+                section={section}
+                groups={list}
+                collapsed={collapsed.includes(section.id)}
+                onToggle={() => toggleSection(section.id)}
+                onOpen={openGroup}
+              />
             ))}
           </div>
         )}

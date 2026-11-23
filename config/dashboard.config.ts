@@ -622,6 +622,43 @@ export const dashboardConfig = {
     // لون كل جروب: بالاسم أو الـ id، والباقي بالترتيب من colors - a color per group by name or id; others cycle colors
     groupColors: {} as Record<string, string>,
     colors: ["#22C55E", "#3B82F6", "#F97316", "#A855F7", "#EC4899", "#14B8A6", "#EAB308", "#EF4444", "#06B6D4", "#84CC16"],
+    // ===== تقسيم الجروبات لأقسام (كل قسم بعنوانه ولونه وعدد جروباته، وجواه نفس الترتيب: الصورة الأول وبعدين رسالة/يوم)
+    // الترتيب في الفحص: sectionOverrides الأول، وبعدين الأقسام بالترتيب ده (أول قسم كلمة من كلماته في اسم الجروب = هو)،
+    // واللي ملوش قسم بيروح للقسم اللي default: true. الكلمات بتتقارن بعد التوحيد: من غير مسافات ولا تشكيل، ة = ه،
+    // أ / إ / آ = ا، ى = ي، ئ = ي، ؤ = و، والإنجليزي small. يعني "تعبئة" = "تعبيه" = "التعبئه"
+    // Group sections (each with its title, color and count; inside, the same sort: picture first, then messages/day).
+    // Check order: sectionOverrides first, then the sections in this order (the first whose keyword is in the group
+    // name wins); the rest go to the default: true section. Keywords match after normalizing: no spaces or diacritics,
+    // ة = ه, أ / إ / آ = ا, ى = ي, ئ = ي, ؤ = و, English lower-case
+    sections: [
+      {
+        id: "packaging",
+        title: "التعبئة والبلاستيك",
+        icon: "📦",
+        color: "#3B82F6", // أزرق - blue
+        keywords: ["تعبئ", "تعبي", "القادسية", "باك فور", "باكفور", "back for", "backfor", "بلاستيك"],
+      },
+      {
+        id: "treasury",
+        title: "الخزنة والحضور",
+        icon: "💰",
+        color: "#EAB308", // دهبي - gold
+        // الخزنة (بنوك، مصروفات) + جروبين الحضور - the treasury (banks, expenses) + the 2 attendance groups
+        keywords: ["بنوك", "مصروفات", "حضور وانصراف", "حضور وغياب"],
+      },
+      {
+        id: "production",
+        title: "الإنتاج",
+        icon: "🔥",
+        color: "#F97316", // برتقالي - orange
+        keywords: [] as string[],
+        default: true, // أي جروب ملوش قسم بييجي هنا - any group without a section lands here
+      },
+    ] as { id: string; title: string; icon: string; color: string; keywords: string[]; default?: boolean }[],
+    // نقل جروب بالإيد لقسم: "id الجروب أو اسمه بالظبط": "id القسم" (packaging / treasury / production)
+    // Move a group by hand: "group id or exact name": "section id"
+    // مثال - example: { "120363040866284130@g.us": "treasury", "المشتريات": "packaging" }
+    sectionOverrides: {} as Record<string, string>,
   },
 
   pages: {
