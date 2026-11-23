@@ -5,6 +5,10 @@ import { agentAuthError, waErrorResponse } from "@/lib/wa-http";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 export const dynamic = "force-dynamic";
+// مفيش كاش خالص: لا Next ولا CDN ولا المتصفح، فالصفحة والإيجنت شايفين نفس الـ Postgres دايما
+// No cache at all (Next, CDN or browser): the page and the agent always see the same Postgres
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 // ملف (صورة / فويس / PDF ...): الـ body = الملف نفسه، والهيدرز x-media-id و Content-Type و x-file-name (encodeURIComponent)
 // A file (image / voice / PDF ...): the body is the raw file; headers x-media-id, Content-Type, x-file-name (URI-encoded)

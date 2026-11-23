@@ -4,6 +4,10 @@ import { search } from "@/lib/wa-store";
 import { waErrorResponse } from "@/lib/wa-http";
 
 export const dynamic = "force-dynamic";
+// مفيش كاش خالص: لا Next ولا CDN ولا المتصفح، فالصفحة والإيجنت شايفين نفس الـ Postgres دايما
+// No cache at all (Next, CDN or browser): the page and the agent always see the same Postgres
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 // البحث (للداشبورد بعد الدخول بس): ?q= كلام، sender= الراسل، date=YYYY-MM-DD، group= جروب واحد (فاضي = كلهم)
 // Search (dashboard login only): q = text, sender, date = a Cairo day, group = one group (empty = all)

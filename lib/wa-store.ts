@@ -10,7 +10,7 @@
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 import { del, get, put } from "@vercel/blob";
 import { dashboardConfig } from "@/config/dashboard.config";
-import { WaGroup, WaMedia, WaMessage, WaMessageType, WaMessagesResponse } from "./types";
+import { WaGroup, WaMedia, WaMessage, WaMessageType, WaMessagesResponse, WaStatus } from "./types";
 
 const cfg = dashboardConfig.whatsapp;
 
@@ -44,6 +44,8 @@ const SCHEMA = [
      type text NOT NULL DEFAULT 'text', body text, reply_id text, reply_sender text, reply_text text, media_id text,
      deleted boolean NOT NULL DEFAULT false)`,
   `CREATE INDEX IF NOT EXISTS wa_messages_group_at ON wa_messages (group_id, at DESC, id DESC)`,
+  // وقت ما الرسالة وصلت السيرفر (جدول قديم بياخده كمان) - when the message reached the server (added to older tables too)
+  `ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS received_at timestamptz NOT NULL DEFAULT now()`,
   `CREATE TABLE IF NOT EXISTS wa_media (
      id text PRIMARY KEY, pathname text NOT NULL, mime text, file_name text, size int, at timestamptz NOT NULL DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS wa_meta (key text PRIMARY KEY, value text NOT NULL)`,
@@ -74,7 +76,7 @@ async function q(text: string, params: unknown[] = []): Promise<Row[]> {
 
 const iso = (v: unknown): string | null => {
   if (v === null || v === undefined || v === "") return null;
-  const d = v instanceof Date ? v : new Date(String(v));
+  const d = v instanceof Date ? v : typeof v === "number" ? new Date(v) : new Date(String(v));
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 const str = (v: unknown, max: number): string => (typeof v === "string" || typeof v === "number" ? String(v).slice(0, max) : "");
@@ -90,60 +92,158 @@ export async function lastSyncAt(): Promise<string | null> {
   return rows[0] ? String(rows[0].value) : null;
 }
 
-// الشكل في docs/whatsapp-agent.md - the shape is in docs/whatsapp-agent.md
-export async function ingest(body: unknown): Promise<{ groups: number; messages: number }> {
-  if (!body || typeof body !== "object") throw new WaError("body must be a JSON object");
-  const b = body as { groups?: unknown; messages?: unknown };
-  const rawGroups = Array.isArray(b.groups) ? b.groups.slice(0, 200) : [];
+// ===== قراية شكل الإيجنت: بيقبل الشكل في docs/whatsapp-agent.md، وكمان الأشكال المشهورة من مكتبات الواتساب
+// (whatsapp-web.js / Baileys): id جوه object ({_serialized})، chatId / from / remoteJid، timestamp بالثواني، body / caption
+// Reading the agent's shape: the documented one, plus the common WhatsApp library shapes (whatsapp-web.js / Baileys):
+// ids as objects ({_serialized}), chatId / from / remoteJid, timestamp in seconds, body / caption
+function idOf(v: unknown, max = 160): string {
+  if (typeof v === "string" || typeof v === "number") return String(v).trim().slice(0, max);
+  if (v && typeof v === "object") {
+    const o = v as Row;
+    return idOf(o._serialized ?? o.id ?? o.jid ?? (o.user && o.server ? `${o.user}@${o.server}` : ""), max);
+  }
+  return "";
+}
+// وقت: ISO، أو رقم بالثواني / بالملي ثانية (رقم أو نص) - a time: ISO, or epoch seconds / ms (number or numeric string)
+function timeOf(v: unknown): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : NaN;
+  if (Number.isFinite(n)) return iso(n < 1e12 ? n * 1000 : n);
+  return iso(v);
+}
+const first = (o: Row, keys: string[]) => {
+  for (const k of keys) if (o[k] !== undefined && o[k] !== null && o[k] !== "") return o[k];
+  return undefined;
+};
+const TYPE_ALIASES: Record<string, WaMessageType> = {
+  text: "text", chat: "text", conversation: "text", extendedtextmessage: "text",
+  image: "image", imagemessage: "image",
+  video: "video", videomessage: "video", gif: "video",
+  audio: "audio", audiomessage: "audio",
+  voice: "voice", ptt: "voice",
+  document: "document", documentmessage: "document", file: "document",
+  sticker: "sticker", stickermessage: "sticker",
+  system: "system", notification: "system", notification_template: "system", e2e_notification: "system", gp2: "system", call_log: "system",
+};
+
+type ParsedMessage = {
+  id: string; groupId: string; sender: string; at: string; type: WaMessageType; text: string | null;
+  replyId: string | null; replySender: string | null; replyText: string | null; mediaId: string | null; deleted: boolean;
+};
+
+// سبب رفض الرسالة (بيرجع للإيجنت ويتخزن في wa_meta.last_ingest) - why a message was rejected (returned and stored)
+type Reject = "no id" | "no group id" | "no/invalid time" | "not an object";
+
+function parseMessage(raw: unknown): ParsedMessage | Reject {
+  if (!raw || typeof raw !== "object") return "not an object";
+  const m = raw as Row;
+  const key = m.key && typeof m.key === "object" ? (m.key as Row) : {};
+  const id = idOf(first(m, ["id", "messageId", "msgId"]) ?? key.id, 160);
+  if (!id) return "no id";
+  const chat = m.chat && typeof m.chat === "object" ? (m.chat as Row) : {};
+  let groupId = idOf(first(m, ["groupId", "group_id", "chatId", "chat_id", "remoteJid", "jid"]) ?? chat.id ?? key.remoteJid, 120);
+  if (!groupId) {
+    // whatsapp-web.js: رسالة جاية = from هو الجروب، رسالة مني = to هو الجروب - incoming: from is the group; mine: to is the group
+    const from = idOf(m.from, 120);
+    const to = idOf(m.to, 120);
+    groupId = from.endsWith("@g.us") ? from : to.endsWith("@g.us") ? to : from || to;
+  }
+  if (!groupId) return "no group id";
+  const at = timeOf(first(m, ["at", "timestamp", "time", "t", "messageTimestamp", "date", "sentAt"]));
+  if (!at) return "no/invalid time";
+
+  const rawType = String(first(m, ["type", "messageType"]) ?? "").toLowerCase();
+  const deleted = m.deleted === true || m.isDeleted === true || rawType === "revoked";
+  const media = m.media && typeof m.media === "object" ? (m.media as Row) : null;
+  const mediaId = (media ? idOf(first(media, ["id", "mediaId"]), 120) : "") || idOf(m.mediaId, 120) || (m.hasMedia === true ? id.slice(0, 120) : "") || null;
+  const type: WaMessageType = TYPE_ALIASES[rawType] ?? (TYPES.includes(rawType as WaMessageType) ? (rawType as WaMessageType) : mediaId ? "document" : "text");
+
+  const sender = str(
+    first(m, ["senderName", "sender_name", "pushName", "notifyName", "authorName", "fromName"]) ??
+      (typeof m.sender === "string" ? m.sender : (m.sender as Row | undefined)?.name ?? (m.sender as Row | undefined)?.pushname) ??
+      // وإلا رقم الراسل: author / participant، أو from لو مش الجروب (رسالة من رقم كمبيوتر الـ IT نفسه)
+      // else the sender's number: author / participant, or from when it isn't the group (a message from the IT PC's number)
+      (idOf(first(m, ["author", "participant"]) ?? key.participant, 120) || (idOf(m.from, 120).endsWith("@g.us") ? "" : idOf(m.from, 120))).replace(/@.*$/, ""),
+    120
+  );
+  const textRaw = first(m, ["text", "body", "caption", "content", "message"]);
+  const reply = (first(m, ["replyTo", "quoted", "quotedMsg", "quotedMessage"]) ?? null) as Row | null;
+  return {
+    id,
+    groupId,
+    sender,
+    at,
+    type,
+    text: typeof textRaw === "string" ? textRaw.replace(/\u0000/g, "").slice(0, 8000) || null : null,
+    replyId: reply && typeof reply === "object" ? idOf(first(reply, ["id", "messageId"]), 160) || null : null,
+    replySender: reply && typeof reply === "object" ? str(first(reply, ["senderName", "sender", "author", "pushName", "notifyName"]), 120).replace(/@.*$/, "") : null,
+    replyText: reply && typeof reply === "object" ? str(first(reply, ["text", "body", "caption"]), 500).replace(/\u0000/g, "") : null,
+    mediaId,
+    deleted,
+  };
+}
+
+function parseGroup(raw: unknown) {
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as Row;
+  const id = idOf(first(g, ["id", "groupId", "chatId", "jid"]), 120);
+  if (!id) return null;
+  const p = g.participants ?? g.participantsCount ?? g.size;
+  const participants = Array.isArray(p) ? p.length : Number.isFinite(Number(p)) && p !== null && p !== "" ? Math.max(0, Math.round(Number(p))) : null;
+  return {
+    id,
+    name: str(first(g, ["name", "subject", "title"]), 200).replace(/\u0000/g, ""),
+    participants,
+    picture: idOf(first(g, ["pictureMediaId", "pictureId", "picture"]), 120) || null,
+  };
+}
+
+export type IngestResult = {
+  groups: { received: number; saved: number };
+  messages: { received: number; saved: number; rejected: number };
+  reasons: Record<string, number>;
+};
+
+// الشكل في docs/whatsapp-agent.md. لو اتبعت حاجة ومفيش ولا حاجة اتحفظت = WaError 422 بالأسباب (مش 200)
+// The shape is in docs/whatsapp-agent.md. When something was sent but nothing could be saved = WaError 422 with reasons
+export async function ingest(body: unknown): Promise<IngestResult> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new WaError("body must be a JSON object: { groups: [...], messages: [...] }");
+  const b = body as Row;
+  const rawGroups = Array.isArray(b.groups) ? b.groups.slice(0, 500) : Array.isArray(b.chats) ? b.chats.slice(0, 500) : [];
   const rawMessages = Array.isArray(b.messages) ? b.messages.slice(0, 1000) : [];
 
-  const groups = rawGroups
-    .map((g) => g as Row)
-    .map((g) => ({
-      id: str(g.id, 120),
-      name: str(g.name, 200),
-      participants: Number.isFinite(Number(g.participants)) && g.participants !== null ? Math.max(0, Math.round(Number(g.participants))) : null,
-      picture: str(g.pictureMediaId ?? g.pictureId, 120) || null,
-    }))
-    .filter((g) => g.id);
+  const groups = rawGroups.map(parseGroup).filter((g): g is NonNullable<ReturnType<typeof parseGroup>> => g !== null);
+  const reasons: Record<string, number> = {};
+  const messages: ParsedMessage[] = [];
+  let sampleKeys: string[] | null = null;
+  for (const raw of rawMessages) {
+    const parsed = parseMessage(raw);
+    if (typeof parsed === "string") {
+      reasons[parsed] = (reasons[parsed] ?? 0) + 1;
+      // أسامي الحقول بس (مش المحتوى) عشان نعرف الشكل اللي جاي - field names only (never content), to see the shape
+      if (!sampleKeys && raw && typeof raw === "object") sampleKeys = Object.keys(raw as Row).slice(0, 30);
+    } else messages.push(parsed);
+  }
+  if (rawGroups.length > groups.length) reasons["group without id"] = rawGroups.length - groups.length;
+  // نفس الرسالة مرتين في نفس الطلب: الأخيرة تكسب (وإلا ON CONFLICT بيفشل) - the same message twice: the last wins
+  const unique = Array.from(new Map(messages.map((m) => [m.id, m])).values());
+  const uniqueGroups = Array.from(new Map(groups.map((g) => [g.id, g])).values());
 
-  const messages = rawMessages
-    .map((m) => m as Row)
-    .map((m) => {
-      const reply = m.replyTo && typeof m.replyTo === "object" ? (m.replyTo as Row) : null;
-      const media = m.media && typeof m.media === "object" ? (m.media as Row) : null;
-      const type = TYPES.includes(m.type as WaMessageType) ? (m.type as WaMessageType) : media ? "document" : "text";
-      return {
-        id: str(m.id, 160),
-        groupId: str(m.groupId, 120),
-        sender: str(m.senderName ?? m.sender, 120),
-        at: iso(m.at),
-        type,
-        text: str(m.text, 8000) || null,
-        replyId: reply ? str(reply.id, 160) || null : null,
-        replySender: reply ? str(reply.senderName ?? reply.sender, 120) : null,
-        replyText: reply ? str(reply.text, 500) : null,
-        mediaId: media ? str(media.id, 120) || null : str(m.mediaId, 120) || null,
-        deleted: m.deleted === true,
-      };
-    })
-    .filter((m) => m.id && m.groupId && m.at);
-
-  if (groups.length) {
+  if (uniqueGroups.length) {
     await q(
       `INSERT INTO wa_groups (id, name, participants, picture_media_id)
        SELECT * FROM unnest($1::text[], $2::text[], $3::int[], $4::text[])
        ON CONFLICT (id) DO UPDATE SET
-         name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE wa_groups.name END,
+         name = CASE WHEN EXCLUDED.name <> '' AND EXCLUDED.name <> EXCLUDED.id THEN EXCLUDED.name ELSE wa_groups.name END,
          participants = COALESCE(EXCLUDED.participants, wa_groups.participants),
          picture_media_id = COALESCE(EXCLUDED.picture_media_id, wa_groups.picture_media_id),
          updated_at = now()`,
-      [groups.map((g) => g.id), groups.map((g) => g.name || g.id), groups.map((g) => g.participants), groups.map((g) => g.picture)]
+      [uniqueGroups.map((g) => g.id), uniqueGroups.map((g) => g.name || g.id), uniqueGroups.map((g) => g.participants), uniqueGroups.map((g) => g.picture)]
     );
   }
-  if (messages.length) {
+  if (unique.length) {
     // جروب لسه مبعتش اسمه: بيتعمل باسم الـ id لحد ما الاسم يوصل - a group not sent yet: created with its id as the name
-    const ids = Array.from(new Set(messages.map((m) => m.groupId)));
+    const ids = Array.from(new Set(unique.map((m) => m.groupId)));
     await q(`INSERT INTO wa_groups (id, name) SELECT g, g FROM unnest($1::text[]) AS g ON CONFLICT (id) DO NOTHING`, [ids]);
     // نفس الرسالة تاني = تعديل أو مسح (الـ id هو هو) - the same message again = an edit or a delete (same id)
     await q(
@@ -151,26 +251,75 @@ export async function ingest(body: unknown): Promise<{ groups: number; messages:
        SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::timestamptz[], $5::text[], $6::text[], $7::text[],
                             $8::text[], $9::text[], $10::text[], $11::boolean[])
        ON CONFLICT (id) DO UPDATE SET
-         body = EXCLUDED.body, media_id = COALESCE(EXCLUDED.media_id, wa_messages.media_id), deleted = EXCLUDED.deleted,
+         body = COALESCE(EXCLUDED.body, wa_messages.body), media_id = COALESCE(EXCLUDED.media_id, wa_messages.media_id),
+         deleted = EXCLUDED.deleted OR wa_messages.deleted,
          sender = CASE WHEN EXCLUDED.sender <> '' THEN EXCLUDED.sender ELSE wa_messages.sender END`,
       [
-        messages.map((m) => m.id),
-        messages.map((m) => m.groupId),
-        messages.map((m) => m.sender),
-        messages.map((m) => m.at),
-        messages.map((m) => m.type),
-        messages.map((m) => m.text),
-        messages.map((m) => m.replyId),
-        messages.map((m) => m.replySender),
-        messages.map((m) => m.replyText),
-        messages.map((m) => m.mediaId),
-        messages.map((m) => m.deleted),
+        unique.map((m) => m.id),
+        unique.map((m) => m.groupId),
+        unique.map((m) => m.sender),
+        unique.map((m) => m.at),
+        unique.map((m) => m.type),
+        unique.map((m) => m.text),
+        unique.map((m) => m.replyId),
+        unique.map((m) => m.replySender),
+        unique.map((m) => m.replyText),
+        unique.map((m) => m.mediaId),
+        unique.map((m) => m.deleted),
       ]
     );
   }
+
+  const result: IngestResult = {
+    groups: { received: rawGroups.length, saved: uniqueGroups.length },
+    messages: { received: rawMessages.length, saved: unique.length, rejected: rawMessages.length - messages.length },
+    reasons,
+  };
+  const received = rawGroups.length + rawMessages.length;
+  const saved = uniqueGroups.length + unique.length;
+  // آخر طلب (أرقام وأسامي حقول بس) عشان نعرف لو في مشكلة - the last request (counts and field names only) for diagnosis
+  await q(`INSERT INTO wa_meta (key, value) VALUES ('last_ingest', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [
+    JSON.stringify({ at: new Date().toISOString(), ...result, sampleRejectedKeys: sampleKeys }),
+  ]);
+  console.log(`[wa] ingest: groups ${result.groups.saved}/${result.groups.received}, messages ${result.messages.saved}/${result.messages.received}`, received > saved ? JSON.stringify(reasons) : "");
+
+  if (received > 0 && saved === 0) {
+    // اتبعت حاجة ومفيش ولا حاجة اتحفظت: غلط (مش 200)، وآخر مزامنة متتحركش - nothing saved: an error, last sync unchanged
+    throw new WaError(
+      `nothing saved: ${JSON.stringify(reasons)}. Each message needs id, groupId (or chatId/from), at (ISO or epoch). ` +
+        (sampleKeys ? `Fields received: ${sampleKeys.join(", ")}` : ""),
+      422
+    );
+  }
+  // آخر مزامنة: لما حاجة اتحفظت، أو نبضة {} فاضية - last sync: when something was saved, or an empty {} heartbeat
   await touchSync();
-  await cleanupIfDue();
-  return { groups: groups.length, messages: messages.length };
+  // التنضيف مش بيبوظ طلب اتحفظ - the cleanup never fails a request that was saved
+  await cleanupIfDue().catch((error) => console.error("[wa] cleanup failed:", error instanceof Error ? error.message : error));
+  return result;
+}
+
+// ===== الحالة: الجداول والأرقام وآخر طلب - status: tables, row counts and the last request =====
+export async function waStatus(): Promise<WaStatus> {
+  const [counts, meta] = await Promise.all([
+    q(`SELECT (SELECT count(*) FROM wa_groups)::int AS groups, (SELECT count(*) FROM wa_messages)::int AS messages,
+              (SELECT count(*) FROM wa_media)::int AS media, (SELECT max(received_at) FROM wa_messages) AS latest_received_at,
+              (SELECT max(at) FROM wa_messages) AS latest_message_at`),
+    q(`SELECT key, value FROM wa_meta WHERE key IN ('last_sync', 'last_ingest')`),
+  ]);
+  const c = counts[0] ?? {};
+  const get = (k: string) => meta.find((r) => r.key === k)?.value;
+  let lastIngest: WaStatus["lastIngest"] = null;
+  try {
+    lastIngest = get("last_ingest") ? JSON.parse(String(get("last_ingest"))) : null;
+  } catch {}
+  return {
+    database: "neon-postgres",
+    counts: { groups: Number(c.groups ?? 0), messages: Number(c.messages ?? 0), media: Number(c.media ?? 0) },
+    latestReceivedAt: iso(c.latest_received_at),
+    latestMessageAt: iso(c.latest_message_at),
+    lastSyncAt: get("last_sync") ? String(get("last_sync")) : null,
+    lastIngest,
+  };
 }
 
 // ===== الملفات - files =====

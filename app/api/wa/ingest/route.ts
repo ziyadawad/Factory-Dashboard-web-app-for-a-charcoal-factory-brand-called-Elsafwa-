@@ -4,6 +4,10 @@ import { ingest } from "@/lib/wa-store";
 import { agentAuthError, waErrorResponse } from "@/lib/wa-http";
 
 export const dynamic = "force-dynamic";
+// مفيش كاش خالص: لا Next ولا CDN ولا المتصفح، فالصفحة والإيجنت شايفين نفس الـ Postgres دايما
+// No cache at all (Next, CDN or browser): the page and the agent always see the same Postgres
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 // كمبيوتر الـ IT بيبعت الجروبات والرسايل الجديدة (الشكل في docs/whatsapp-agent.md). body فاضي {} = نبضة (آخر مزامنة)
 // The IT PC sends groups and new messages (schema in docs/whatsapp-agent.md). An empty {} body = a heartbeat (last sync)

@@ -4,6 +4,10 @@ import { openMedia } from "@/lib/wa-store";
 import { waErrorResponse } from "@/lib/wa-http";
 
 export const dynamic = "force-dynamic";
+// مفيش كاش خالص: لا Next ولا CDN ولا المتصفح، فالصفحة والإيجنت شايفين نفس الـ Postgres دايما
+// No cache at all (Next, CDN or browser): the page and the agent always see the same Postgres
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 // ملف من الواتساب (للداشبورد بعد الدخول بس): الـ Blob private والسيرفر هو اللي بيقراه ويبعته. ?download=1 = تحميل
 // A WhatsApp file (dashboard login only): the Blob is private and the server streams it. ?download=1 = download

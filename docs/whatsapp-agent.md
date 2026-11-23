@@ -55,7 +55,36 @@ Send only what is new (e.g. every 30 s); at most 1000 messages and ~4 MB per req
 }
 ```
 
-الرد: `{ "ok": true, "groups": 1, "messages": 1 }`. جروب لسه مبعتش اسمه بيظهر بالـ id لحد ما الاسم يوصل.
+الرد: `{ "ok": true, "groups": { "received": 1, "saved": 1 }, "messages": { "received": 1, "saved": 1, "rejected": 0 }, "reasons": {} }`.
+جروب لسه مبعتش اسمه بيظهر بالـ id لحد ما الاسم يوصل.
+The reply says how many were received / saved / rejected and why.
+
+**أشكال تانية مقبولة** (من مكتبات الواتساب على طول) - **other accepted shapes** (straight from WhatsApp libraries):
+
+| الحقل | بيتقري من |
+|---|---|
+| `id` | `id` (نص أو `{ "_serialized": "…" }`)، `messageId`، `key.id` |
+| `groupId` | `groupId`، `chatId`، `remoteJid`، `key.remoteJid`، `chat.id`، أو `from` / `to` اللي آخره `@g.us` |
+| `at` | `at`، `timestamp`، `messageTimestamp`، `t` — ISO أو epoch **بالثواني أو بالملي ثانية** |
+| الراسل | `senderName`، `pushName`، `notifyName`، `sender.name`، وإلا رقم `author` / `participant` |
+| النص | `text`، `body`، `caption`، `message` |
+| النوع | `chat`→text، `ptt`→voice، `revoked`→اتمسحت، `image` / `video` / `audio` / `document` / `sticker` |
+| الملف | `media.id`، `mediaId`، أو `hasMedia: true` (= نفس `id` الرسالة في `/upload`) |
+| الرد | `replyTo`، `quotedMsg`، `quoted` |
+| الجروبات | `groups` أو `chats`؛ الاسم `name` / `subject`؛ الأعضاء رقم أو ليستة |
+
+**لو اتبعت رسايل ومفيش ولا واحدة اتحفظت = `422`** وفي الرسالة السبب وأسامي الحقول اللي وصلت (مش 200)، و"آخر مزامنة" مش بتتحرك.
+لو الداتابيز فشلت = `500`. **When messages were sent but none could be saved the reply is `422`** with the reasons and
+the field names received (never 200), and the last sync does not move. A database failure is `500`.
+
+## 3) الحالة: `GET /api/wa/status` (هيدر `x-it-secret`)
+
+```json
+{ "database": "neon-postgres", "counts": { "groups": 26, "messages": 48, "media": 3 },
+  "latestReceivedAt": "…", "latestMessageAt": "…", "lastSyncAt": "…",
+  "lastIngest": { "at": "…", "groups": {…}, "messages": { "received": 10, "saved": 10, "rejected": 0 }, "reasons": {}, "sampleRejectedKeys": null } }
+```
+عدد الصفوف في Postgres وآخر طلب (اتبعت كام / اتحفظ كام / ليه اترفض). Row counts in Postgres and the last request.
 
 ## 2) الملفات: `POST /api/wa/upload`
 

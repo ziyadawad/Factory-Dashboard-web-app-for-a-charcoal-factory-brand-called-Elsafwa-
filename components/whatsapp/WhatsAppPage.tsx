@@ -166,7 +166,22 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
           <WhatsAppIcon /> جروبات الواتساب
         </span>
         <ReadOnlyBadge />
-        {data && <span className="text-[14px] text-gray-400"><span className="font-numbers font-bold text-gray-200">{groups.length}</span> جروب</span>}
+        {data && (
+          <span className="text-[14px] text-gray-400">
+            <span className="font-numbers font-bold text-gray-200">{groups.length}</span> جروب ·{" "}
+            <span className="font-numbers font-bold text-gray-200">{data.status?.counts.messages ?? 0}</span> رسالة محفوظة
+          </span>
+        )}
+        {/* آخر طلب من كمبيوتر الـ IT اترفض فيه رسايل: نقول ليه - the last IT request had rejected messages: say why */}
+        {data?.status?.lastIngest && data.status.lastIngest.messages.rejected > 0 && (
+          <span
+            className="rounded-full border border-statusRed/50 bg-statusRed/10 px-2.5 py-0.5 text-[13px] font-bold text-statusRed"
+            title={JSON.stringify(data.status.lastIngest.reasons)}
+          >
+            ⚠ آخر مزامنة: <span className="font-numbers">{data.status.lastIngest.messages.rejected}</span> رسالة اترفضت (
+            {Object.keys(data.status.lastIngest.reasons).join("، ")})
+          </span>
+        )}
         <span className="ms-auto">
           <SyncStatus lastSyncAt={data?.lastSyncAt ?? null} />
         </span>

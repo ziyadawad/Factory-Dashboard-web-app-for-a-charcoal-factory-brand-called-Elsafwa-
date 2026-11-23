@@ -5,6 +5,10 @@ import { waErrorResponse } from "@/lib/wa-http";
 import { WaMessagesResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// مفيش كاش خالص: لا Next ولا CDN ولا المتصفح، فالصفحة والإيجنت شايفين نفس الـ Postgres دايما
+// No cache at all (Next, CDN or browser): the page and the agent always see the same Postgres
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 // رسايل جروب (للداشبورد بعد الدخول بس): ?group=ID و before=ISO~id (الأقدم، الأحدث الأول) أو after=ISO~id (الجديد، الأقدم الأول)
 // A group's messages (dashboard login only): before=ISO~id (older, newest first) or after=ISO~id (newer, oldest first)

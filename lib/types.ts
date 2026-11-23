@@ -1263,9 +1263,27 @@ export interface WaGroup {
   unread: number; // من آخر زيارة (اللي المتصفح بعتها) - since the last visit (sent by the browser)
 }
 
+// حالة التخزين (من /api/wa/status وفي رد الجروبات) - the storage status (from /api/wa/status and in the groups reply)
+export interface WaStatus {
+  database: "neon-postgres";
+  counts: { groups: number; messages: number; media: number };
+  latestReceivedAt: string | null; // آخر رسالة وصلت السيرفر - the latest message to reach the server
+  latestMessageAt: string | null;
+  lastSyncAt: string | null;
+  // آخر طلب من الإيجنت: اتبعت كام واتحفظ كام وليه اترفض - the agent's last request: sent / saved / why rejected
+  lastIngest: {
+    at: string;
+    groups: { received: number; saved: number };
+    messages: { received: number; saved: number; rejected: number };
+    reasons: Record<string, number>;
+    sampleRejectedKeys: string[] | null;
+  } | null;
+}
+
 export interface WaGroupsResponse {
   groups: WaGroup[];
-  lastSyncAt: string | null; // ISO: آخر مرة كمبيوتر الـ IT بعت حاجة - when the IT PC last sent anything
+  status: WaStatus;
+  lastSyncAt: string | null; // ISO: آخر مرة كمبيوتر الـ IT بعت حاجة اتحفظت - when the IT PC last sent anything saved
 }
 
 export interface WaMessagesResponse {
