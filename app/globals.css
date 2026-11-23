@@ -479,3 +479,87 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     animation: none !important;
   }
 }
+
+/* مشهد الميزان في "آخر وزنة": الترول بينزل على البسكول، البسكول بينزل شوية، الأرقام بترمش، والكارت بينبض 5 مرات
+   The "آخر وزنة" scale scene: the trolley drops onto the platform, the platform dips, the digits blink, the card pulses 5x */
+.scale-trolley-drop {
+  transform-box: view-box;
+  animation: scale-trolley-drop 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.scale-platform-dip {
+  transform-box: view-box;
+  animation: scale-platform-dip 0.45s ease-out 0.62s both;
+}
+.scale-digits-blink {
+  animation: scale-digits-blink 0.7s steps(1) both;
+}
+.scale-screen-idle {
+  animation: scale-screen-idle 3s ease-in-out infinite;
+}
+.scale-card-pulse {
+  animation: scale-card-pulse 1.1s ease-in-out 2.4s 5 both;
+}
+@keyframes scale-trolley-drop {
+  0% {
+    transform: translateY(-70px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(3px);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-4px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes scale-platform-dip {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(3.5px);
+  }
+}
+@keyframes scale-digits-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  25%,
+  75% {
+    opacity: 0.12;
+  }
+}
+@keyframes scale-screen-idle {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes scale-card-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 122, 0, 0);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 26px 5px rgba(255, 122, 0, 0.45);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scale-trolley-drop,
+  .scale-platform-dip,
+  .scale-digits-blink,
+  .scale-screen-idle,
+  .scale-card-pulse {
+    animation: none !important;
+  }
+}

@@ -1046,7 +1046,7 @@ export const dashboardConfig = {
     productionPage: {
       kpiTonsFontSize: 104, // رقم "إنتاج النهارده" (الأكبر، في عمود الشمال تحت آخر وزنة) - the biggest KPI (left column)
       kpiFontSize: 38, // الكروت الـ 3 الصغيرة تحته (الطرحات، متوسط الطرحة، الشهر) - the 3 small cards under it
-      kpiSmallHeight: 150, // ارتفاع صف الكروت الـ 3 الصغيرة - the small cards row height
+      kpiSmallHeight: 126, // ارتفاع صف الكروت الـ 3 الصغيرة - the small cards row height
       kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
       kilnStatFontSize: 18, // عدد الطرحات وساعة آخر خروج تحت رسمة الفرن - exits count and last exit time under the kiln drawing
       kilnChipFontSize: 15, // شارة الحالة (شغالة / صيانة / متوقفة) - the status chip
@@ -1054,7 +1054,7 @@ export const dashboardConfig = {
       compact: {
         kpiTonsFontSize: 68,
         kpiFontSize: 24,
-        kpiSmallHeight: 104,
+        kpiSmallHeight: 88,
         kilnTonsFontSize: 20,
         kilnStatFontSize: 13,
         kilnChipFontSize: 12,
@@ -1068,9 +1068,9 @@ export const dashboardConfig = {
     production: {
       // ===== "آخر وزنة": الوزن الكبير، وتحته سطور: ترول · دخلت فرن — غرفة · النوع · الساعة ومن قد ايه · الطرحة
       // "آخر وزنة": the big weight, then lines: trolley · kiln — room · type · time and how long ago · the batch
-      lastTitleFontSize: 20, // عنوان "آخر وزنة" - the card title
-      lastIconSize: 30, // أيقونة الميزان - the scale icon
-      lastWeightFontSize: 92, // الوزن الكبير "563 كجم" - the big weight
+      lastTitleFontSize: 26, // عنوان "آخر وزنة" (عريض) - the card title (bold)
+      lastIconSize: 32, // أيقونة الميزان - the scale icon
+      lastWeightFontSize: 84, // الوزن الكبير "563 كجم" - the big weight
       lastNoWeightFontSize: 36, // "بدون وزن" مكان الرقم (رمادي) - "بدون وزن" instead of the number (gray)
       lastLineFontSize: 27, // السطور تحت الوزن - the lines under the weight
       // ===== طرحات النهارده: كارت لكل طرحة بيملا ارتفاعه (طرحة واحدة = المساحة كلها، اتنين = النص، ...)، وفيه:
@@ -1091,9 +1091,9 @@ export const dashboardConfig = {
       batchMoreFontSize: 20, // "+N طرحة تانية"
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس الحاجات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
-        lastTitleFontSize: 16,
+        lastTitleFontSize: 20,
         lastIconSize: 24,
-        lastWeightFontSize: 62,
+        lastWeightFontSize: 52,
         lastNoWeightFontSize: 26,
         lastLineFontSize: 17,
         batchRowMin: 140,

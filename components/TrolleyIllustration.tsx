@@ -11,14 +11,17 @@ export default function TrolleyIllustration({
   waiting = false,
   highlight = false,
   className = "",
+  place,
 }: {
   waiting?: boolean;
   highlight?: boolean;
   className?: string;
+  // مكانها جوه SVG تاني (زي مشهد الميزان) - its position inside another SVG (e.g. the scale scene)
+  place?: { x: number; y: number; width: number; height: number };
 }) {
   if (waiting) {
     return (
-      <svg viewBox="0 0 120 150" className={className} preserveAspectRatio="xMidYMax meet" aria-hidden>
+      <svg viewBox="0 0 120 150" className={className} preserveAspectRatio="xMidYMax meet" aria-hidden {...place}>
         <g fill="none" stroke="#F59E0B" strokeOpacity="0.65" strokeWidth="2.5" strokeDasharray="7 6" strokeLinejoin="round">
           <rect x="8" y="20" width="104" height="8" rx="2" />
           <rect x="12" y="28" width="96" height="96" rx="2" />
@@ -29,7 +32,7 @@ export default function TrolleyIllustration({
     );
   }
   return (
-    <svg viewBox="0 0 120 150" className={className} preserveAspectRatio="xMidYMax meet" aria-hidden>
+    <svg viewBox="0 0 120 150" className={className} preserveAspectRatio="xMidYMax meet" aria-hidden {...place}>
       <defs>
         <linearGradient id="trolley-body" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#23272E" />

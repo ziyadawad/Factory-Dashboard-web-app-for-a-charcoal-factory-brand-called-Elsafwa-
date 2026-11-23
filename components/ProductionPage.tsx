@@ -23,6 +23,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import { sameExit } from "@/lib/kiln-alert";
 import TrolleyIllustration from "./TrolleyIllustration";
+import ScaleScene from "./ScaleScene";
 import { GREEN_CHIP, TypeBadge } from "./TypeBadge";
 import { progressText } from "@/lib/batches";
 
@@ -171,7 +172,8 @@ function batchOrdinal(batch: ProductionBatch, batches: ProductionBatch[]): strin
   return `الطرحة ${words[i] ?? String(i + 1)}`;
 }
 
-// آخر وزنة (ترول): الوزن كبير، وتحته سطرين شرايح: [ترول 24] [فرن 4] [غرفة 1] ثم النوع بأيقونته و"الطرحة التالتة —
+// آخر وزنة (ترول): مشهد الميزان الحي فوق (ScaleScene: الترول بينزل على البسكول والشاشة بتعد للوزن، والكارت بينبض 5 مرات
+// مع كل وزنة جديدة ومرة أول ما الصفحة تفتح)، وتحته: الوزن كبير، وسطرين شرايح: [ترول 24] [فرن 4] [غرفة 1] ثم النوع بأيقونته و"الطرحة التالتة —
 // ترول 3 من 3"، وبعدين الساعة و"من 1 ساعة و34 دقيقة". بتنور شوية لما ترول جديد يوصل
 // The last weighing (a trolley): the big weight, two lines of chips (trolley, kiln, room / type with its icon and the
 // batch), then the time and how long ago. Glows briefly when a new trolley arrives
@@ -205,20 +207,29 @@ function LastExitCard({
 
   const chip = "prod-fs shrink-0 px-2.5 py-0.5 leading-[1.4]";
   return (
+    // key = الترول: وزنة جديدة = الكارت بيتبني من الأول فالحركة والنبض بيتعادوا - a new trolley remounts it, replaying the animation
     <div
-      className={`flex-[1.7] min-h-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden select-none caret-transparent transition-[box-shadow,border-color] duration-700 ${
-        glow ? "border-brandOrange shadow-[0_0_28px_6px_rgba(255,122,0,0.55)] animate-new-exit" : "border-cardBorder"
+      key={lastKey ?? "none"}
+      className={`scale-card-pulse flex-[2.6] min-h-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden select-none caret-transparent ${
+        glow ? "border-brandOrange" : "border-cardBorder"
       }`}
     >
       <div className="shrink-0 flex items-center gap-2 whitespace-nowrap min-w-0">
         <Scale className="text-brandOrange shrink-0" size={sizes.lastIconSize} />
-        <span className="prod-fs text-gray-300 font-bold" style={fs(sizes.lastTitleFontSize)}>
+        <span className="prod-fs text-white font-extrabold" style={fs(sizes.lastTitleFontSize)}>
           آخر وزنة
         </span>
         {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[14px] font-extrabold">جديدة</span>}
       </div>
+      {/* مشهد الميزان - the scale scene */}
+      <ScaleScene
+        playKey={lastKey}
+        weightKg={last?.kg ?? null}
+        trolley={toEnglishDigits(last?.trolley ?? "")}
+        className="flex-1 min-h-0 w-full my-1"
+      />
       {last ? (
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2.5">
+        <div className="shrink-0 flex flex-col items-center text-center gap-2">
           {/* الوزن الكبير - the big weight */}
           {last.kg !== null ? (
             <p className="leading-none whitespace-nowrap">
@@ -275,7 +286,7 @@ function LastExitCard({
           </p>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="shrink-0 flex items-center justify-center">
           <p className="prod-fs text-gray-500 font-bold" style={fs(sizes.lastLineFontSize)}>
             لسه مفيش طرحات
           </p>
