@@ -47,7 +47,6 @@ export default function OperatorApp() {
   const [now, setNow] = useState(() => Date.now());
   const [confirmDrop, setConfirmDrop] = useState<string | null>(null);
   const [install, setInstall] = useState<InstallEvent | null>(null);
-  const [iosHint, setIosHint] = useState(false);
 
   const options = usePolling<OperatorOptions>("/api/operator/options", fetcher, 5 * 60_000, true);
   const pending = usePolling<{ pending: PendingWeighing[] }>("/api/scale/pending", fetcher, cfg.pendingPollSeconds * 1000, !form);
@@ -59,8 +58,8 @@ export default function OperatorApp() {
     return () => clearInterval(timer);
   }, [visible]);
 
-  // "ضيفه على الشاشة الرئيسية": service worker + زرار التثبيت (أندرويد) أو شرح (آيفون)
-  // "Add to Home screen": service worker + install button (Android) or a hint (iPhone)
+  // "ضيفه على الشاشة الرئيسية": service worker + زرار التثبيت (أندرويد)
+  // "Add to Home screen": service worker + install button (Android)
   useEffect(() => {
     navigator.serviceWorker?.register("/operator-sw.js", { scope: "/operator" }).catch(() => {});
     const onPrompt = (e: Event) => {
@@ -68,8 +67,6 @@ export default function OperatorApp() {
       setInstall(e as InstallEvent);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
-    const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone;
-    if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) setIosHint(true);
     return () => window.removeEventListener("beforeinstallprompt", onPrompt);
   }, []);
 
@@ -125,14 +122,6 @@ export default function OperatorApp() {
           >
             📲 ثبّت الشاشة على الموبايل
           </button>
-        )}
-        {iosHint && !install && (
-          <p className="rounded-2xl border border-cardBorder bg-card/70 px-4 py-3 text-[15px] text-gray-300">
-            📲 عشان تبقى على الشاشة الرئيسية: اضغط زرار المشاركة في Safari ← &quot;إضافة إلى الشاشة الرئيسية&quot;
-            <button type="button" onClick={() => setIosHint(false)} className="ms-2 font-bold text-gray-400 underline">
-              تمام
-            </button>
-          </p>
         )}
 
         {/* الوزن المباشر - live weight */}
