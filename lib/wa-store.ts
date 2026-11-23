@@ -11,6 +11,7 @@ import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 import { del, get, put } from "@vercel/blob";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { WaGroup, WaMedia, WaMessage, WaMessageType, WaMessagesResponse, WaStatus } from "./types";
+import { eventsConfigured, eventsSince, pushEvents, WaEvent } from "./wa-events";
 
 const cfg = dashboardConfig.whatsapp;
 
@@ -248,19 +249,21 @@ export async function ingest(body: unknown): Promise<IngestResult> {
       [uniqueGroups.map((g) => g.id), uniqueGroups.map((g) => g.name || g.id), uniqueGroups.map((g) => g.participants), uniqueGroups.map((g) => g.picture)]
     );
   }
+  let inserted: Row[] = [];
   if (unique.length) {
     // جروب لسه مبعتش اسمه: بيتعمل باسم الـ id لحد ما الاسم يوصل - a group not sent yet: created with its id as the name
     const ids = Array.from(new Set(unique.map((m) => m.groupId)));
     await q(`INSERT INTO wa_groups (id, name) SELECT g, g FROM unnest($1::text[]) AS g ON CONFLICT (id) DO NOTHING`, [ids]);
     // نفس الرسالة تاني = تعديل أو مسح (الـ id هو هو) - the same message again = an edit or a delete (same id)
-    await q(
+    inserted = await q(
       `INSERT INTO wa_messages (id, group_id, sender, at, type, body, reply_id, reply_sender, reply_text, media_id, deleted)
        SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::timestamptz[], $5::text[], $6::text[], $7::text[],
                             $8::text[], $9::text[], $10::text[], $11::boolean[])
        ON CONFLICT (id) DO UPDATE SET
          body = COALESCE(EXCLUDED.body, wa_messages.body), media_id = COALESCE(EXCLUDED.media_id, wa_messages.media_id),
          deleted = EXCLUDED.deleted OR wa_messages.deleted,
-         sender = CASE WHEN EXCLUDED.sender <> '' THEN EXCLUDED.sender ELSE wa_messages.sender END`,
+         sender = CASE WHEN EXCLUDED.sender <> '' THEN EXCLUDED.sender ELSE wa_messages.sender END
+       RETURNING group_id, at, type, deleted, (xmax = 0) AS inserted`,
       [
         unique.map((m) => m.id),
         unique.map((m) => m.groupId),
@@ -300,9 +303,58 @@ export async function ingest(body: unknown): Promise<IngestResult> {
   }
   // آخر مزامنة: لما حاجة اتحفظت، أو نبضة {} فاضية - last sync: when something was saved, or an empty {} heartbeat
   await touchSync();
+  // تنبيه "رسالة جديدة": الرسايل الجديدة فعلا (مش تعديل) وحديثة (مش تاريخ قديم مستورد) - the alert: really new, recent messages
+  await publishNew(inserted).catch((error) => console.error("[wa] alert events failed:", error instanceof Error ? error.message : error));
   // التنضيف مش بيبوظ طلب اتحفظ - the cleanup never fails a request that was saved
   await cleanupIfDue().catch((error) => console.error("[wa] cleanup failed:", error instanceof Error ? error.message : error));
   return result;
+}
+
+// رسايل جديدة فعلا (xmax = 0 = اتعملت دلوقتي مش اتعدلت)، مش نظام ولا ممسوحة، وأحدث من alertMaxAgeMinutes
+// (الرسايل القديمة المستوردة عمرها ما تعمل تنبيه) - really new messages (inserted, not updated), not system / deleted,
+// newer than alertMaxAgeMinutes (imported history never alerts)
+async function publishNew(rows: Row[]) {
+  const minAt = Date.now() - cfg.alertMaxAgeMinutes * 60_000;
+  const fresh = rows.filter((r) => r.inserted === true && r.deleted !== true && r.type !== "system" && Date.parse(iso(r.at) ?? "") > minAt);
+  if (fresh.length === 0) return;
+  const byGroup = new Map<string, { count: number; at: string }>();
+  for (const r of fresh) {
+    const id = String(r.group_id);
+    const at = iso(r.at) ?? "";
+    const cur = byGroup.get(id);
+    byGroup.set(id, { count: (cur?.count ?? 0) + 1, at: cur && cur.at > at ? cur.at : at });
+  }
+  const names = await q(`SELECT id, name FROM wa_groups WHERE id = ANY($1::text[])`, [Array.from(byGroup.keys())]);
+  const nameOf = new Map(names.map((n) => [String(n.id), String(n.name)]));
+  const hidden = new Set(cfg.hidden);
+  await pushEvents(
+    Array.from(byGroup, ([groupId, v]) => ({ groupId, groupName: nameOf.get(groupId) ?? groupId, count: v.count, at: v.at })).filter(
+      (e) => !hidden.has(e.groupId) && !hidden.has(e.groupName)
+    )
+  );
+}
+
+// آخر رسايل جديدة للتنبيه: من Redis، ومن غيره من Postgres (كاش 10 ثواني على السيرفر)
+// The latest new messages for the alert: from Redis; without it from Postgres (10 s server cache)
+let latestCache: { at: number; since: string | null; value: { cursor: string; events: WaEvent[] } } | null = null;
+export async function latestEvents(since: string | null): Promise<{ cursor: string; events: WaEvent[] }> {
+  if (eventsConfigured()) return eventsSince(since);
+  if (latestCache && latestCache.since === since && Date.now() - latestCache.at < 10_000) return latestCache.value;
+  const rows = await q(
+    `SELECT m.group_id, g.name, count(*)::int AS n, max(m.at) AS at, max(m.received_at) AS received
+     FROM wa_messages m JOIN wa_groups g ON g.id = m.group_id
+     WHERE m.received_at > $1::timestamptz AND NOT m.deleted AND m.type <> 'system'
+       AND m.at > now() - make_interval(mins => $2::int)
+     GROUP BY m.group_id, g.name`,
+    [since ?? new Date().toISOString(), cfg.alertMaxAgeMinutes]
+  );
+  const events: WaEvent[] = since
+    ? rows.map((r) => ({ receivedAt: iso(r.received) ?? "", groupId: String(r.group_id), groupName: String(r.name), count: Number(r.n), at: iso(r.at) ?? "" }))
+    : [];
+  const latest = events.reduce((max, e) => (e.receivedAt > max ? e.receivedAt : max), since ?? new Date().toISOString());
+  const value = { cursor: latest, events };
+  latestCache = { at: Date.now(), since, value };
+  return value;
 }
 
 // ===== الحالة: الجداول والأرقام وآخر طلب - status: tables, row counts and the last request =====

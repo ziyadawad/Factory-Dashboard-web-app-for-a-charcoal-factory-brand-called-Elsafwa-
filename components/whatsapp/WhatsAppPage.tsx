@@ -1,17 +1,21 @@
 "use client";
 
-// الصفحة 7 "واتساب": جروبات الواتساب قراية بس (مفيش كتابة ولا إرسال خالص). كروت الجروبات بآخر نشاط، والضغط على كارت
-// بيفتح الشات صفحة كاملة. بتسأل بس والصفحة ظاهرة (كل whatsapp.gridRefreshSeconds)، ووقف خالص في الخلفية
-// Page 7 "واتساب": read-only WhatsApp groups (no typing or sending anywhere). Group blocks by last activity; a block
-// opens the chat full page. Polls only while the page is visible (every whatsapp.gridRefreshSeconds)
+// الصفحة 7 "واتساب": جروبات الواتساب قراية بس (مفيش كتابة ولا إرسال خالص). 3 أعمدة جنب بعض، عمود لكل قسم بنوره ولونه،
+// وجوه كل عمود الجروبات بالأحدث فوق (ورسالة جديدة بتطلّع جروبها فوق بحركة). الضغط على جروب بيفتح الشات صفحة كاملة.
+// التحميل الكامل بس والصفحة ظاهرة (كل whatsapp.gridRefreshSeconds)، وعلى طول لما تنبيه رسالة جديدة يوصل
+// Page 7 "واتساب": read-only WhatsApp groups (no typing or sending anywhere). 3 columns side by side, one per section
+// with its own glow and color, groups newest first inside (a new message slides its group to the top). A group opens
+// the chat full page. Full loads only while visible (every gridRefreshSeconds), and at once when a new-message alert
+// arrives
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, RefreshCw, Users } from "lucide-react";
+import { CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Eye, RefreshCw } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
 import { sectionOf } from "@/lib/wa-sections";
+import { WaAlertItem } from "@/lib/wa-alert";
 import {
   cairoTime,
   groupColor,
@@ -19,9 +23,7 @@ import {
   markSeen,
   mediaUrl,
   minutesSince,
-  perDayText,
   shortWhen,
-  sortGroups,
   typePreview,
   waFetch,
   WaFetchError,
@@ -82,105 +84,148 @@ export function GroupAvatar({ group, size }: { group: WaGroup; size: number }) {
   );
 }
 
-function GroupBlock({ group, onOpen }: { group: WaGroup; onOpen: () => void }) {
-  const color = groupColor(group);
+// سطر جروب صغير جوه العمود: الصورة، الاسم والساعة، آخر رسالة (سطر أو اتنين)، وعدد الجديد
+// A compact group row inside a column: picture, name and time, the last message (1–2 lines), unread count
+function GroupRow({ group, color, pulse, onOpen }: { group: WaGroup; color: string; pulse: number | null; onOpen: () => void }) {
   const preview = group.lastText || typePreview(group.lastType) || "لسه مفيش رسايل";
   return (
     <button
       type="button"
+      data-wa-row={group.id}
       onClick={onOpen}
-      className="group relative text-start rounded-2xl border border-cardBorder bg-card/90 p-4 flex flex-col gap-3 overflow-hidden hover:bg-white/[0.04] transition-colors min-w-0"
-      style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}
+      // key الـ pulse بيعيد الحركة كل تنبيه - the pulse key restarts the flash on each alert
+      key={pulse ?? "still"}
+      className={`w-full text-start rounded-xl border border-white/[0.07] bg-card/85 px-3 py-2.5 flex items-start gap-3 hover:bg-white/[0.05] transition-colors min-w-0 ${pulse ? "wa-pulse" : ""}`}
     >
-      {/* نور خفيف بلون الجروب - a soft glow in the group color */}
-      <span aria-hidden className="pointer-events-none absolute -top-16 -end-16 h-40 w-40 rounded-full opacity-25 blur-3xl" style={{ background: color }} />
-      <div className="relative flex items-center gap-3 min-w-0">
-        <GroupAvatar group={group} size={52} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[19px] font-extrabold text-white truncate">{group.name}</p>
-          {group.participants !== null && (
-            <p className="text-[13px] text-gray-400 inline-flex items-center gap-1">
-              <Users size={13} /> <span className="font-numbers">{group.participants}</span> عضو
-            </p>
-          )}
-          {/* النشاط: متوسط آخر 30 يوم - activity: the 30-day average */}
-          <p className="text-[12px] font-bold font-numbers" style={{ color: group.perDay > 0 ? color : "#6B7280" }}>
-            {perDayText(group.perDay)}
-          </p>
-        </div>
-        <div className="shrink-0 flex flex-col items-end gap-1">
-          <span className={`font-numbers text-[13px] ${group.unread > 0 ? "font-bold" : "text-gray-500"}`} style={group.unread > 0 ? { color } : undefined}>
+      <GroupAvatar group={group} size={44} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="flex-1 min-w-0 text-[16px] min-[1600px]:text-[17px] font-extrabold text-white truncate">{group.name}</p>
+          <span className={`shrink-0 font-numbers text-[12px] ${group.unread > 0 ? "font-bold" : "text-gray-500"}`} style={group.unread > 0 ? { color } : undefined}>
             {shortWhen(group.lastAt)}
           </span>
+        </div>
+        <div className="flex items-start gap-2 min-w-0">
+          <p className="flex-1 min-w-0 text-[13px] min-[1600px]:text-[14px] text-gray-300 line-clamp-2 leading-[1.35]" dir="auto">
+            {group.lastSender && <span className="font-bold text-gray-200">{group.lastSender}: </span>}
+            {preview}
+          </p>
           {group.unread > 0 && (
-            <span className="min-w-[26px] h-[26px] px-1.5 rounded-full flex items-center justify-center font-numbers text-[14px] font-extrabold text-black" style={{ background: color }}>
+            <span className="shrink-0 mt-0.5 min-w-[22px] h-[22px] px-1.5 rounded-full flex items-center justify-center font-numbers text-[12px] font-extrabold text-black" style={{ background: color }}>
               {group.unread > 99 ? "99+" : group.unread}
             </span>
           )}
         </div>
       </div>
-      <p className="relative text-[15px] text-gray-300 line-clamp-2 min-h-[2.6em] leading-[1.3]" dir="auto">
-        {group.lastSender && <span className="font-bold text-gray-200">{group.lastSender}: </span>}
-        {preview}
-      </p>
     </button>
   );
 }
 
-const COLLAPSED_KEY = "elsafwa:wa:collapsed";
+const reduceMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-// قسم: عنوان بيتقفل ويتفتح ("▾ الإنتاج · 14 جروب") بلونه، وتحته الجروبات 4 في الصف (3 على شاشة أصغر من 1600)
-// A section: a collapsible header in its color ("▾ الإنتاج · 14 جروب"), then its groups, 4 per row (3 under 1600 wide)
-function GroupSection({
+// عمود قسم: عنوان ثابت فوق (الأيقونة والاسم والعدد والجديد)، وتحته الجروبات بالأحدث بسكرول لوحده، ونور خفيف بلونه.
+// الجروب اللي جاله رسالة بيطلع فوق بحركة (FLIP)، ولو جه تنبيه العمود بيطلع لفوق والجروب بيلمع مرتين
+// A section column: a fixed header (icon, title, count, new badge), its groups newest first in their own scroll, and a
+// soft glow in its color. A group with a new message slides to the top (FLIP); on an alert the column scrolls up and
+// the group flashes twice
+function GroupColumn({
   section,
   groups,
-  collapsed,
-  onToggle,
+  alert,
   onOpen,
 }: {
   section: (typeof cfg.sections)[number];
   groups: WaGroup[];
-  collapsed: boolean;
-  onToggle: () => void;
+  alert: WaAlertItem | null;
   onOpen: (g: WaGroup) => void;
 }) {
+  const color = section.color;
   const unread = groups.reduce((n, g) => n + g.unread, 0);
+  const scroller = useRef<HTMLDivElement>(null);
+  const tops = useRef(new Map<string, number>());
+  const order = groups.map((g) => g.id).join("|");
+
+  // FLIP: كل سطر بيتحرك من مكانه القديم لمكانه الجديد - each row slides from its old place to the new one
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const rows = Array.from(el.querySelectorAll<HTMLElement>("[data-wa-row]"));
+    const next = new Map<string, number>();
+    for (const row of rows) next.set(row.dataset.waRow ?? "", row.offsetTop);
+    if (!reduceMotion()) {
+      for (const row of rows) {
+        const before = tops.current.get(row.dataset.waRow ?? "");
+        const after = next.get(row.dataset.waRow ?? "") ?? 0;
+        if (before === undefined || before === after) continue;
+        row.style.transition = "none";
+        row.style.transform = `translateY(${before - after}px)`;
+        requestAnimationFrame(() => {
+          row.style.transition = "transform 600ms cubic-bezier(0.22, 1, 0.36, 1)";
+          row.style.transform = "";
+        });
+      }
+    }
+    tops.current = next;
+  }, [order]);
+
+  // تنبيه لجروب في العمود ده: نطلع لفوق - an alert for a group in this column: scroll to the top
+  const alerted = alert && groups.some((g) => g.id === alert.groupId) ? alert : null;
+  useEffect(() => {
+    if (alerted) scroller.current?.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" });
+  }, [alerted?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <section className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!collapsed}
-        className="flex items-center gap-3 rounded-xl border px-4 py-2.5 text-start"
-        style={{ borderColor: `${section.color}66`, background: `linear-gradient(90deg, ${section.color}1f, transparent 70%)` }}
+    <section
+      className="wa-col relative min-h-0 min-w-0 flex flex-col rounded-2xl border"
+      style={{ "--c": color, borderColor: `${color}55`, boxShadow: `0 0 28px -10px ${color}88, inset 0 0 0 1px ${color}14` } as CSSProperties}
+    >
+      {/* النور ورا العمود - the glow behind the column */}
+      <div aria-hidden className="wa-col-glow" />
+      {/* العنوان (ثابت) - the header (fixed) */}
+      <header
+        className="relative shrink-0 flex items-center gap-2 rounded-t-2xl border-b px-4 py-3"
+        style={{ borderColor: `${color}40`, background: `linear-gradient(180deg, ${color}30, ${color}08)` }}
       >
-        <span className="text-[18px] text-gray-300 transition-transform" style={{ transform: collapsed ? "rotate(90deg)" : "none" }}>
-          ▾
-        </span>
-        <span className="text-[22px] font-extrabold" style={{ color: section.color }}>
+        <span className="text-[20px] min-[1600px]:text-[22px] font-extrabold truncate" style={{ color }}>
           {section.icon} {section.title}
         </span>
-        <span className="text-[16px] text-gray-300">
+        <span className="shrink-0 text-[14px] text-gray-300">
           · <span className="font-numbers font-bold">{groups.length}</span> جروب
         </span>
         {unread > 0 && (
-          <span className="rounded-full px-2.5 py-0.5 font-numbers text-[14px] font-extrabold text-black" style={{ background: section.color }}>
+          <span className="ms-auto shrink-0 rounded-full px-2.5 py-0.5 font-numbers text-[13px] font-extrabold text-black" style={{ background: color }}>
             {unread > 99 ? "99+" : unread} جديدة
           </span>
         )}
-      </button>
-      {!collapsed && (
-        <div className="grid grid-cols-3 min-[1600px]:grid-cols-4 gap-4">
-          {groups.map((g) => (
-            <GroupBlock key={g.id} group={g} onOpen={() => onOpen(g)} />
-          ))}
-        </div>
-      )}
+      </header>
+      {/* الجروبات (سكرول لوحده) - the groups (own scroll) */}
+      <div ref={scroller} className="wa-col-scroll relative flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-2">
+        {groups.length === 0 ? (
+          <p className="py-8 text-center text-[14px] text-gray-500">مفيش جروبات هنا لسه</p>
+        ) : (
+          groups.map((g) => (
+            <GroupRow key={g.id} group={g} color={color} pulse={alerted && alerted.groupId === g.id ? alerted.nonce : null} onOpen={() => onOpen(g)} />
+          ))
+        )}
+      </div>
     </section>
   );
 }
 
-export default function WhatsAppPage({ active, onOverlayChange }: { active: boolean; onOverlayChange: (open: boolean) => void }) {
+// الأحدث فوق - newest first
+const byLast = (a: WaGroup, b: WaGroup) => (b.lastAt ?? "").localeCompare(a.lastAt ?? "") || a.name.localeCompare(b.name);
+
+export default function WhatsAppPage({
+  active,
+  onOverlayChange,
+  alert = null,
+  refreshKey = 0,
+}: {
+  active: boolean;
+  onOverlayChange: (open: boolean) => void;
+  alert?: WaAlertItem | null; // تنبيه رسالة جديدة دلوقتي - the current new-message alert
+  refreshKey?: number; // بيزيد مع أي رسايل جديدة = تحديث على طول - bumps on new messages = refresh now
+}) {
   const [open, setOpen] = useState<WaGroup | null>(null);
   const [seenState, setSeenState] = useState<{ seen: Record<string, string>; baseline: string } | null>(null);
   useEffect(() => setSeenState(loadSeen()), []);
@@ -197,6 +242,10 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
     return `/api/wa/groups?seen=${encodeURIComponent(parts.join(","))}`;
   }, [ids, seenState]);
   const { data, error, mutate } = usePolling<WaGroupsResponse>(key, waFetch, cfg.gridRefreshSeconds * 1000, active && !open, { keepPreviousData: true });
+  // رسالة جديدة (من التنبيه) والصفحة ظاهرة: تحديث على طول عشان الجروب يطلع فوق - new message while shown: refresh now
+  useEffect(() => {
+    if (active && refreshKey > 0) mutate();
+  }, [refreshKey, active, alert?.nonce, mutate]);
 
   // أول رد بيقول الجروبات إيه، فالطلب الجاي بيبعت آخر زيارة لكل واحد - the first answer lists the groups; next requests send each visit
   const groupIds = (data?.groups ?? []).map((g) => g.id).sort().join("|");
@@ -204,32 +253,16 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
     if (groupIds) setIds(groupIds.split("|"));
   }, [groupIds]);
 
-  const groups = useMemo(() => sortGroups(data?.groups ?? []), [data]);
-  // الأقسام بترتيب الكونفج، وكل قسم بنفس ترتيب الجروبات (الصورة الأول وبعدين رسالة/يوم). قسم فاضي مش بيظهر
-  // Sections in config order, each keeping the group sort (picture first, then messages/day). Empty sections are hidden
-  const sections = useMemo(
-    () =>
-      cfg.sections
-        .map((section) => ({ section, list: groups.filter((g) => sectionOf(g).id === section.id) }))
-        .filter((s) => s.list.length > 0),
-    [groups]
-  );
-  // الأقسام المقفولة (بتتفتكر في المتصفح) - collapsed sections (remembered in this browser)
-  const [collapsed, setCollapsed] = useState<string[]>([]);
-  useEffect(() => {
-    try {
-      setCollapsed(JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
-    } catch {}
-  }, []);
-  const toggleSection = useCallback((id: string) => {
-    setCollapsed((list) => {
-      const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-      try {
-        window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
+  const groups = useMemo(() => (data?.groups ?? []).filter(Boolean), [data]);
+  // الأعمدة بترتيب whatsapp.columnOrder (من اليمين)، وجوه كل عمود الأحدث فوق - columns in columnOrder, newest first inside
+  const columns = useMemo(() => {
+    const ids = cfg.columnOrder.filter((id) => cfg.sections.some((s) => s.id === id));
+    const rest = cfg.sections.filter((s) => !ids.includes(s.id)).map((s) => s.id);
+    return [...ids, ...rest].map((id) => {
+      const section = cfg.sections.find((s) => s.id === id)!;
+      return { section, list: groups.filter((g) => sectionOf(g).id === id).sort(byLast) };
     });
-  }, []);
+  }, [groups]);
   const openGroup = useCallback((g: WaGroup) => {
     setSeenState((s) => (s ? { ...s, seen: markSeen(g.id) } : s));
     setOpen(g);
@@ -271,32 +304,24 @@ export default function WhatsAppPage({ active, onOverlayChange }: { active: bool
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pe-1">
-        {setupError ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
-            <AlertTriangle size={40} className="text-statusAmber" />
-            <p className="text-[20px] font-bold text-white">الواتساب لسه مش متوصل</p>
-            <p className="text-[16px] text-gray-400 max-w-[560px]">{setupError}</p>
-          </div>
-        ) : !data ? (
-          <div className="h-full flex items-center justify-center text-gray-500 text-[18px]">{error ? `مش قادرين نجيب الجروبات — بنحاول تاني… (${error instanceof Error ? error.message : ""})` : "جاري التحميل…"}</div>
-        ) : groups.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-500 text-[18px]">لسه مفيش جروبات وصلت من كمبيوتر الـ IT</div>
-        ) : (
-          <div className="flex flex-col gap-5">
-            {sections.map(({ section, list }) => (
-              <GroupSection
-                key={section.id}
-                section={section}
-                groups={list}
-                collapsed={collapsed.includes(section.id)}
-                onToggle={() => toggleSection(section.id)}
-                onOpen={openGroup}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {setupError ? (
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 text-center">
+          <AlertTriangle size={40} className="text-statusAmber" />
+          <p className="text-[20px] font-bold text-white">الواتساب لسه مش متوصل</p>
+          <p className="text-[16px] text-gray-400 max-w-[560px]">{setupError}</p>
+        </div>
+      ) : !data ? (
+        <div className="flex-1 min-h-0 flex items-center justify-center text-gray-500 text-[18px]">
+          {error ? `مش قادرين نجيب الجروبات — بنحاول تاني… (${error instanceof Error ? error.message : ""})` : "جاري التحميل…"}
+        </div>
+      ) : (
+        // 3 أعمدة جنب بعض (من اليمين)، والصفحة نفسها مش بتعمل سكرول - 3 columns side by side (from the right); the page never scrolls
+        <div className="flex-1 min-h-0 grid grid-cols-3 gap-4">
+          {columns.map(({ section, list }) => (
+            <GroupColumn key={section.id} section={section} groups={list} alert={alert} onOpen={openGroup} />
+          ))}
+        </div>
+      )}
 
       {open && <WhatsAppChat group={open} active={active} onClose={closeChat} />}
     </div>

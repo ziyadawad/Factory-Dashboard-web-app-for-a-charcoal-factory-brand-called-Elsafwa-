@@ -615,3 +615,76 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     animation: none !important;
   }
 }
+
+/* صفحة الواتساب: أعمدة الأقسام. --c = لون العمود. نور خفيف ورا كل عمود، سكرول رفيع بلونه، ولمعة مرتين للجروب الجديد
+   WhatsApp page: the section columns. --c = the column color. A soft glow behind each column, a thin scrollbar in its
+   color, and a two-time flash for a group with a new message */
+.wa-col {
+  isolation: isolate;
+  background: rgba(17, 24, 39, 0.55);
+}
+.wa-col-glow {
+  position: absolute;
+  inset: -18px;
+  z-index: -1;
+  border-radius: 28px;
+  background: radial-gradient(60% 45% at 50% 0%, var(--c), transparent 75%), radial-gradient(70% 55% at 50% 100%, var(--c), transparent 80%);
+  opacity: 0.13;
+  filter: blur(36px);
+  pointer-events: none;
+  animation: wa-glow-breathe 9s ease-in-out infinite;
+}
+@keyframes wa-glow-breathe {
+  0%,
+  100% {
+    opacity: 0.11;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+.wa-col-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--c) 70%, transparent) transparent;
+}
+.wa-col-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.wa-col-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wa-col-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c) 65%, transparent);
+  border-radius: 6px;
+}
+.wa-pulse {
+  animation: wa-pulse 0.9s ease-in-out 2;
+}
+@keyframes wa-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    border-color: rgba(255, 255, 255, 0.07);
+  }
+  50% {
+    box-shadow: 0 0 22px 4px color-mix(in srgb, var(--c) 75%, transparent);
+    border-color: var(--c);
+    background-color: color-mix(in srgb, var(--c) 18%, #111827);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-col-glow {
+    animation: none;
+  }
+  .wa-col-scroll {
+    scroll-behavior: auto;
+  }
+  /* من غير حركة: لمعة ثابتة بدل النبض - no motion: a static highlight instead of the pulse */
+  .wa-pulse {
+    animation: none;
+    border-color: var(--c);
+    box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c) 55%, transparent);
+  }
+}

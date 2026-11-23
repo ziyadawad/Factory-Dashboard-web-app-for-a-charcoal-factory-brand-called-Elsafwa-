@@ -24,6 +24,7 @@ import WhatsAppPage from "@/components/whatsapp/WhatsAppPage";
 import OperatorQrButton from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
+import { useWhatsAppAlerts } from "@/lib/wa-alert";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -192,6 +193,9 @@ export default function Dashboard() {
   const chime = useChime();
   const alert = useKilnExitAlerts(production, paused, chime.play);
   const alertOn = alert.current !== null;
+  // تنبيه الواتساب: بعد الطرحة (الطرحة ليها الأولوية)، وبيستنى لو لوحة أو شات مفتوح - the WhatsApp alert (kiln first)
+  const waAlert = useWhatsAppAlerts({ blocked: paused, kilnBusy: alertOn || alert.pending > 0, playChime: chime.playSoft });
+  const waOn = waAlert.current !== null;
   // الطرحة بآخر بياناتها (الوزن ممكن يوصل بعدين من ERPNext) - the exit with its latest values (ERPNext may add the weight later)
   const alertExit = useMemo(() => {
     const cur = alert.current;
@@ -230,6 +234,33 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertOn, alert.current]);
 
+  // تنبيه الواتساب: يروح لصفحة الواتساب alertHoldSeconds، وبعدين يرجع للصفحة اللي كان عليها (والمتثبتة بتفضل متثبتة).
+  // لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده
+  // The WhatsApp alert: go to the WhatsApp page for alertHoldSeconds, then back to the previous page (a pinned page
+  // stays pinned). A kiln alert in between wins; WhatsApp resumes after it
+  const whatsappIndex = PAGES.findIndex((p) => p.id === "whatsapp");
+  const waReturnRef = useRef<number | null>(null);
+  const wasWaOn = useRef(false);
+  useEffect(() => {
+    if (whatsappIndex < 0) return;
+    if (alertOn) {
+      wasWaOn.current = false;
+      waReturnRef.current = null;
+      return;
+    }
+    if (waOn) {
+      if (!wasWaOn.current) waReturnRef.current = pageIndex !== whatsappIndex ? pageIndex : null;
+      wasWaOn.current = true;
+      if (pageIndex !== whatsappIndex) changePage(whatsappIndex, 1);
+    } else if (wasWaOn.current) {
+      wasWaOn.current = false;
+      const back = waReturnRef.current;
+      waReturnRef.current = null;
+      if (back !== null) changePage(back, -1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waOn, waAlert.current?.nonce, alertOn]);
+
   // الكيبورد: تحت / PageDown / الشمال = الجاية، فوق / PageUp / اليمين = اللي فاتت (وبتلف)
   // Keyboard: ArrowDown / PageDown / ArrowLeft = next, ArrowUp / PageUp / ArrowRight = previous (wraps around)
   useEffect(() => {
@@ -254,10 +285,10 @@ export default function Dashboard() {
     const seconds = PAGES[pageIndex]?.durationSeconds;
     const next = nextInRotation(pageIndex);
     // التنبيه شغال = التقليب واقف، ولما يخلص العداد بيبدأ من الأول - alert on = rotation held; afterwards the timer restarts
-    if (paused || pinned || alertOn || !autoRotate || next === pageIndex || !(seconds > 0)) return;
+    if (paused || pinned || alertOn || waOn || !autoRotate || next === pageIndex || !(seconds > 0)) return;
     const timer = setTimeout(() => changePage(next, 1), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [pageIndex, switchCount, paused, pinned, alertOn, autoRotate, changePage]);
+  }, [pageIndex, switchCount, paused, pinned, alertOn, waOn, autoRotate, changePage]);
 
   // حركة التقليب: الجديدة بتدخل من تحت (الجاية) أو من فوق (اللي فاتت)، والقديمة بتخرج عكسها وهي بتختفي.
   // "حركة أقل" في الجهاز: من غير حركة، ظهور تدريجي بس
@@ -399,7 +430,9 @@ export default function Dashboard() {
             onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
           />;
       case "whatsapp":
-        return <WhatsAppPage active={pageId === "whatsapp"} onOverlayChange={setWaChatOpen} />;
+        return (
+          <WhatsAppPage active={pageId === "whatsapp"} onOverlayChange={setWaChatOpen} alert={waAlert.current} refreshKey={waAlert.activity} />
+        );
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>

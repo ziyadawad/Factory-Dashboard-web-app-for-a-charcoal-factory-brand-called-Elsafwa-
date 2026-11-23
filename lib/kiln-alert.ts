@@ -36,7 +36,8 @@ function cairoStamp(ms: number): string {
 // ===== الصوت - the chime =====
 // Web Audio: بيتحمل مرة واحدة، والـ AudioContext بيقول لو المتصفح مانع الصوت (suspended) لحد أول ضغطة
 // Web Audio: loaded once; the AudioContext tells whether the browser blocks sound (suspended) until a first gesture
-export type Chime = { play: () => void; needsUnlock: boolean; unlock: () => void };
+// play = صوت الطرحة (الملف)، playSoft = نغمة واتساب هادية (متولدة، مش ملف) - play = the kiln sound, playSoft = a soft WhatsApp tone
+export type Chime = { play: () => void; playSoft: () => void; needsUnlock: boolean; unlock: () => void };
 
 export function useChime(): Chime {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -128,7 +129,31 @@ export function useChime(): Chime {
   // الزرار بيظهر لو الصوت ممنوع: من أول مرة لو لسه متفعلش، ولو اتفعل قبل كده بس لما صوت يتمنع فعلا
   // The button shows while sound is blocked: right away if never enabled, else only once a chime was really blocked
   const needsUnlock = ALERTS_ENABLED && !running && (!remembered || failed);
-  return { play, needsUnlock, unlock };
+  // نغمتين ناعمين طالعين (مختلفة عن صوت الطرحة)، على نفس الـ AudioContext اللي زرار "فعّل الصوت" بيفكه
+  // Two soft rising notes (unlike the kiln sound), on the same AudioContext the "فعّل الصوت" button unlocks
+  const playSoft = useCallback(() => {
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.state !== "running") return;
+    const volume = Math.max(0, Math.min(1, cfg.alertVolume)) * 0.35;
+    [
+      { freq: 784, at: 0 }, // G5
+      { freq: 1175, at: 0.14 }, // D6
+    ].forEach(({ freq, at }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = ctx.currentTime + at;
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  }, []);
+
+  return { play, playSoft, needsUnlock, unlock };
 }
 
 // ===== الطابور - the queue =====
