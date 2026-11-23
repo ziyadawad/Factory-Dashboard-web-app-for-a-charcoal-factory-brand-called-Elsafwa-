@@ -53,7 +53,7 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
   const byDate = new Map(days.map((d) => [d.date, d.tally]));
   const daily = Array.from({ length: Number(data.today.slice(8)) }, (_, i) => {
     const tally = byDate.get(`${data.today.slice(0, 8)}${String(i + 1).padStart(2, "0")}`);
-    return { day: i + 1, value: !tally ? 0 : total.weighed > 0 ? Math.round((tally.kg / 1000) * 100) / 100 : tally.count };
+    return { day: i + 1, value: !tally ? 0 : total.weighed > 0 ? Math.round((tally.kg / 1000) * 100) / 100 : tally.batches };
   });
   const th = "px-3 py-2 font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
   const td = "px-3 border-b border-cardBorder/60";
@@ -94,9 +94,14 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
 
         <div className="shrink-0 flex items-stretch gap-3 px-5 py-3 border-b border-cardBorder">
           <Box label="إنتاج الشهر (صافي)" value={formatTons(total.kg)} unit="طن" color="text-brandOrange" />
-          <Box label="عدد الطرحات" value={formatNumber(total.count)} />
-          <Box label="متوسط صافي الطرحة" value={total.weighed ? formatTons(total.kg / total.weighed) : "—"} unit={total.weighed ? "طن" : undefined} />
-          <Box label="بدون وزن" value={formatNumber(unweighed)} unit="طرحة" color={unweighed ? "text-gray-300" : "text-gray-600"} />
+          <Box label="عدد الطرحات" value={formatNumber(total.batches)} />
+          <Box label="عدد الترولات" value={formatNumber(total.count)} />
+          <Box
+            label="متوسط وزن الطرحة"
+            value={total.weighedBatches ? formatTons(total.batchKg / total.weighedBatches) : "—"}
+            unit={total.weighedBatches ? "طن" : undefined}
+          />
+          <Box label="بدون وزن" value={formatNumber(unweighed)} unit="ترول" color={unweighed ? "text-gray-300" : "text-gray-600"} />
           <Box label="أيام فيها طرحات" value={formatNumber(days.length)} unit="يوم" />
         </div>
 
@@ -125,11 +130,13 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                         <td colSpan={7} className="px-4 py-0.5 border-b border-cardBorder bg-background/70 font-bold">
                           <span className="text-white">{formatDayName(day.date)}</span>
                           <span className="text-gray-500"> — </span>
-                          <span className="text-gray-200">{n(formatNumber(day.tally.count))} طرحة</span>
+                          <span className="text-gray-200">
+                            {n(formatNumber(day.tally.batches))} طرحة · {n(formatNumber(day.tally.count))} ترول
+                          </span>
                           <span className="text-gray-500"> · </span>
                           <span className="text-brandOrange">{n(formatTons(day.tally.kg))} طن</span>
                           {day.tally.count > day.tally.weighed && (
-                            <span className="text-gray-500 font-normal"> ({day.tally.count - day.tally.weighed} بدون وزن)</span>
+                            <span className="text-gray-500 font-normal"> ({day.tally.count - day.tally.weighed} ترول بدون وزن)</span>
                           )}
                         </td>
                       </tr>

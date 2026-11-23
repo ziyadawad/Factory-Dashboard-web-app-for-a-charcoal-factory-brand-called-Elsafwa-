@@ -71,6 +71,8 @@ function parseExit(raw: unknown): LiveExit | null {
     emptyKg: empty,
     trolley: text(e.trolley),
     room: text(e.room),
+    batchId: text(e.batchId ?? e.batch_id, 80),
+    batchSize: Number(e.batchSize ?? e.batch_size) > 0 ? Number(e.batchSize ?? e.batch_size) : null,
     live: true,
     erpName: text(e.erpName ?? e.erp_name, 80),
   };
@@ -209,8 +211,10 @@ export function withLiveExits(data: ProductionData, live: LiveExit[]): Productio
       match.trolley ||= l.trolley;
       match.room ||= l.room;
       match.type ||= l.type;
+      match.batchId ||= l.batchId;
+      match.batchSize ??= l.batchSize;
     } else {
-      added.push({ id: l.id, date: l.date, time: l.time, kiln: l.kiln, type: l.type, kg: l.kg, fullKg: l.fullKg, emptyKg: l.emptyKg, trolley: l.trolley, room: l.room, live: true });
+      added.push({ id: l.id, date: l.date, time: l.time, kiln: l.kiln, type: l.type, kg: l.kg, fullKg: l.fullKg, emptyKg: l.emptyKg, trolley: l.trolley, room: l.room, batchId: l.batchId, batchSize: l.batchSize, live: true });
     }
   }
   if (added.length === 0) return { ...data, exits };

@@ -333,7 +333,7 @@ export interface ProductionType {
   color: string; // "#FF7A00"
 }
 
-// طرحة خرجت (سجل Kiln Exit) - one batch out of a kiln (a Kiln Exit record)
+// ترول خرج (سجل Kiln Exit)؛ الطرحة = 2 أو 3 منهم (lib/batches.ts) - one trolley out of a kiln; a batch = 2 or 3 of them
 export interface ProductionExit {
   id: string;
   date: string; // "2026-11-14" بتوقيت القاهرة - Cairo time
@@ -345,6 +345,8 @@ export interface ProductionExit {
   emptyKg: number | null; // الوزن فاضي (الترول لوحده) - empty weight (the trolley alone)
   trolley: string; // رقم / اسم الترول، "" = مش معروف - the trolley number / name, "" = unknown
   room: string; // الغرفة، "" = مش معروفة - the room, "" = unknown
+  batchId: string; // الطرحة (batch_id)، "" = مفيش (بتتجمع بالقاعدة) - the batch id, "" = none (grouped by the rule)
+  batchSize: number | null; // عدد ترولات الطرحة (batch_size) - trolleys in the batch
   live?: boolean; // جاية من الإيجنت على الشبكة ولسه مش في ERPNext - from the LAN agent, not in ERPNext yet
   liveId?: string; // سجل ERPNext اللي اتشاف الأول كحدث مباشر (id الحدث) - an ERPNext record first seen as a live event (its id)
 }
@@ -698,6 +700,8 @@ export type ConfigErpBatches = (
       emptyWeightField: string; // فاضي بالكيلو (Float) - empty weight in kg (Float)
       trolleyField: string; // الترول - the trolley
       roomField: string; // الغرفة - the room
+      batchIdField: string; // الطرحة (Data) - the batch id
+      batchSizeField: string; // عدد الترولات (Int) - trolleys in the batch
     }
 ) & { types: ConfigBatchType[]; defaultTypeColor: string; optionsCacheMinutes: number };
 
@@ -1189,6 +1193,9 @@ export interface OperatorExit {
   tareKg: number | null;
   netKg: number | null;
   manual: boolean;
+  date: string; // "2026-11-23"
+  batchId: string; // "" = مفيش - none
+  batchSize: number | null;
 }
 
 // اللي الفورم بيبعته للحفظ - what the form sends to save
@@ -1203,6 +1210,20 @@ export interface OperatorSaveRequest {
   pendingId: string | null;
   fromScale: boolean; // الوزن اتاخد من الميزان المباشر (مش متكتب بالإيد) - taken from the live scale, not typed
   confirmDuplicate: boolean; // الأوبريتر وافق رغم إن الترول اتسجل من شوية - confirmed despite a recent same trolley
+  // الطرحة: batchId = كمّل طرحة مفتوحة (الفرن والغرفة والنوع بيتاخدوا منها)، أو null + batchSize = طرحة جديدة
+  // The batch: batchId = continue an open batch (kiln, room and type come from it), or null + batchSize = a new batch
+  batchId: string | null;
+  batchSize: number | null;
+}
+
+// ملخص الطرحة بعد الحفظ - the batch summary after a save
+export interface OperatorBatchSummary {
+  batchId: string;
+  kiln: string;
+  size: number | null;
+  trolleys: { trolley: string; netKg: number | null }[]; // الأقدم الأول - oldest first
+  totalKg: number;
+  complete: boolean;
 }
 
 // آخر قراية من الميزان (من /api/scale/live) - the latest scale reading

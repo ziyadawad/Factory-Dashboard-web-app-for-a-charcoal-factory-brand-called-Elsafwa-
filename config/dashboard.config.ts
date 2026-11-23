@@ -281,7 +281,7 @@ export const dashboardConfig = {
     // with a "غير متصل" badge, else "غير متصل" (never fake zeros)
     batches: {
       source: "erp",
-      exitsDoctype: "Kiln Exit", // خروج طرحات - سجل لكل طرحة
+      exitsDoctype: "Kiln Exit", // سجل لكل ترول (الطرحة = 2 أو 3 ترولات بنفس batch_id)
       typeField: "charcoal_type", // نوع الفحم (Select) - the charcoal type field
       // الوزن بالكيلو (Float). لو الحقل لسه مش موجود في الـ DocType كل الطرحات بتبقى "بدون وزن" لحد ما يتضاف
       // Weight in kg (Float). While the DocType has no such field every batch shows "بدون وزن" until it is added
@@ -292,6 +292,12 @@ export const dashboardConfig = {
       emptyWeightField: "وزن_الترول_الفاضي_كجم", // وزن الترول الفاضي (كجم) - اسم الحقل في ERPNext عربي
       trolleyField: "trolley",
       roomField: "room",
+      // الطرحة: batch_id (Data "الطرحة") بيربط ترولات نفس الطرحة، وbatch_size (Int "عدد الترولات") 2 أو 3
+      // السجلات اللي من غيرهم (القديمة) بتتجمع بقاعدة production.batchWindowMinutes / maxTrolleysPerBatch
+      // The batch: batch_id (Data) links the trolleys of one batch, batch_size (Int) = 2 or 3.
+      // Records without them (older ones) are grouped by the production.batchWindowMinutes / maxTrolleysPerBatch rule
+      batchIdField: "batch_id",
+      batchSizeField: "batch_size",
       // الأنواع بتتقري من خيارات charcoal_type في الـ DocType نفسه، فأي نوع جديد بيظهر لوحده بـ defaultTypeColor
       // واللي هنا بيحدد الترتيب واللون للأنواع المعروفة (الأسامي بتتطابق بعد توحيد الحروف: ة = ه، أ = ا ...)
       // Types are read from the DocType's charcoal_type options, so a new option shows up on its own with
@@ -470,6 +476,15 @@ export const dashboardConfig = {
     // Today's hourly chart: from this hour to this hour (exits outside go into the first / last bar)
     hourFrom: 6,
     hourTo: 22,
+    // ===== الطرحة = 2 أو 3 ترولات من نفس الفرن (كل وزنة = ترول واحد) =====
+    // السجلات القديمة من غير batch_id بتتجمع كده: نفس الفرن (ونفس الغرفة لو مكتوبة) وكل ترول خارج في حدود
+    // batchWindowMinutes دقيقة من الترول اللي قبله = نفس الطرحة، وبحد أقصى maxTrolleysPerBatch ترول في الطرحة.
+    // وفي شاشة الأوبريتر: الطرحة بتفضل "مفتوحة" (الوزنة الجاية بتروحلها) لحد ما تكمل أو يعدي الوقت ده من آخر ترول
+    // A batch = 2 or 3 trolleys from one kiln (each weighing = one trolley). Older records without batch_id group by:
+    // same kiln (+ same room when set), each trolley within batchWindowMinutes of the previous one, at most
+    // maxTrolleysPerBatch trolleys. On the operator screen a batch stays open until full or this long after its last trolley
+    batchWindowMinutes: 15, // دقايق بين ترول والتاني في نفس الطرحة - minutes between trolleys of one batch
+    maxTrolleysPerBatch: 3, // أكبر عدد ترولات في الطرحة (الأوبريتر بيختار من 2 لحد كده) - most trolleys per batch (operator picks 2..this)
     glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
     // جوه المصنع: أحداث "kiln_exit" على طول من الإيجنت ({it.cameraBaseUrl}/status.json كل liveSeconds، مهلة liveTimeoutMs)
     // فالطرحة الجديدة بتظهر في "آخر وزنة" و"طرحات النهارده" على طول. برا المصنع = التحديث العادي (refreshSeconds)
@@ -482,7 +497,7 @@ export const dashboardConfig = {
     liveTimeoutMs: 2000,
     liveWsPath: null as string | null,
     // ===== تنبيه طرحة جديدة (على كل الصفحات) =====
-    // طرحة جديدة (من الإيجنت على الشبكة، أو التحديث العادي برا المصنع): صوت قصير (public/sounds/kiln-exit.wav)،
+    // كل ترول جديد (من الإيجنت على الشبكة، أو التحديث العادي برا المصنع) والكارت بيوري تقدم الطرحة بتاعته: صوت قصير (public/sounds/kiln-exit.wav)،
     // والشاشة بتروح لصفحة "الإنتاج والأفران" وتقف عليها alertHoldSeconds مع كارت كبير للطرحة، وبعدين التقليب بيكمل
     // (ولو كانت صفحة تانية متثبتة بترجعلها). كذا طرحة مع بعض = ورا بعض alertQueueSeconds لكل واحدة وصوت لكل طرحة.
     // مش بيشتغل أول ما الصفحة تفتح (الطرحات اللي بعد كده بس)، ولو لوحة تفاصيل مفتوحة بيستنى لحد ما تتقفل
@@ -495,7 +510,8 @@ export const dashboardConfig = {
     alertQueueSeconds: 5,
     alertSound: "/sounds/kiln-exit.wav",
     // مقاسات الكارت بالبكسل (ثابتة) - the card's sizes in px (fixed)
-    alertCard: { width: 860, titleFontSize: 54, weightFontSize: 120, unitFontSize: 34, chipFontSize: 32, labelFontSize: 18 },
+    // batchFontSize = سطر تقدم الطرحة "طرحة فرن 3 — ترول 2 من 3" وشرايح الترولات - the batch progress line and trolley chips
+    alertCard: { width: 860, titleFontSize: 54, weightFontSize: 110, unitFontSize: 34, chipFontSize: 30, labelFontSize: 18, batchFontSize: 26 },
   },
 
   // ============================================================
@@ -1041,9 +1057,13 @@ export const dashboardConfig = {
       lastChipFontSize: 22, // الفرن والنوع تحت الوزن - kiln and type under the weight
       lastTimeFontSize: 20, // ساعة الطرحة - the exit time
       lastAgoFontSize: 18, // "من X دقيقة" - how long ago
-      exitRowHeight: 64, // ارتفاع سطر الطرحة العادي - a normal exit row height
-      exitRowMin: 44, // أقل ارتفاع لما الطرحات كتير (وبعدها "+N طرحة تانية") - minimum when there are many exits
-      exitRowMax: 90, // أكبر ارتفاع لما الطرحات قليلة - maximum when there are only a few exits
+      // سطر الطرحة = سطرين: الساعة والفرن والنوع والمجموع، وتحتهم شرايح الترولات - a batch row = two lines: time / kiln /
+      // type / total, and the trolley chips under them
+      exitRowHeight: 84, // ارتفاع سطر الطرحة العادي - a normal batch row height
+      exitRowMin: 66, // أقل ارتفاع لما الطرحات كتير (وبعدها "+N طرحة تانية") - minimum when there are many batches
+      exitRowMax: 112, // أكبر ارتفاع لما الطرحات قليلة - maximum when there are only a few batches
+      exitChipFontSize: 16, // شرايح "ترول 22: 580" تحت الطرحة - the "ترول 22: 580" chips under a batch
+      lastBatchFontSize: 18, // "ضمن طرحة فرن 4 (2 من 3)" في "آخر وزنة" - the batch line in "آخر وزنة"
       exitTimeFontSize: 22, // الساعة - the time
       exitKilnFontSize: 20, // اسم الفرن - the kiln chip
       exitTypeFontSize: 22, // النوع - the charcoal type
@@ -1061,9 +1081,11 @@ export const dashboardConfig = {
         lastChipFontSize: 17,
         lastTimeFontSize: 16,
         lastAgoFontSize: 14,
-        exitRowHeight: 50,
-        exitRowMin: 38,
-        exitRowMax: 72,
+        exitRowHeight: 68,
+        exitRowMin: 54,
+        exitRowMax: 92,
+        exitChipFontSize: 13,
+        lastBatchFontSize: 14,
         exitTimeFontSize: 18,
         exitKilnFontSize: 15,
         exitTypeFontSize: 17,

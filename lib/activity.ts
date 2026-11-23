@@ -9,6 +9,7 @@
 import { erpPost, erpToday } from "./erp";
 import { describeOutgoing, GlRow, shortAccount } from "./account-details";
 import { doctypeInfo, BatchesMapping } from "./production";
+import { Batch, batchOf, BatchMember, groupBatches, progressText } from "./batches";
 import { normalizeArabic } from "./data-source";
 import { packetsOf, productOfItem } from "./sales";
 import { ActivityData, ActivityEvent, MoveOut } from "./types";
@@ -134,35 +135,87 @@ async function moneyEvents(since: string): Promise<ActivityEvent[]> {
   });
 }
 
-// ===== طرحات - kiln exits =====
+/// ===== ترولات خرجت (كل سجل Kiln Exit = ترول، والطرحة = 2 أو 3 ترولات) - trolleys out (a batch = 2 or 3) =====
+// كل ترول حدث لوحده، ومعاه الطرحة بتاعته "طرحة فرن 3 (2 من 3)" (lib/batches.ts على ترولات نفس الأيام)
+// Each trolley is its own event, with its batch "طرحة فرن 3 (2 من 3)" (lib/batches.ts over the same days' trolleys)
 async function kilnEvents(since: string): Promise<ActivityEvent[]> {
   const mapping = dashboardConfig.erp.batches;
   if (mapping.source !== "erp") return [];
   const info = await doctypeInfo(mapping as BatchesMapping);
-  const fields = ["name", "creation", "kiln", mapping.typeField, ...(info.hasWeight ? [mapping.weightField] : [])];
-  const rows = await getList<Record<string, string | number | null>>(mapping.exitsDoctype, {
+  const has = (field: string) => info.fields.includes(field);
+  const fields = [
+    "name",
+    "creation",
+    "kiln",
+    "exit_time",
+    mapping.typeField,
+    ...(info.hasWeight ? [mapping.weightField] : []),
+    ...[mapping.trolleyField, mapping.roomField, mapping.batchIdField, mapping.batchSizeField].filter(has),
+  ];
+  type Row = Record<string, string | number | null>;
+  const rows = await getList<Row>(mapping.exitsDoctype, {
     filters: [
       ["creation", ">=", since],
       ["docstatus", "!=", 2],
     ],
     fields,
   });
-  return rows.map((row) => {
+  if (rows.length === 0) return [];
+  const member = (row: Row): BatchMember => {
+    const at = stamp(row.exit_time);
     const kg = info.hasWeight ? Number(row[mapping.weightField]) : NaN;
+    return {
+      id: String(row.name),
+      date: at.slice(0, 10),
+      time: at.slice(11, 16),
+      kiln: String(row.kiln ?? "").trim(),
+      room: has(mapping.roomField) ? String(row[mapping.roomField] ?? "").trim() : "",
+      type: String(row[mapping.typeField] ?? "").trim(),
+      trolley: has(mapping.trolleyField) ? String(row[mapping.trolleyField] ?? "").trim() : "",
+      kg: Number.isFinite(kg) && kg > 0 ? kg : null,
+      batchId: has(mapping.batchIdField) ? String(row[mapping.batchIdField] ?? "").trim() : "",
+      batchSize: has(mapping.batchSizeField) ? Number(row[mapping.batchSizeField]) || null : null,
+    };
+  };
+  // الطرحات: كل ترولات الأيام دي (من أول يوم فيه ترول جديد) - batches over every trolley from the first event's day
+  let batches: Batch[] = [];
+  try {
+    const from = rows.map((r) => stamp(r.exit_time).slice(0, 10)).filter(Boolean).sort()[0];
+    const all = from
+      ? await getList<Row>(mapping.exitsDoctype, { filters: [["exit_time", ">=", `${from} 00:00:00`], ["docstatus", "!=", 2]], fields })
+      : rows;
+    batches = groupBatches(all.map(member), {
+      windowMinutes: dashboardConfig.production.batchWindowMinutes,
+      maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch,
+    });
+  } catch (error) {
+    console.error("[activity] kiln batches failed:", error instanceof Error ? error.message : error);
+  }
+  return rows.map((row) => {
+    const m = member(row);
+    const inBatch = batchOf(batches, m.id);
     return {
       id: `kiln:${row.name}`,
       kind: "kiln",
       at: stamp(row.creation),
-      title: "طرحة خرجت",
-      details: [String(row.kiln ?? "").trim(), String(row[mapping.typeField] ?? "").trim()].filter(Boolean).join(" · "),
+      title: inBatch && inBatch.index > 1 ? "ترول خرج" : "طرحة خرجت",
+      details: [
+        m.kiln,
+        m.type,
+        m.trolley ? `ترول ${m.trolley}` : "",
+        inBatch ? `طرحة ${progressText(inBatch.batch)}${inBatch.batch.complete && inBatch.batch.size !== null ? " ✓" : ""}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
       amount: null,
-      extra: Number.isFinite(kg) && kg > 0 ? `${qtyText(kg)} كجم صافي` : "بدون وزن",
+      extra: m.kg !== null ? `${qtyText(m.kg)} كجم صافي` : "بدون وزن",
       badge: null,
       doctype: mapping.exitsDoctype,
       docname: String(row.name),
     };
   });
 }
+
 
 // ===== فواتير البيع والمرتجعات - sales invoices and returns =====
 type InvoiceRow = {

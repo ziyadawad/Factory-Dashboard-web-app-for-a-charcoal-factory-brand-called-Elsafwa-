@@ -1,6 +1,6 @@
-// الإنتاج والأفران: سجلات Kiln Exit (طرحة لكل سجل) من أول الشهر (أو من امبارح لو أول الشهر) لحد النهارده
+// الإنتاج والأفران: سجلات Kiln Exit (ترول لكل سجل، والطرحة = 2 أو 3 ترولات - lib/batches.ts) من أول الشهر (أو من امبارح لو أول الشهر) لحد النهارده
 // + حالة الأفران من Workstation. قراية بس من ERPNext، كاش production.cacheSeconds على السيرفر
-// Production and kilns: Kiln Exit records (one per batch) from the month start (or yesterday, on the 1st) to today,
+// Production and kilns: Kiln Exit records (one per trolley; a batch = 2 or 3 trolleys, lib/batches.ts) from the month start (or yesterday, on the 1st) to today,
 // plus each kiln's Workstation status. Read-only; cached production.cacheSeconds on the server.
 // الملخصات (طن النهارده، لكل فرن/نوع/ساعة) بتتحسب في الواجهة من القايمة دي (lib/production-stats.ts)
 // The summaries (today's tons, per kiln / type / hour) are computed in the UI from this list (lib/production-stats.ts)
@@ -90,7 +90,8 @@ async function loadProduction(): Promise<ProductionData> {
   // The weight field is requested only when the DocType has it (old records without a weight = null)
   // ممتلئ / فاضي / الترول / الغرفة: بس اللي موجود في الـ DocType - full / empty / trolley / room: only those the DocType has
   const has = (field: string) => info.fields.includes(field);
-  const extra = [mapping.fullWeightField, mapping.emptyWeightField, mapping.trolleyField, mapping.roomField].filter(has);
+  // + الطرحة (batch_id / batch_size) - + the batch fields
+  const extra = [mapping.fullWeightField, mapping.emptyWeightField, mapping.trolleyField, mapping.roomField, mapping.batchIdField, mapping.batchSizeField].filter(has);
   const fields = ["name", mapping.typeField, "kiln", "exit_time", ...(info.hasWeight ? [mapping.weightField] : []), ...extra];
   const { data: rows } = await erpGet<{ data: KilnExitRow[] }>(`/api/resource/${encodeURIComponent(mapping.exitsDoctype)}`, {
     fields: JSON.stringify(fields),
@@ -118,6 +119,8 @@ async function loadProduction(): Promise<ProductionData> {
       emptyKg: has(mapping.emptyWeightField) ? kgOf(row[mapping.emptyWeightField]) : null,
       trolley: has(mapping.trolleyField) ? String(row[mapping.trolleyField] ?? "").trim() : "",
       room: has(mapping.roomField) ? String(row[mapping.roomField] ?? "").trim() : "",
+      batchId: has(mapping.batchIdField) ? String(row[mapping.batchIdField] ?? "").trim() : "",
+      batchSize: has(mapping.batchSizeField) ? Number(row[mapping.batchSizeField]) || null : null,
     };
   });
   return {

@@ -1,13 +1,20 @@
-// شاشة الأوبريتر على السيرفر: اختيارات الفورم، طرحات النهارده، وحفظ طرحة جديدة في ERPNext (Kiln Exit + Trolley جديد)
-// The operator screen, server side: form choices, today's exits, and saving a new exit to ERPNext (Kiln Exit + new Trolley)
+// شاشة الأوبريتر على السيرفر: اختيارات الفورم، ترولات النهارده، وحفظ ترول في ERPNext (Kiln Exit + Trolley جديد)
+// كل وزنة = ترول = سجل Kiln Exit، والطرحة = 2 أو 3 ترولات بنفس batch_id (وbatch_size = عددهم)
+// The operator screen, server side: form choices, today's trolleys, and saving a trolley to ERPNext (Kiln Exit + new
+// Trolley). Each weighing = one trolley = one Kiln Exit record; a batch = 2 or 3 of them sharing a batch_id (batch_size)
 import { dashboardConfig } from "@/config/dashboard.config";
 import { ErpError, erpInsert, erpPost, erpToday } from "./erp";
 import { normalizeArabic } from "./data-source";
 import { BatchesMapping, doctypeInfo } from "./production";
 import { getPending, restorePending, takePending } from "./scale-pending";
-import { OperatorExit, OperatorOptions, OperatorSaveRequest, OperatorTrolley } from "./types";
+import { OperatorBatchSummary, OperatorExit, OperatorOptions, OperatorSaveRequest, OperatorTrolley } from "./types";
+import { Batch, batchOf, BatchMember, BatchRules, groupBatches, makeBatchId } from "./batches";
 
 const cfg = dashboardConfig.operator;
+const RULES: BatchRules = {
+  windowMinutes: dashboardConfig.production.batchWindowMinutes,
+  maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch,
+};
 
 export class OperatorError extends Error {
   constructor(message: string, readonly status = 400, readonly extra: Record<string, unknown> = {}) {
@@ -67,22 +74,28 @@ const kg = (v: unknown) => {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : null;
 };
 
-export async function todayExits(): Promise<OperatorExit[]> {
+// ترولات بفلتر (الأحدث الأول) - trolleys matching filters, newest first
+async function listExits(filters: unknown[], limit: number): Promise<OperatorExit[]> {
   const m = mapping();
   const info = await doctypeInfo(m);
   const has = (f: string) => info.fields.includes(f);
-  const today = erpToday();
-  const fields = ["name", "kiln", "exit_time", m.typeField, ...[m.weightField, m.fullWeightField, m.emptyWeightField, m.trolleyField, m.roomField, cfg.manualField].filter(has)];
+  const fields = [
+    "name", "kiln", "exit_time", m.typeField,
+    ...[m.weightField, m.fullWeightField, m.emptyWeightField, m.trolleyField, m.roomField, cfg.manualField, m.batchIdField, m.batchSizeField].filter(has),
+  ];
   const { message } = await erpPost<{ message: Record<string, unknown>[] }>("/api/method/frappe.client.get_list", {
     doctype: m.exitsDoctype,
     fields,
-    filters: [["exit_time", ">=", `${today} 00:00:00`], ["exit_time", "<=", `${today} 23:59:59`]],
+    filters: [...filters, ["docstatus", "!=", 2]],
     order_by: "exit_time desc, creation desc",
-    limit_page_length: 200,
+    limit_page_length: limit,
   });
   return message.map((r) => ({
     name: String(r.name),
+    date: String(r.exit_time ?? "").slice(0, 10),
     time: String(r.exit_time ?? "").slice(11, 16),
+    batchId: String(r[m.batchIdField] ?? "").trim(),
+    batchSize: Number(r[m.batchSizeField]) > 0 ? Number(r[m.batchSizeField]) : null,
     kiln: String(r.kiln ?? ""),
     room: String(r[m.roomField] ?? ""),
     type: String(r[m.typeField] ?? ""),
@@ -92,6 +105,31 @@ export async function todayExits(): Promise<OperatorExit[]> {
     netKg: kg(r[m.weightField]),
     manual: Number(r[cfg.manualField]) === 1,
   }));
+}
+
+export async function todayExits(): Promise<OperatorExit[]> {
+  const today = erpToday();
+  return listExits([["exit_time", ">=", `${today} 00:00:00`], ["exit_time", "<=", `${today} 23:59:59`]], 300);
+}
+
+// ترولات طرحة واحدة بالـ batch_id - one batch's trolleys by batch_id
+async function batchExits(batchId: string): Promise<OperatorExit[]> {
+  return listExits([[mapping().batchIdField, "=", batchId]], 20);
+}
+
+export const exitMember = (e: OperatorExit): BatchMember => ({
+  id: e.name, date: e.date, time: e.time, kiln: e.kiln, room: e.room, type: e.type, trolley: e.trolley, kg: e.netKg, batchId: e.batchId, batchSize: e.batchSize,
+});
+
+function summaryOf(batch: Batch): OperatorBatchSummary {
+  return {
+    batchId: batch.batchId || batch.key,
+    kiln: batch.kiln,
+    size: batch.size,
+    trolleys: batch.trolleys.map((t) => ({ trolley: t.trolley, netKg: t.kg })),
+    totalKg: batch.kg,
+    complete: batch.size !== null && batch.count >= batch.size,
+  };
 }
 
 // ===== الحفظ - saving =====
@@ -111,10 +149,33 @@ async function recentSameTrolley(trolley: number): Promise<{ time: string; kiln:
   return r ? { time: String(r.exit_time ?? "").slice(11, 16), kiln: String(r.kiln ?? ""), netKg: kg(r[m.weightField]) } : null;
 }
 
-export async function saveExit(input: OperatorSaveRequest): Promise<{ name: string; netKg: number; trolleyCreated: boolean }> {
+export async function saveExit(
+  input: OperatorSaveRequest
+): Promise<{ name: string; netKg: number; trolleyCreated: boolean; batch: OperatorBatchSummary | null }> {
   const m = mapping();
   const [info, known] = await Promise.all([doctypeInfo(m), trolleys(true)]);
   const has = (f: string) => info.fields.includes(f);
+  // حقول الطرحة موجودة في الـ DocType؟ (لو لأ بتتجمع بالقاعدة بس) - batch fields present? (else rule grouping only)
+  const batchFields = has(m.batchIdField) && has(m.batchSizeField);
+
+  // الطرحة: كمّل طرحة مفتوحة (الفرن والغرفة والنوع منها) أو طرحة جديدة بعدد ترولاتها
+  // The batch: continue an open one (kiln, room and type come from it) or a new one with its trolley count
+  let batchId = "";
+  let batchSize: number | null = null;
+  if (input.batchId && batchFields) {
+    const members = await batchExits(input.batchId);
+    if (members.length === 0) throw new OperatorError("الطرحة دي مش موجودة — ابدأ طرحة جديدة", 409, { batchGone: true });
+    const batch = groupBatches(members.map(exitMember), RULES)[0];
+    if (batch.size !== null && batch.count >= batch.size) {
+      throw new OperatorError(`طرحة ${batch.kiln} كملت (${batch.count} ترول) — ابدأ طرحة جديدة`, 409, { batchGone: true });
+    }
+    input = { ...input, kiln: batch.kiln, room: batch.room || input.room, type: batch.type || input.type };
+    batchId = batch.batchId;
+    batchSize = batch.size;
+  } else {
+    batchSize = Number(input.batchSize);
+    if (!Number.isInteger(batchSize) || batchSize < 2 || batchSize > RULES.maxTrolleys) throw new OperatorError("اختار الطرحة كام ترول");
+  }
 
   // التحقق - validation
   if (!cfg.kilns.includes(input.kiln)) throw new OperatorError("اختار الفرن");
@@ -166,26 +227,50 @@ export async function saveExit(input: OperatorSaveRequest): Promise<{ name: stri
   // The pending weighing is taken before saving so two operators can't both save it; restored if saving fails
   if (pending && !(await takePending(pending.id))) throw new OperatorError("الوزنة دي اتسجلت خلاص من جهاز تاني", 409, { gone: true });
 
+  const exitTime = cairoDateTime(pending ? new Date(pending.time) : new Date());
+  // طرحة جديدة: batch_id من الفرن ووقت أول ترول (KILN-3-20261123-0715)، ولو متاخد نفس الدقيقة بيزيد "-2"
+  // A new batch: batch_id from the kiln and the first trolley time (KILN-3-20261123-0715), "-2" etc. when taken
+  if (batchFields && !batchId) {
+    const base = makeBatchId(input.kiln, exitTime.slice(0, 10), exitTime.slice(11, 16));
+    batchId = base;
+    for (let n = 2; n < 10 && (await batchExits(batchId)).length > 0; n++) batchId = `${base}-${n}`;
+  }
+
   const doc: Record<string, unknown> = {
     kiln: input.kiln,
     [m.roomField]: input.room,
     [m.typeField]: input.type,
-    exit_time: cairoDateTime(pending ? new Date(pending.time) : new Date()),
+    exit_time: exitTime,
     [m.weightField]: net,
   };
+  if (batchFields) {
+    doc[m.batchIdField] = batchId;
+    doc[m.batchSizeField] = batchSize;
+  }
   if (has(m.fullWeightField)) doc[m.fullWeightField] = gross;
   if (has(m.emptyWeightField)) doc[m.emptyWeightField] = tare;
   if (linkTrolley) doc[m.trolleyField] = String(trolleyNo);
   // يدوي = الوزن اتكتب بالإيد (مش من وزنة مستنية ولا من الميزان المباشر) - manual = typed, not from a pending / live scale
   if (has(cfg.manualField)) doc[cfg.manualField] = !pending && !input.fromScale ? 1 : 0;
 
+  let saved: { name: string };
   try {
-    const saved = await erpInsert<{ name: string }>(m.exitsDoctype, doc);
-    return { name: saved.name, netKg: net, trolleyCreated };
+    saved = await erpInsert<{ name: string }>(m.exitsDoctype, doc);
   } catch (error) {
     if (pending) await restorePending(pending).catch(() => null);
     const message = error instanceof ErpError ? error.message : String(error);
     console.error("[operator] save failed:", message);
     throw new OperatorError(`الحفظ في ERPNext فشل — جرب تاني (${message})`, 502);
   }
+
+  // ملخص الطرحة بعد الحفظ (لو فشل الترول اتحفظ برضه) - the batch summary after saving (the trolley is saved either way)
+  let batch: OperatorBatchSummary | null = null;
+  try {
+    const members = batchFields ? await batchExits(batchId) : await todayExits();
+    const found = batchOf(groupBatches(members.map(exitMember), RULES), saved.name);
+    if (found) batch = summaryOf(found.batch);
+  } catch (error) {
+    console.error("[operator] batch summary failed:", error instanceof Error ? error.message : error);
+  }
+  return { name: saved.name, netKg: net, trolleyCreated, batch };
 }

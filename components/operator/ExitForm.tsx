@@ -1,17 +1,31 @@
 "use client";
 
-// تسجيل طرحة: خطوة في كل شاشة — الفرن ← الغرفة ← النوع ← الترول ← الوزن ← مراجعة وحفظ
-// Registering an exit, one step per screen: kiln -> room -> type -> trolley -> weight -> review and save
+// تسجيل ترول (كل وزنة = ترول، والطرحة = 2 أو 3 ترولات من نفس الفرن)، خطوة في كل شاشة:
+// - أول ترول في طرحة (مفيش طرحة مفتوحة): الطرحة دي كام ترول؟ ← الفرن ← الغرفة ← النوع ← الترول ← الوزن ← مراجعة
+// - طرحة مفتوحة (ناقصة وفي حدود الوقت): بتتختار لوحدها والفرن والغرفة والنوع منها، فرقم الترول ← الوزن ← مراجعة
+//   ("طرحة جديدة" بيبدأ طرحة تانية). بعد الحفظ: ملخص الطرحة "ترول 1: 580 · ترول 2: 587 → المجموع 1,167 كجم (2 من 3)"
+// Registering a trolley (each weighing = one trolley; a batch = 2 or 3 trolleys from one kiln), one step per screen:
+// - first trolley of a batch (no open batch): how many trolleys? -> kiln -> room -> type -> trolley -> weight -> review
+// - an open batch (short and within the window) is picked by default with its kiln, room and type: trolley -> weight
+//   -> review ("طرحة جديدة" starts another). After saving: the batch summary
 
 import { useMemo, useState } from "react";
 import { ArrowRight, Check, X } from "lucide-react";
 import Keypad from "./Keypad";
 import { LiveScale } from "@/lib/useLiveScale";
-import { OperatorOptions, OperatorSaveRequest, PendingWeighing } from "@/lib/types";
+import { OperatorBatchSummary, OperatorOptions, OperatorSaveRequest, PendingWeighing } from "@/lib/types";
+import { Batch, cairoNowMinutes, isOpen } from "@/lib/batches";
+import { dashboardConfig } from "@/config/dashboard.config";
 
-type Step = "kiln" | "room" | "type" | "trolley" | "weight" | "review" | "done";
-const STEPS: Step[] = ["kiln", "room", "type", "trolley", "weight", "review"];
+const RULES = { windowMinutes: dashboardConfig.production.batchWindowMinutes, maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch };
+// اختيارات عدد الترولات: من 2 لحد maxTrolleysPerBatch - trolley count choices: 2..maxTrolleysPerBatch
+const SIZES = Array.from({ length: Math.max(1, RULES.maxTrolleys - 1) }, (_, i) => i + 2);
+
+type Step = "size" | "kiln" | "room" | "type" | "trolley" | "weight" | "review" | "done";
+const NEW_STEPS: Step[] = ["size", "kiln", "room", "type", "trolley", "weight", "review"];
+const OPEN_STEPS: Step[] = ["trolley", "weight", "review"];
 const TITLES: Record<Step, string> = {
+  size: "الطرحة دي كام ترول؟",
   kiln: "الفرن",
   room: "الغرفة",
   type: "النوع",
@@ -28,23 +42,36 @@ const kilnNumber = (kiln: string) => kiln.replace(/^\D+/, "") || kiln;
 
 type Duplicate = { time: string; kiln: string; netKg: number | null };
 
+// "ترول 1: 580 · ترول 2: 587" - the trolleys of a batch, by position
+const trolleyLine = (list: { netKg: number | null }[]) => list.map((t, i) => `ترول ${i + 1}: ${t.netKg === null ? "—" : kg(t.netKg)}`).join(" · ");
+
 export default function ExitForm({
   options,
   pending,
+  batches,
   scale,
   onClose,
   onSaved,
 }: {
   options: OperatorOptions;
   pending: PendingWeighing | null;
+  batches: Batch[]; // طرحات النهارده - today's batches
   scale: LiveScale;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [step, setStep] = useState<Step>("kiln");
-  const [kiln, setKiln] = useState("");
-  const [room, setRoom] = useState("");
-  const [type, setType] = useState("");
+  // الطرحات المفتوحة وقت الوزنة (أو دلوقتي) - the batches open at the weighing time (or now)
+  const [openBatches] = useState(() => {
+    const at = cairoNowMinutes(pending ? Date.parse(pending.time) : Date.now());
+    return batches.filter((b) => isOpen(b, at, RULES));
+  });
+  const first = openBatches[0] ?? null;
+  const [batch, setBatch] = useState<Batch | null>(first);
+  const [size, setSize] = useState<number | null>(null);
+  const [step, setStep] = useState<Step>(first ? "trolley" : "size");
+  const [kiln, setKiln] = useState(first?.kiln ?? "");
+  const [room, setRoom] = useState(first?.room ?? "");
+  const [type, setType] = useState(first?.type ?? "");
   const [trolley, setTrolley] = useState("");
   const [tare, setTare] = useState("");
   const [editing, setEditing] = useState<"trolley" | "tare">("trolley");
@@ -55,6 +82,8 @@ export default function ExitForm({
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
   const [savedNet, setSavedNet] = useState<number | null>(null);
+  const [summary, setSummary] = useState<OperatorBatchSummary | null>(null);
+  const STEPS = batch ? OPEN_STEPS : NEW_STEPS;
 
   const known = useMemo(() => options.trolleys.find((t) => String(t.no) === trolley) ?? null, [options.trolleys, trolley]);
   const grossKg = pending ? pending.grossKg : Number(gross) || 0;
@@ -68,9 +97,30 @@ export default function ExitForm({
     setStep(next);
   };
   const back = () => {
-    if (step === "kiln" || step === "done") return onClose();
+    if (index <= 0 || step === "done") return onClose();
     setDuplicate(null);
     go(STEPS[index - 1]);
+  };
+
+  // كمّل طرحة مفتوحة - continue an open batch
+  const pickBatch = (b: Batch) => {
+    setBatch(b);
+    setSize(null);
+    setKiln(b.kiln);
+    setRoom(b.room);
+    setType(b.type);
+    setDuplicate(null);
+    go("trolley");
+  };
+  // طرحة جديدة - a new batch
+  const newBatch = () => {
+    setBatch(null);
+    setSize(null);
+    setKiln("");
+    setRoom("");
+    setType("");
+    setDuplicate(null);
+    go("size");
   };
 
   const save = async (confirmDuplicate: boolean) => {
@@ -85,15 +135,31 @@ export default function ExitForm({
       pendingId: pending?.id ?? null,
       fromScale,
       confirmDuplicate,
+      batchId: batch?.batchId ?? null,
+      batchSize: batch ? batch.size : size,
     };
     try {
       const res = await fetch("/api/operator/exit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const result = (await res.json().catch(() => ({}))) as { error?: string; duplicate?: Duplicate; gone?: boolean; netKg?: number };
+      const result = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        duplicate?: Duplicate;
+        gone?: boolean;
+        batchGone?: boolean;
+        netKg?: number;
+        batch?: OperatorBatchSummary | null;
+      };
       if (res.status === 401) return window.location.reload();
       if (res.ok) {
         setSavedNet(result.netKg ?? net);
+        setSummary(result.batch ?? null);
         setStep("done");
         onSaved();
+        return;
+      }
+      // الطرحة كملت أو اتشالت من جهاز تاني: ابدأ طرحة جديدة - the batch filled up or vanished elsewhere: start a new one
+      if (result.batchGone) {
+        newBatch();
+        setError(result.error ?? "الطرحة دي كملت — ابدأ طرحة جديدة");
         return;
       }
       if (result.duplicate) setDuplicate(result.duplicate);
@@ -108,6 +174,7 @@ export default function ExitForm({
 
   // ملخص اللي اتختار لحد دلوقتي - what has been chosen so far
   const chips = [
+    !batch && size ? `طرحة ${size} ترول` : "",
     kiln && `فرن ${kilnNumber(kiln)}`,
     room && `غرفة ${room}`,
     type,
@@ -120,7 +187,7 @@ export default function ExitForm({
     "w-full h-[64px] rounded-2xl bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white text-[22px] font-extrabold shadow-[0_8px_30px_rgba(255,122,0,0.35)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none";
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background" role="dialog" aria-modal="true" aria-label="تسجيل طرحة">
+    <div className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background" role="dialog" aria-modal="true" aria-label="تسجيل ترول">
       <div aria-hidden className="pointer-events-none fixed -top-40 left-1/2 -translate-x-1/2 h-[380px] w-[480px] rounded-full bg-brandOrange/15 blur-[120px]" />
       <div className="relative mx-auto flex min-h-full w-full max-w-[560px] flex-col gap-5 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
         {/* الهيدر: رجوع / الخطوة / قفل - header: back / step / close */}
@@ -129,7 +196,7 @@ export default function ExitForm({
             <ArrowRight size={24} />
           </button>
           <div className="flex flex-col items-center">
-            <p className="text-[13px] text-gray-400">{pending ? `وزنة ${cairoTime(pending.time)} — ${kg(pending.grossKg)} كجم` : "طرحة بالإيد"}</p>
+            <p className="text-[13px] text-gray-400">{pending ? `وزنة ${cairoTime(pending.time)} — ${kg(pending.grossKg)} كجم` : "ترول بالإيد"}</p>
             <h2 className="text-[22px] font-extrabold text-white">{TITLES[step]}</h2>
           </div>
           <button type="button" onClick={onClose} className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cardBorder bg-card text-gray-200" aria-label="إغلاق">
@@ -145,12 +212,70 @@ export default function ExitForm({
           </div>
         )}
 
+        {/* الطرحة المفتوحة: "طرحة فرن 3 — ترول 2 من 3"، وتغيير الطرحة - the open batch, and switching batches */}
+        {batch && step !== "done" && (
+          <div className="flex flex-col gap-3 rounded-2xl border-2 border-statusAmber/60 bg-statusAmber/10 px-4 py-3.5">
+            <p className="text-[21px] font-extrabold text-statusAmber">
+              طرحة فرن {kilnNumber(batch.kiln)} — ترول <span className="font-numbers">{batch.count + 1}</span> من{" "}
+              <span className="font-numbers">{batch.size}</span>
+            </p>
+            <p className="font-numbers text-[15px] text-gray-200">
+              {trolleyLine(batch.trolleys.map((t) => ({ netKg: t.kg })))} → المجموع {kg(batch.kg)} كجم
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {openBatches
+                .filter((b) => b.key !== batch.key)
+                .map((b) => (
+                  <button key={b.key} type="button" onClick={() => pickBatch(b)} className="h-11 rounded-xl border border-cardBorder bg-card px-3 text-[15px] font-bold text-gray-100">
+                    طرحة فرن {kilnNumber(b.kiln)} ({b.count + 1} من {b.size})
+                  </button>
+                ))}
+              <button type="button" onClick={newBatch} className="h-11 rounded-xl border border-brandOrange/60 bg-brandOrange/10 px-4 text-[15px] font-extrabold text-brandOrange">
+                + طرحة جديدة
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && step !== "review" && (
+          <p className="rounded-2xl border border-statusRed/50 bg-statusRed/10 px-4 py-3 text-[17px] font-bold text-statusRed" role="alert">
+            {error}
+          </p>
+        )}
+
         {chips.length > 0 && step !== "done" && (
           <div className="flex flex-wrap gap-2">
             {chips.map((c) => (
               <span key={c} className="rounded-full border border-cardBorder bg-card/80 px-3 py-1 text-[15px] font-bold text-gray-200">
                 {c}
               </span>
+            ))}
+          </div>
+        )}
+
+        {step === "size" && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              {SIZES.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    setSize(n);
+                    go("kiln");
+                  }}
+                  className={`${bigBtn} flex h-[150px] flex-col items-center justify-center gap-1 ${size === n ? "border-brandOrange bg-brandOrange/15" : ""}`}
+                >
+                  <span className="font-numbers text-[64px] leading-none">{n}</span>
+                  <span className="text-[18px] font-bold text-gray-400">ترول</span>
+                </button>
+              ))}
+            </div>
+            {/* الرجوع لطرحة مفتوحة - back to an open batch */}
+            {openBatches.map((b) => (
+              <button key={b.key} type="button" onClick={() => pickBatch(b)} className="h-[56px] rounded-2xl border border-statusAmber/50 bg-statusAmber/10 text-[17px] font-bold text-statusAmber">
+                كمّل طرحة فرن {kilnNumber(b.kiln)} (ترول {b.count + 1} من {b.size})
+              </button>
             ))}
           </div>
         )}
@@ -357,7 +482,7 @@ export default function ExitForm({
                   ⚠ الترول {trolley} اتسجل من شوية ({duplicate.time} — {duplicate.kiln}
                   {duplicate.netKg ? ` — ${kg(duplicate.netKg)} كجم` : ""})
                 </p>
-                <p className="text-[15px] text-gray-300">لو دي طرحة تانية فعلا احفظها، ولو نفس الطرحة ارجع.</p>
+                <p className="text-[15px] text-gray-300">لو ده ترول تاني فعلا احفظه، ولو نفس الوزنة ارجع.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button type="button" disabled={busy} onClick={() => save(true)} className="h-[52px] rounded-xl bg-statusAmber text-[18px] font-extrabold text-black disabled:opacity-50">
                     احفظ برضه
@@ -388,10 +513,34 @@ export default function ExitForm({
             <div className="flex h-28 w-28 items-center justify-center rounded-full bg-statusGreen/15 shadow-[0_0_60px_rgba(34,197,94,0.35)]">
               <Check size={64} className="text-statusGreen" />
             </div>
-            <p className="text-[28px] font-extrabold text-white">الطرحة اتسجلت</p>
+            <p className="text-[28px] font-extrabold text-white">الترول اتسجل</p>
             <p className="text-[20px] text-gray-300">
-              فرن {kilnNumber(kiln)} · {type} · صافي <span className="font-numbers font-extrabold text-statusGreen">{kg(savedNet ?? net)}</span> كجم
+              فرن {kilnNumber(kiln)} · {type} · ترول {trolley} · صافي <span className="font-numbers font-extrabold text-statusGreen">{kg(savedNet ?? net)}</span> كجم
             </p>
+            {/* ملخص الطرحة - the batch summary */}
+            {summary && (
+              <div
+                className={`w-full rounded-2xl border-2 px-5 py-4 ${
+                  summary.complete ? "border-statusGreen/60 bg-statusGreen/10" : "border-statusAmber/60 bg-statusAmber/10"
+                }`}
+              >
+                <p className="font-numbers text-[18px] font-bold leading-[1.8] text-gray-100">
+                  {trolleyLine(summary.trolleys)} → المجموع {kg(summary.totalKg)} كجم
+                  {summary.size !== null && ` (${summary.trolleys.length} من ${summary.size})`}
+                </p>
+                {summary.complete ? (
+                  <p className="mt-1 text-[26px] font-extrabold text-statusGreen">
+                    ✓ الطرحة كملت — <span className="font-numbers">{kg(summary.totalKg)}</span> كجم
+                  </p>
+                ) : (
+                  summary.size !== null && (
+                    <p className="mt-1 text-[18px] font-bold text-statusAmber">
+                      فاضل <span className="font-numbers">{summary.size - summary.trolleys.length}</span> ترول — الوزنة الجاية هتروح للطرحة دي
+                    </p>
+                  )
+                )}
+              </div>
+            )}
             <button type="button" onClick={onClose} className={primary}>
               تمام
             </button>

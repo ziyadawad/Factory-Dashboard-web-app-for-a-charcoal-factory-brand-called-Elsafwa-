@@ -242,8 +242,13 @@ Content-Type: application/json
 
 ### 3) ERPNext
 
-- الطرحة بتتسجل في `Kiln Exit`: `kiln`، `room`، `charcoal_type`، `trolley`، `gross_kg`، `وزن_الترول_الفاضي_كجم`،
+- كل وزنة = ترول = سجل `Kiln Exit`: `kiln`، `room`، `charcoal_type`، `trolley`، `gross_kg`، `وزن_الترول_الفاضي_كجم`،
   `weight_kg` (الصافي)، `exit_time` (وقت الوزن أو دلوقتي).
+- **الطرحة** = 2 أو 3 ترولات من نفس الفرن بنفس `batch_id` (Data "الطرحة"، مثلا `KILN-3-20261123-0715`) و`batch_size`
+  (Int "عدد الترولات"). أول ترول بيعمل الـ batch_id، والباقيين بيتسجلوا عليه. السجلات القديمة من غير batch_id بتتجمع بالقاعدة
+  (نفس الفرن والغرفة، كل ترول في حدود `production.batchWindowMinutes` من اللي قبله، بحد أقصى `maxTrolleysPerBatch`).
+  Each weighing = one trolley = one Kiln Exit; a batch = 2-3 trolleys sharing `batch_id` + `batch_size`. Older records
+  without a batch_id are grouped by the rule above. A live `kiln_exit` event may also carry `batchId` / `batchSize`.
 - **يدوي**: ضيف في Kiln Exit حقل Check اسمه `manual_entry` (Customize Form → Label "إدخال يدوي"). لو موجود بيتكتب 1 لما
   الوزن يتكتب بالإيد، ولو مش موجود الطرحة بتتسجل عادي من غيره. Add a Check field `manual_entry`; written when present.
 - ترول مش متسجل: الأوبريتر بيكتب وزنه الفاضي، ولو علّم "احفظ الترول ده" بيتعمل `Trolley` جديد (`trolley_no`، `empty_weight_kg`).

@@ -1,11 +1,21 @@
-// ملخصات الإنتاج من قايمة الطرحات (بتتحسب في المتصفح، فمفيش طلب زيادة لـ ERPNext)
-// Production summaries from the exits list (computed in the browser: no extra ERPNext request)
+// ملخصات الإنتاج من قايمة الترولات (بتتحسب في المتصفح، فمفيش طلب زيادة لـ ERPNext)
+// كل سجل = ترول، والطرحة = 2 أو 3 ترولات (lib/batches.ts): العدد بالطرحات، والأطنان من الترولات زي ما هي
+// Production summaries from the trolley list (computed in the browser: no extra ERPNext request).
+// Each record = one trolley, a batch = 2 or 3 of them (lib/batches.ts): counts are batches, tons come from trolleys
 // الوزن: طرحة من غير وزن (kg = null) بتتعد في العدد بس، ومش بتدخل في الأطنان ولا المتوسط
 // Weights: an exit with no weight (kg = null) counts in the number of exits only, never in tons or the average
 
 import { useEffect, useState } from "react";
 import { KilnStatus, ProductionData, ProductionExit } from "./types";
+import { Batch, batchOf, BatchRules, groupBatches } from "./batches";
 import { dashboardConfig } from "@/config/dashboard.config";
+
+// قاعدة تجميع الترولات في طرحات (production.batchWindowMinutes / maxTrolleysPerBatch) - the grouping rule
+export const BATCH_RULES: BatchRules = {
+  windowMinutes: dashboardConfig.production.batchWindowMinutes,
+  maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch,
+};
+export type ProductionBatch = Batch<ProductionExit>;
 
 export const NO_TYPE = "غير محدد";
 export const NO_TYPE_COLOR = "#6B7280";
@@ -17,9 +27,17 @@ const kgFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 export const formatTons = (kg: number) => tonsFormat.format(kg / 1000);
 export const formatKg = (kg: number) => kgFormat.format(kg);
 
-// مجموعة طرحات: العدد، المتوزن منهم، والكيلوهات - a set of exits: count, how many are weighed, and kg
-export type Tally = { count: number; weighed: number; kg: number };
-export const emptyTally = (): Tally => ({ count: 0, weighed: 0, kg: 0 });
+// مجموعة ترولات: العدد، المتوزن منهم، والكيلوهات، وعدد الطرحات - a set of trolleys: count, weighed, kg, and batches
+export type Tally = { count: number; weighed: number; kg: number; batches: number; weighedBatches: number; batchKg: number };
+export const emptyTally = (): Tally => ({ count: 0, weighed: 0, kg: 0, batches: 0, weighedBatches: 0, batchKg: 0 });
+// طرحة في المجموعة (للعدد ومتوسط وزن الطرحة) - a batch into the set (count and average batch weight)
+export function addBatch(tally: Tally, batch: ProductionBatch) {
+  tally.batches += 1;
+  if (batch.weighed > 0) {
+    tally.weighedBatches += 1;
+    tally.batchKg += batch.kg;
+  }
+}
 export function addExit(tally: Tally, exit: ProductionExit) {
   tally.count += 1;
   if (exit.kg !== null) {
@@ -42,6 +60,8 @@ export interface ProductionSummary {
   yesterday: Tally;
   month: Tally;
   todayExits: ProductionExit[]; // الأحدث الأول - newest first
+  batches: ProductionBatch[]; // كل الطرحات، الأحدث الأول - every batch, newest first
+  todayBatches: ProductionBatch[]; // طرحات النهارده، الأحدث الأول - today's batches, newest first
   last: ProductionExit | null; // آخر طرحة (حتى لو امبارح) - the latest exit (even yesterday's)
   // مقارنة بإمبارح: بالأطنان لو فيه أوزان، وإلا بعدد الطرحات. pct = null لو امبارح صفر
   // Compared with yesterday: in tons when there are weights, else by exits; pct = null when yesterday is zero
@@ -65,9 +85,18 @@ export function summarize(data: ProductionData): ProductionSummary {
   const yesterday = tallyOf(data.exits.filter((e) => e.date === data.yesterday));
   const month = tallyOf(monthExits);
 
+  // الطرحات: بتتعد في يوم أول ترول فيها - batches count on their first trolley's day
+  const batches = groupBatches(data.exits, BATCH_RULES);
+  const todayBatches = batches.filter((b) => b.date === data.today);
+  for (const b of batches) {
+    if (b.date === data.today) addBatch(today, b);
+    if (b.date === data.yesterday) addBatch(yesterday, b);
+    if (b.date >= data.monthStart) addBatch(month, b);
+  }
+
   const byTons = today.weighed + yesterday.weighed > 0;
-  const now = byTons ? today.kg : today.count;
-  const before = byTons ? yesterday.kg : yesterday.count;
+  const now = byTons ? today.kg : today.batches;
+  const before = byTons ? yesterday.kg : yesterday.batches;
 
   // الأفران: من Workstation، وأي فرن في الطرحات مش في القايمة بيتضاف (متوقف) - kilns from Workstation (+ unknown ones, stopped)
   const kilnMap = new Map<string, KilnSummary>();
@@ -86,6 +115,13 @@ export function summarize(data: ProductionData): ProductionSummary {
     const k = kilnMap.get(e.kiln);
     if (k && !k.last) k.last = e; // الأحدث الأول - newest first
   }
+  for (const b of batches) {
+    if (b.date < data.monthStart) continue;
+    const k = kilnMap.get(b.kiln);
+    if (!k) continue;
+    addBatch(k.month, b);
+    if (b.date === data.today) addBatch(k.today, b);
+  }
 
   // الأنواع بترتيب ERPNext، والفاضي في الآخر لو موجود - types in ERPNext order, the empty one last when present
   const types: TypeSummary[] = data.types.map((t) => ({ label: t.label, color: t.color, today: emptyTally(), month: emptyTally() }));
@@ -98,6 +134,13 @@ export function summarize(data: ProductionData): ProductionSummary {
     }
     addExit(t.month, e);
     if (e.date === data.today) addExit(t.today, e);
+  }
+  for (const b of batches) {
+    if (b.date < data.monthStart) continue;
+    const t = types.find((x) => x.label === (b.type || NO_TYPE));
+    if (!t) continue;
+    addBatch(t.month, b);
+    if (b.date === data.today) addBatch(t.today, b);
   }
 
   // بالساعة: طرحة قبل hourFrom في أول عمود وبعد hourTo في آخر عمود - hourly: earlier / later exits go to the edge bars
@@ -116,6 +159,8 @@ export function summarize(data: ProductionData): ProductionSummary {
     yesterday,
     month,
     todayExits,
+    batches,
+    todayBatches,
     last: data.exits[0] ?? null,
     compare: { by: byTons ? "tons" : "count", today: now, yesterday: before, pct: before > 0 ? ((now - before) / before) * 100 : null },
     kilns,
@@ -125,14 +170,29 @@ export function summarize(data: ProductionData): ProductionSummary {
   };
 }
 
-// طرحات الشهر لفرن أو نوع، يوم بيوم (الأحدث الأول) - a kiln's or type's exits this month, day by day (newest first)
+// ترولات الشهر لفرن أو نوع، يوم بيوم (الأحدث الأول)، والطرحات معدودة في كل يوم
+// A kiln's or type's trolleys this month, day by day (newest first), with the batches counted per day
 export function monthDays(data: ProductionData, kind: "kiln" | "type", name: string) {
-  const exits = data.exits.filter(
-    (e) => e.date >= data.monthStart && (kind === "kiln" ? e.kiln === name : (e.type || NO_TYPE) === name)
-  );
+  const match = (x: { kiln: string; type: string }) => (kind === "kiln" ? x.kiln === name : (x.type || NO_TYPE) === name);
+  const exits = data.exits.filter((e) => e.date >= data.monthStart && match(e));
+  const batches = groupBatches(data.exits, BATCH_RULES).filter((b) => b.date >= data.monthStart && match(b));
   const days = new Map<string, ProductionExit[]>();
   for (const e of exits) days.set(e.date, [...(days.get(e.date) ?? []), e]);
-  return { total: tallyOf(exits), days: Array.from(days, ([date, list]) => ({ date, exits: list, tally: tallyOf(list) })) };
+  const total = tallyOf(exits);
+  batches.forEach((b) => addBatch(total, b));
+  return {
+    total,
+    days: Array.from(days, ([date, list]) => {
+      const tally = tallyOf(list);
+      batches.filter((b) => b.date === date).forEach((b) => addBatch(tally, b));
+      return { date, exits: list, tally };
+    }),
+  };
+}
+
+// الطرحة اللي فيها الترول ده وترتيبه - the batch holding this trolley and its position
+export function batchOfExit(batches: ProductionBatch[], exit: ProductionExit) {
+  return batchOf(batches, exit.id);
 }
 
 // "من X دقيقة" من وقت الطرحة (بتوقيت القاهرة)، بيتحدث كل 30 ثانية - "since X minutes", refreshed every 30 s

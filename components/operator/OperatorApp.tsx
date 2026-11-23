@@ -1,20 +1,26 @@
 "use client";
 
-// شاشة الأوبريتر: الوزن المباشر (جوه المصنع بس)، الوزنات المستنية، طرحة بالإيد، وآخر الطرحات النهارده
+// شاشة الأوبريتر: الطرحات المفتوحة فوق، الوزن المباشر، الوزنات المستنية، ترول بالإيد، وطرحات النهارده
+// (كل وزنة = ترول، والطرحة = 2 أو 3 ترولات - lib/batches.ts)
 // الطلبات بتحصل بس والصفحة مفتوحة وظاهرة: المستنية كل pendingPollSeconds، والنهارده كل todayPollSeconds
 // The operator screen: live weight (factory LAN only), pending weighings, a manual exit, and today's latest exits.
 // Requests only while the page is open and visible: pending every pendingPollSeconds, today every todayPollSeconds
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LogOut, Plus, Scale } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePageVisible, usePolling } from "@/lib/usePolling";
 import { useLiveScale } from "@/lib/useLiveScale";
 import { OperatorExit, OperatorOptions, PendingWeighing } from "@/lib/types";
+import { BatchMember, cairoNowMinutes, groupBatches, isOpen, kilnNumber, progressText } from "@/lib/batches";
 import ExitForm from "./ExitForm";
 import OperatorShell from "./OperatorShell";
 
 const cfg = dashboardConfig.operator;
+const RULES = { windowMinutes: dashboardConfig.production.batchWindowMinutes, maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch };
+const member = (e: OperatorExit): BatchMember => ({
+  id: e.name, date: e.date, time: e.time, kiln: e.kiln, room: e.room, type: e.type, trolley: e.trolley, kg: e.netKg, batchId: e.batchId, batchSize: e.batchSize,
+});
 
 // 401 = الكوكي خلص أو الرقم اتغير: نرجع لشاشة الرقم - 401 = cookie expired or PIN changed: back to the PIN screen
 async function fetcher<T>(url: string): Promise<T> {
@@ -92,6 +98,10 @@ export default function OperatorApp() {
   const exits = today.data?.exits ?? [];
   const typeColor = (label: string) => options.data?.types.find((t) => t.label === label)?.color ?? "#9CA3AF";
   const todayNet = exits.reduce((s, e) => s + (e.netKg ?? 0), 0);
+  // الطرحات (الأحدث الأول) واللي لسه مفتوحة - batches (newest first) and the ones still open
+  const batches = useMemo(() => groupBatches((today.data?.exits ?? []).map(member), RULES), [today.data]);
+  const open = batches.filter((b) => isOpen(b, cairoNowMinutes(now), RULES));
+  const manual = new Set(exits.filter((e) => e.manual).map((e) => e.name));
 
   return (
     <OperatorShell>
@@ -103,7 +113,7 @@ export default function OperatorApp() {
             <img src="/operator/logo-round.png" alt="الصفوة" className="h-14 w-14 rounded-full shadow-[0_0_40px_rgba(255,122,0,0.35)]" />
             <div>
               <h1 className="text-[22px] font-extrabold leading-tight text-white">شاشة الأوبريتر</h1>
-              <p className="text-[14px] text-gray-400">تسجيل طرحات الأفران</p>
+              <p className="text-[14px] text-gray-400">تسجيل ترولات الطرحات</p>
             </div>
           </div>
           <button type="button" onClick={logout} className="flex h-11 items-center gap-2 rounded-xl border border-cardBorder bg-card/80 px-3 text-[14px] font-bold text-gray-300" aria-label="خروج">
@@ -123,6 +133,26 @@ export default function OperatorApp() {
             📲 ثبّت الشاشة على الموبايل
           </button>
         )}
+
+        {/* الطرحات المفتوحة: "طرحة فرن 3 — ترول 2 من 3" - open batches */}
+        {open.map((b) => (
+          <section key={b.key} className="flex flex-col gap-2 rounded-3xl border-2 border-statusAmber/60 bg-statusAmber/10 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[22px] font-extrabold text-statusAmber">
+                طرحة فرن {kilnNumber(b.kiln)} — ترول <span className="font-numbers">{b.count + 1}</span> من <span className="font-numbers">{b.size}</span>
+              </p>
+              <span className="font-numbers text-[16px] font-bold text-gray-300">{b.time}</span>
+            </div>
+            <p className="text-[15px] text-gray-300">
+              {b.room && `غرفة ${b.room} · `}
+              {b.type}
+            </p>
+            <p className="font-numbers text-[16px] font-bold text-gray-100">
+              {b.trolleys.map((t, i) => `ترول ${i + 1}: ${kg(t.kg)}`).join(" · ")} → المجموع {kg(b.kg)} كجم
+            </p>
+            <p className="text-[14px] text-gray-400">الوزنة الجاية هتروح للطرحة دي (وتقدر تبدأ طرحة جديدة من الفورم)</p>
+          </section>
+        ))}
 
         {/* الوزن المباشر - live weight */}
         {scale.online && scale.weightKg !== null ? (
@@ -177,7 +207,7 @@ export default function OperatorApp() {
               {confirmDrop === p.id ? (
                 <div className="grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => drop(p.id)} className="h-[56px] rounded-2xl bg-statusRed/90 text-[18px] font-extrabold text-white">
-                    أيوه، مش طرحة
+                    أيوه، مش ترول
                   </button>
                   <button type="button" onClick={() => setConfirmDrop(null)} className="h-[56px] rounded-2xl border border-cardBorder bg-background/60 text-[18px] font-bold text-gray-200">
                     رجوع
@@ -191,10 +221,10 @@ export default function OperatorApp() {
                     onClick={() => setForm({ pending: p })}
                     className="h-[60px] rounded-2xl bg-gradient-to-l from-brandOrange to-brandDeepOrange text-[20px] font-extrabold text-white shadow-[0_8px_30px_rgba(255,122,0,0.3)] disabled:opacity-50"
                   >
-                    سجّل طرحة
+                    سجّل ترول
                   </button>
                   <button type="button" onClick={() => setConfirmDrop(p.id)} className="h-[60px] rounded-2xl border border-cardBorder bg-background/60 text-[18px] font-bold text-gray-300">
-                    مش طرحة
+                    مش ترول
                   </button>
                 </div>
               )}
@@ -202,24 +232,25 @@ export default function OperatorApp() {
           ))}
         </section>
 
-        {/* طرحة بالإيد - a manual exit */}
+        {/* ترول بالإيد (نفس خطوات الطرحة) - a manual trolley (same batch flow) */}
         <button
           type="button"
           disabled={!options.data}
           onClick={() => setForm({ pending: null })}
           className="flex h-[64px] items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brandOrange/60 bg-brandOrange/5 text-[20px] font-extrabold text-brandOrange disabled:opacity-50"
         >
-          <Plus size={24} /> طرحة جديدة بإيدي
+          <Plus size={24} /> {open.length > 0 ? "ترول بإيدي" : "طرحة جديدة بإيدي"}
         </button>
         {options.error && !options.data && <p className="-mt-3 text-center text-[15px] text-statusRed">ERPNext مش بيرد — بنحاول تاني…</p>}
 
-        {/* آخر الطرحات النهارده - today's latest exits */}
+        {/* طرحات النهارده: سطر لكل طرحة وتحته الترولات - today's batches, one row each with its trolleys */}
         <section className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-[20px] font-extrabold text-white">آخر الطرحات</h2>
+            <h2 className="text-[20px] font-extrabold text-white">طرحات النهارده</h2>
             {exits.length > 0 && (
               <p className="text-[14px] text-gray-400">
-                النهارده <span className="font-numbers font-bold text-gray-200">{exits.length}</span> طرحة ·{" "}
+                <span className="font-numbers font-bold text-gray-200">{batches.length}</span> طرحة ·{" "}
+                <span className="font-numbers font-bold text-gray-200">{exits.length}</span> ترول ·{" "}
                 <span className="font-numbers font-bold text-gray-200">{kg(Math.round(todayNet))}</span> كجم
               </p>
             )}
@@ -228,27 +259,40 @@ export default function OperatorApp() {
             <p className="rounded-2xl border border-dashed border-cardBorder px-5 py-5 text-center text-[16px] text-gray-500">مفيش طرحات النهارده لسه</p>
           )}
           <div className="flex flex-col gap-2.5">
-            {exits.slice(0, 30).map((e) => (
-              <div key={e.name} className="flex items-center gap-4 rounded-2xl border border-cardBorder bg-card/80 px-4 py-3">
-                <span className="font-numbers text-[18px] font-bold text-gray-300">{e.time}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-x-2 text-[17px] font-bold text-white">
-                    {e.kiln}
-                    {e.room && <span className="text-[14px] font-semibold text-gray-400">غ {e.room}</span>}
-                    <span className="flex items-center gap-1.5 text-[15px] font-semibold text-gray-200">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: typeColor(e.type) }} />
-                      {e.type}
+            {batches.slice(0, 20).map((b) => (
+              <div key={b.key} className="flex flex-col gap-2 rounded-2xl border border-cardBorder bg-card/80 px-4 py-3">
+                <div className="flex items-center gap-4">
+                  <span className="font-numbers text-[18px] font-bold text-gray-300">{b.time}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2 text-[17px] font-bold text-white">
+                      {b.kiln}
+                      {b.room && <span className="text-[14px] font-semibold text-gray-400">غ {b.room}</span>}
+                      <span className="flex items-center gap-1.5 text-[15px] font-semibold text-gray-200">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: typeColor(b.type) }} />
+                        {b.type}
+                      </span>
+                    </p>
+                    <span
+                      className={`mt-0.5 inline-block rounded-full px-2 text-[13px] font-bold ${
+                        b.complete ? "bg-white/10 text-gray-300" : "bg-statusAmber/15 text-statusAmber"
+                      }`}
+                    >
+                      {b.complete ? `${b.count} ترول` : progressText(b)}
                     </span>
-                  </p>
-                  <p className="text-[14px] text-gray-500">
-                    {e.trolley ? `ترول ${e.trolley}` : "من غير ترول"}
-                    {e.manual && <span className="ms-2 rounded-full bg-statusAmber/15 px-2 text-[12px] font-bold text-statusAmber">يدوي</span>}
+                  </div>
+                  <p className="text-end">
+                    <span className="block font-numbers text-[24px] font-extrabold text-statusGreen">{kg(b.weighed > 0 ? b.kg : null)}</span>
+                    <span className="text-[12px] text-gray-500">كجم صافي</span>
                   </p>
                 </div>
-                <p className="text-end">
-                  <span className="block font-numbers text-[22px] font-extrabold text-statusGreen">{kg(e.netKg)}</span>
-                  <span className="text-[12px] text-gray-500">كجم صافي</span>
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {b.trolleys.map((t, i) => (
+                    <span key={t.id} className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-[14px] text-gray-300">
+                      ترول {t.trolley || i + 1}: <b className="font-numbers text-gray-100">{kg(t.kg)}</b>
+                      {manual.has(t.id) && <span className="ms-1 text-[12px] font-bold text-statusAmber">يدوي</span>}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -259,6 +303,7 @@ export default function OperatorApp() {
         <ExitForm
           options={options.data}
           pending={form.pending}
+          batches={batches}
           scale={scale}
           onClose={() => {
             setForm(null);

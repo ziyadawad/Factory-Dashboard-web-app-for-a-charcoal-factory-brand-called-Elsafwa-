@@ -6,7 +6,7 @@ import { OperatorSaveRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-// حفظ طرحة جديدة (Kiln Exit) - save a new kiln exit
+// حفظ ترول (Kiln Exit) في طرحة جديدة أو مفتوحة - save a trolley into a new or open batch
 export async function POST(request: NextRequest) {
   const denied = operatorAuthError(request);
   if (denied) return denied;
@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
       pendingId: raw.pendingId ? String(raw.pendingId) : null,
       fromScale: raw.fromScale === true,
       confirmDuplicate: raw.confirmDuplicate === true,
+      batchId: raw.batchId ? String(raw.batchId).slice(0, 80) : null,
+      batchSize: raw.batchSize === null || raw.batchSize === undefined ? null : Number(raw.batchSize),
     };
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400, headers: NO_STORE });

@@ -280,6 +280,13 @@ function kilnBody(doc: Doc): Body {
           { label: "فاضي", value: kgOf(mapping.emptyWeightField) },
           { label: "الترول", value: str(doc[mapping.trolleyField]) || "—" },
           { label: "الغرفة", value: str(doc[mapping.roomField]) || "—" },
+          // الطرحة اللي الترول ده فيها - the batch this trolley belongs to
+          {
+            label: "الطرحة",
+            value: str(doc[mapping.batchIdField])
+              ? `${str(doc[mapping.batchIdField])}${Number(doc[mapping.batchSizeField]) > 0 ? ` (${Number(doc[mapping.batchSizeField])} ترول)` : ""}`
+              : "—",
+          },
         ]
       : [];
   return {
