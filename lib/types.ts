@@ -1261,6 +1261,7 @@ export interface WaGroup {
   lastText: string | null; // معاينة آخر رسالة - the last message preview
   lastType: WaMessageType | null;
   unread: number; // من آخر زيارة (اللي المتصفح بعتها) - since the last visit (sent by the browser)
+  perDay: number; // متوسط الرسايل في اليوم آخر 30 يوم - average messages per day over the last 30 days
 }
 
 // حالة التخزين (من /api/wa/status وفي رد الجروبات) - the storage status (from /api/wa/status and in the groups reply)

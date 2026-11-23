@@ -33,7 +33,10 @@ function days(list: WaMessage[]): { key: string; list: WaMessage[] }[] {
 // الملف جوه الفقاعة - the file inside a bubble
 function MediaView({ m, onImage, onLoaded }: { m: WaMessage; onImage: (src: string) => void; onLoaded?: () => void }) {
   const media = m.media;
-  if (!media) return null;
+  // رسالة نص عمرها ما تتعرض كملف - a text message is never shown as a file
+  if (!media || m.type === "text" || m.type === "system") return null;
+  // ملف مش متخزن ومعاه كلام: الكلام بس (زي الرسايل القديمة) - a missing file with words: just the words (old messages)
+  if (!media.available && m.text) return null;
   if (!media.available) {
     return <p className="rounded-lg bg-black/20 px-3 py-2 text-[14px] text-gray-400">📎 الملف مش متاح (اتمسح بعد {cfg.retentionDays.media} يوم أو لسه ما اترفعش)</p>;
   }

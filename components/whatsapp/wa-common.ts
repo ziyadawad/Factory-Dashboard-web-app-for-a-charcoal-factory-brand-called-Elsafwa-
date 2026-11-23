@@ -69,13 +69,30 @@ export function groupColor(g: Pick<WaGroup, "id" | "name">): string {
 const SENDER_COLORS = ["#34D399", "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#F87171", "#2DD4BF", "#FB923C", "#A3E635", "#38BDF8"];
 export const senderColor = (name: string) => SENDER_COLORS[hash(name) % SENDER_COLORS.length];
 
-// الترتيب: المتثبت في الكونفج الأول بترتيبه، وبعدين بآخر نشاط - pinned (config order) first, then by last activity
+// الترتيب: المتثبت في الكونفج (whatsapp.pinned) الأول، وبعدين الجروبات اللي ليها صورة، وبعدين اللي من غير صورة. وجوه كل جزء
+// الأنشط الأول (متوسط الرسايل في اليوم آخر 30 يوم)، وبعدين آخر رسالة
+// The order: pinned in config first, then groups with a picture, then those without. Inside each part the most active
+// first (average messages per day over the last 30 days), then the latest message
 export function sortGroups(groups: WaGroup[]): WaGroup[] {
   const pinIndex = (g: WaGroup) => {
     const i = cfg.pinned.findIndex((p) => p === g.id || p === g.name);
     return i < 0 ? Infinity : i;
   };
-  return [...groups].sort((a, b) => pinIndex(a) - pinIndex(b) || (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+  const noPicture = (g: WaGroup) => (g.pictureId ? 0 : 1);
+  return [...groups].sort(
+    (a, b) =>
+      pinIndex(a) - pinIndex(b) ||
+      noPicture(a) - noPicture(b) ||
+      (b.perDay ?? 0) - (a.perDay ?? 0) ||
+      (b.lastAt ?? "").localeCompare(a.lastAt ?? "")
+  );
+}
+
+// "2.3 رسالة/يوم" - messages per day
+export function perDayText(n: number): string {
+  if (!n) return "0 رسالة/يوم";
+  if (n < 0.1) return "أقل من 0.1 رسالة/يوم";
+  return `${n >= 10 ? Math.round(n) : n.toFixed(1).replace(/\.0$/, "")} رسالة/يوم`;
 }
 
 // معاينة رسالة من غير نص - a preview for a message without text

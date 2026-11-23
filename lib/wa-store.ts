@@ -155,8 +155,15 @@ function parseMessage(raw: unknown): ParsedMessage | Reject {
   const rawType = String(first(m, ["type", "messageType"]) ?? "").toLowerCase();
   const deleted = m.deleted === true || m.isDeleted === true || rawType === "revoked";
   const media = m.media && typeof m.media === "object" ? (m.media as Row) : null;
-  const mediaId = (media ? idOf(first(media, ["id", "mediaId"]), 120) : "") || idOf(m.mediaId, 120) || (m.hasMedia === true ? id.slice(0, 120) : "") || null;
-  const type: WaMessageType = TYPE_ALIASES[rawType] ?? (TYPES.includes(rawType as WaMessageType) ? (rawType as WaMessageType) : mediaId ? "document" : "text");
+  const textValue = first(m, ["text", "body", "caption", "content", "message"]);
+  const hasText = typeof textValue === "string" && textValue.trim() !== "";
+  let mediaId = (media ? idOf(first(media, ["id", "mediaId"]), 120) : "") || idOf(m.mediaId, 120) || (m.hasMedia === true ? id.slice(0, 120) : "") || null;
+  // نوع مش معروف (زي الرسايل القديمة المستوردة): نص لو فيه كلام، وملف بس لو مفيش كلام وفيه ملف
+  // An unknown type (e.g. old imported messages): text when there are words; a file only with no words and a file
+  let type: WaMessageType = TYPE_ALIASES[rawType] ?? (TYPES.includes(rawType as WaMessageType) ? (rawType as WaMessageType) : mediaId && !hasText ? "document" : "text");
+  // رسالة نص / نظام عمرها ما تتعرض كملف - a text / system message is never shown as a file
+  if (type === "text" || type === "system") mediaId = null;
+  if (!mediaId && type === "document" && hasText) type = "text";
 
   const sender = str(
     first(m, ["senderName", "sender_name", "pushName", "notifyName", "authorName", "fromName"]) ??
@@ -166,7 +173,7 @@ function parseMessage(raw: unknown): ParsedMessage | Reject {
       (idOf(first(m, ["author", "participant"]) ?? key.participant, 120) || (idOf(m.from, 120).endsWith("@g.us") ? "" : idOf(m.from, 120))).replace(/@.*$/, ""),
     120
   );
-  const textRaw = first(m, ["text", "body", "caption", "content", "message"]);
+  const textRaw = textValue;
   const reply = (first(m, ["replyTo", "quoted", "quotedMsg", "quotedMessage"]) ?? null) as Row | null;
   return {
     id,
@@ -385,8 +392,15 @@ const MESSAGE_SELECT = `
   m.id, m.group_id, m.sender, m.at, m.type, m.body, m.reply_id, m.reply_sender, m.reply_text, m.media_id, m.deleted,
   md.id AS md_id, md.mime AS md_mime, md.file_name AS md_name, md.size AS md_size`;
 
+// الملف بيظهر بس لرسالة نوعها ملف فعلا. رسالة "ملف" فيها كلام والملف مش متخزن (زي الرسايل القديمة المستوردة) = فقاعة نص عادية
+// A file shows only for a real media message. A "file" message with words but no stored file (e.g. old imported
+// messages) is shown as a normal text bubble
+const MEDIA_TYPES: WaMessageType[] = ["image", "video", "audio", "voice", "document", "sticker"];
 function toMessage(r: Row): WaMessage {
-  const mediaId = r.media_id ? String(r.media_id) : null;
+  let type = (TYPES.includes(r.type as WaMessageType) ? r.type : "text") as WaMessageType;
+  const hasText = !!r.body && String(r.body).trim() !== "";
+  if (type === "document" && hasText && !r.md_id) type = "text";
+  const mediaId = r.media_id && MEDIA_TYPES.includes(type) ? String(r.media_id) : null;
   const media: WaMedia | null = mediaId
     ? {
         id: mediaId,
@@ -401,7 +415,7 @@ function toMessage(r: Row): WaMessage {
     groupId: String(r.group_id),
     sender: String(r.sender ?? ""),
     at: iso(r.at) ?? "",
-    type: (TYPES.includes(r.type as WaMessageType) ? r.type : "text") as WaMessageType,
+    type,
     text: r.deleted ? null : r.body ? String(r.body) : null,
     reply: r.reply_sender || r.reply_text ? { id: r.reply_id ? String(r.reply_id) : null, sender: String(r.reply_sender ?? ""), text: String(r.reply_text ?? "") } : null,
     media: r.deleted ? null : media,
@@ -414,7 +428,8 @@ function toMessage(r: Row): WaMessage {
 export async function listGroups(seen: Record<string, string>): Promise<WaGroup[]> {
   const rows = await q(`
     SELECT g.id, g.name, g.participants, g.picture_media_id,
-           m.at AS last_at, m.sender AS last_sender, m.body AS last_body, m.type AS last_type, m.deleted AS last_deleted
+           m.at AS last_at, m.sender AS last_sender, m.body AS last_body, m.type AS last_type, m.deleted AS last_deleted,
+           (SELECT count(*) FROM wa_messages r WHERE r.group_id = g.id AND r.at > now() - interval '30 days' AND NOT r.deleted)::int AS recent
     FROM wa_groups g
     LEFT JOIN LATERAL (
       SELECT at, sender, body, type, deleted FROM wa_messages WHERE group_id = g.id ORDER BY at DESC, id DESC LIMIT 1
@@ -443,6 +458,8 @@ export async function listGroups(seen: Record<string, string>): Promise<WaGroup[
       lastText: r.last_deleted ? "🚫 الرسالة اتمسحت" : r.last_body ? String(r.last_body).slice(0, 160) : null,
       lastType: r.last_type ? (String(r.last_type) as WaMessageType) : null,
       unread: unread.get(String(r.id)) ?? 0,
+      // متوسط الرسايل في اليوم آخر 30 يوم - average messages per day over the last 30 days
+      perDay: Math.round((Number(r.recent ?? 0) / 30) * 10) / 10,
     }));
 }
 

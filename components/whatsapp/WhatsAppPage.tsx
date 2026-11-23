@@ -18,6 +18,7 @@ import {
   markSeen,
   mediaUrl,
   minutesSince,
+  perDayText,
   shortWhen,
   sortGroups,
   typePreview,
@@ -101,6 +102,10 @@ function GroupBlock({ group, onOpen }: { group: WaGroup; onOpen: () => void }) {
               <Users size={13} /> <span className="font-numbers">{group.participants}</span> عضو
             </p>
           )}
+          {/* النشاط: متوسط آخر 30 يوم - activity: the 30-day average */}
+          <p className="text-[12px] font-bold font-numbers" style={{ color: group.perDay > 0 ? color : "#6B7280" }}>
+            {perDayText(group.perDay)}
+          </p>
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1">
           <span className={`font-numbers text-[13px] ${group.unread > 0 ? "font-bold" : "text-gray-500"}`} style={group.unread > 0 ? { color } : undefined}>
