@@ -21,6 +21,8 @@ import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
 import WhatsAppPage from "@/components/whatsapp/WhatsAppPage";
+import SuppliersPage from "@/components/SuppliersPage";
+import SupplierDetailsPanel from "@/components/SupplierDetailsPanel";
 import OperatorQrButton from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
@@ -83,7 +85,7 @@ export default function Dashboard() {
   // /api/dashboard بيغذي كل الصفحات ما عدا الإنتاج و IT، فبيقف وهما على الشاشة (أو والتاب مستخبي)
   // Polls every refreshSeconds without reloading (old data stays until new data arrives). It feeds every page except
   // production and IT, so it stops while those are on screen, and whenever the tab is hidden
-  const { data: serverData, error } = usePolling<DashboardData>("/api/dashboard", fetcher, REFRESH_MS, pageId !== "production" && pageId !== "whatsapp", {
+  const { data: serverData, error } = usePolling<DashboardData>("/api/dashboard", fetcher, REFRESH_MS, pageId !== "production" && pageId !== "whatsapp" && pageId !== "suppliers", {
     // النت رجع = اسأل حالا - internet back = refetch right away
     revalidateOnReconnect: true,
     // يفضل يسأل وهو أوفلاين: الطلب بيفشل فتظهر "غير متصل" والأرقام القديمة فاضلة - keep polling offline so the badge shows
@@ -167,6 +169,9 @@ export default function Dashboard() {
   // تفاصيل كارت في أرصدة المخازن - the open stock card details
   const [stockItem, setStockItem] = useState<StockPanelTarget | null>(null);
   const closeStockItem = useCallback(() => setStockItem(null), []);
+  // المورد المفتوح (صفحة الموردين) - the open supplier (suppliers page)
+  const [supplierName, setSupplierName] = useState<string | null>(null);
+  const closeSupplier = useCallback(() => setSupplierName(null), []);
   // شات واتساب مفتوح صفحة كاملة (صفحة واتساب) - a WhatsApp chat open full page (the WhatsApp page)
   const [waChatOpen, setWaChatOpen] = useState(false);
   // تثبيت الصفحة (محفوظ في المتصفح عشان يفضل بعد الريفرش، وقفل اللوحة مش بيلغيه)
@@ -187,7 +192,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || operatorQrOpen || monthSummaryOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || supplierName !== null || operatorQrOpen || monthSummaryOpen;
 
   // تنبيه طرحة جديدة: بيستنى لو لوحة تفاصيل مفتوحة - the new kiln exit alert; waits while a details panel is open
   const chime = useChime();
@@ -429,6 +434,8 @@ export default function Dashboard() {
             data={data.wallets ?? null}
             onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
           />;
+      case "suppliers":
+        return <SuppliersPage active={pageId === "suppliers"} onOpen={setSupplierName} />;
       case "whatsapp":
         return (
           <WhatsAppPage active={pageId === "whatsapp"} onOverlayChange={setWaChatOpen} alert={waAlert.current} refreshKey={waAlert.activity} />
@@ -576,6 +583,7 @@ export default function Dashboard() {
       )}
       {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
       {charityTarget && <CharityDetailsPanel target={charityTarget} onClose={closeCharity} />}
+      {supplierName && <SupplierDetailsPanel key={supplierName} name={supplierName} onClose={closeSupplier} />}
       {monthSummaryOpen && production && <ProductionMonthPanel data={production} onClose={closeMonthSummary} onOpen={openFromMonth} />}
       {productionTarget && production && (
         <ProductionDetailsPanel data={production} target={productionTarget} onClose={closeProduction} />

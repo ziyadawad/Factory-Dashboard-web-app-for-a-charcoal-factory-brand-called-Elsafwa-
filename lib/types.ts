@@ -1294,3 +1294,88 @@ export interface WaMessagesResponse {
   hasMore: boolean;
   lastSyncAt: string | null;
 }
+
+// ===== الموردين (الصفحة 7) - suppliers (page 7) =====
+export type SupplierCategory = "wood" | "plastic";
+
+// كمية بوحدتها ("12.5 طن"، "300 كيلو جرام") - a quantity with its unit
+export interface QtyByUnit {
+  unit: string;
+  qty: number;
+}
+
+export interface SupplierCard {
+  name: string;
+  group: string | null;
+  category: SupplierCategory;
+  balance: number; // موجب = ليه عندنا، سالب = لينا عنده - positive = we owe them, negative = advance paid
+  lastSupply: { date: string; doc: string; qty: QtyByUnit[]; amount: number } | null;
+  lastPayment: { date: string; amount: number } | null;
+  month: { qty: QtyByUnit[]; amount: number }; // توريد الشهر ده - this month's supplies
+}
+
+export interface SuppliersData {
+  today: string;
+  monthStart: string;
+  suppliers: SupplierCard[]; // الأكبر رصيد الأول - biggest balance first
+  hiddenCount: number; // اتشالوا (مش خشب ولا بلاستيك، أو مش نشطين) - hidden (other categories or inactive)
+  updatedAt: string;
+}
+
+// سطر صنف في فاتورة مشتريات - one item row of a purchase invoice
+export interface SupplyItem {
+  itemCode: string;
+  itemName: string;
+  woodType: string | null; // نوع الخشب (من erp.stock.wood) - the wood type
+  qty: number;
+  unit: string;
+  rate: number;
+  amount: number;
+}
+
+export interface SupplyDoc {
+  doc: string; // ACC-PINV-…
+  doctype: "Purchase Invoice";
+  date: string;
+  isReturn: boolean;
+  billNo: string | null;
+  remarks: string | null;
+  total: number;
+  outstanding: number;
+  items: SupplyItem[];
+}
+
+export interface SupplierPayment {
+  voucher: string;
+  voucherType: string;
+  date: string;
+  createdAt: string; // "YYYY-MM-DD HH:mm" (وقت التسجيل) - when it was entered
+  amount: number;
+  from: string; // الخزنة / المحفظة اللي اتدفع منها - the wallet / treasury it was paid from
+  reference: string | null;
+}
+
+// سطر كشف الحساب - one statement line
+export interface StatementLine {
+  date: string;
+  createdAt: string;
+  voucherType: string;
+  voucher: string;
+  description: string;
+  debit: number; // مدين (دفعنا) - debit (we paid)
+  credit: number; // دائن (فاتورة) - credit (an invoice)
+  balance: number; // الرصيد بعدها (موجب = ليه عندنا) - balance after (positive = we owe them)
+}
+
+export interface SupplierDetails {
+  name: string;
+  group: string | null;
+  category: SupplierCategory | null;
+  balance: number;
+  supplies: SupplyDoc[]; // الأحدث الأول - newest first
+  payments: SupplierPayment[]; // الأحدث الأول - newest first
+  statement: StatementLine[]; // الأقدم الأول - oldest first
+  oldestUnpaid: { doc: string; date: string; days: number; outstanding: number } | null;
+  erpUrl: string;
+  today: string;
+}

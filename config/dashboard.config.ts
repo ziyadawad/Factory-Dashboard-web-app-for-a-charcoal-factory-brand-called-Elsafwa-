@@ -685,6 +685,54 @@ export const dashboardConfig = {
     } as Record<string, string>,
   },
 
+  // ============================================================
+  // الموردين (الصفحة 7) - موردين الخشب والبلاستيك، قراية بس من ERPNext
+  // - الرصيد = رصيد المورد على حساب الموردين (payableAccounts) من GL: دائن − مدين من الأول، من غير الملغي.
+  //   موجب = "ليه عندنا" (علينا فلوس ليه)، سالب = "لينا عنده" (دفعنا مقدم)
+  // - التوريد = فواتير المشتريات المعتمدة (فيها المخزون، update_stock)، والدفعات = قيود مدين على نفس الحساب
+  // - البيانات بتتجاب بس والصفحة / اللوحة ظاهرة، وكاش cacheSeconds على السيرفر
+  // Suppliers (page 7) - wood and plastic suppliers, read-only from ERPNext. Balance = the supplier's balance on the
+  // payable account(s) from GL: credit − debit, all time, not cancelled. Positive = we owe them; negative = advance
+  // paid. Supplies = submitted Purchase Invoices (they carry the stock); payments = debits on the same account
+  // ============================================================
+  suppliers: {
+    cacheSeconds: 60,
+    company: "ALSafwa Coal",
+    // حساب الموردين (الأرصدة من هنا بس). "2140 - دائنون أخرون" مش هنا - the payable account (balances only from here)
+    payableAccounts: ["2110 - الموردين - AC"] as string[],
+    // مورد رصيده صفر ومورّدش حاجة آخر activeDays يوم بيستخبى - a zero-balance supplier with no supply in this many days is hidden
+    activeDays: 90,
+    // ===== التصنيف بالترتيب: overrides الأول، وبعدين البلاستيك (اسم أو مجموعة)، وبعدين الخشب (مجموعة أو ورّد أصناف خشب
+    // من erp.stock.wood أو أي صنف أوله woodItemPrefix)، والباقي بيستخبى. الأسامي بتتقارن بعد التوحيد (ة = ه، أ = ا، من غير مسافات)
+    // Classification order: overrides first, then plastic (name or group), then wood (group, or supplied wood items from
+    // erp.stock.wood or any item starting with woodItemPrefix); everything else is hidden. Names match after normalizing
+    categories: {
+      plastic: {
+        title: "موردين البلاستيك",
+        icon: "🧴",
+        color: "#14B8A6", // تيل - teal
+        // القادسية + باك فور + أي اسم فيه "بلاستيك" - القادسية + باك فور + any name with "بلاستيك"
+        nameKeywords: ["القادسية", "باك فور", "باكفور", "back for", "بلاستيك"],
+        // مجموعات البلاستيك والتعبئة والشكاير - the plastic, packaging and sacks groups
+        groups: ["موردين بلاستيك", "موردين مصنع التعبئة", "مواردين شكاير"],
+      },
+      wood: {
+        title: "موردين الخشب",
+        icon: "🪵",
+        color: "#D97706", // كهرماني خشبي - wood amber
+        groups: ["موردين اخشاب"],
+        woodItemPrefix: "خشب",
+      },
+    },
+    // نقل مورد بالإيد: "اسم المورد بالظبط": "wood" / "plastic" / "hidden" (hidden = ميظهرش)
+    // Move a supplier by hand: "exact supplier name": "wood" / "plastic" / "hidden"
+    overrides: {
+      "اليمان باك": "plastic", // كرتون - cartons (packaging)
+      "omar - test": "hidden", // حساب تجربة - a test supplier
+      "teststststst": "hidden",
+    } as Record<string, "wood" | "plastic" | "hidden">,
+  },
+
   pages: {
     autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header
@@ -699,7 +747,8 @@ export const dashboardConfig = {
       { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 4: مبيعات المناديب - page 4
       { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 5: الخزن والمحافظ - page 5
       { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 6 (الأخيرة): صناديق الصدقات - page 6 (last)
-      // الصفحة 7: واتساب (قراية بس) - في الأسهم والنقط بس، والتقليب التلقائي على التلفزيون بيعديها (inRotation: true = تدخل)
+      { id: "suppliers", title: "الموردين", durationSeconds: 60, enabled: true }, // الصفحة 7: موردين الخشب والبلاستيك - page 7
+      // الصفحة 8 (الأخيرة): واتساب (قراية بس) - في الأسهم والنقط بس، والتقليب التلقائي على التلفزيون بيعديها (inRotation: true = تدخل)
       // Page 7: WhatsApp (read-only) - arrows/dots only; the TV auto-rotation skips it (inRotation: true = include it)
       { id: "whatsapp", title: "واتساب", durationSeconds: 60, enabled: true, inRotation: false },
       // متوقفة — غيّرها لـ true لو عايز ترجّعها
