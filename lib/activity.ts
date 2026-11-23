@@ -198,7 +198,7 @@ async function kilnEvents(since: string): Promise<ActivityEvent[]> {
       id: `kiln:${row.name}`,
       kind: "kiln",
       at: stamp(row.creation),
-      title: inBatch && inBatch.index > 1 ? "ترول خرج" : "طرحة خرجت",
+      title: inBatch && inBatch.index > 1 ? "ترول دخل الفرن" : "طرحة دخلت الفرن",
       details: [
         m.kiln,
         m.type,

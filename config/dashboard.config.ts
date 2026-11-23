@@ -1027,15 +1027,13 @@ export const dashboardConfig = {
 
     // صفحة الإنتاج والأفران - the production page
     productionPage: {
-      kpiHeight: 132, // ارتفاع صف الأرقام اللي فوق - top KPI row height (px)
-      kpiTonsFontSize: 72, // رقم "إنتاج النهارده" (الأكبر) - the "إنتاج النهارده" number (biggest)
-      kpiFontSize: 46, // باقي أرقام الصف اللي فوق - the other KPI numbers
+      kpiTonsFontSize: 72, // رقم "إنتاج النهارده" (الأكبر، في عمود الشمال تحت آخر وزنة) - the biggest KPI (left column)
+      kpiFontSize: 46, // باقي الأرقام (2×2 تحته) - the other KPIs (2x2 under it)
       kilnTonsFontSize: 28, // أطنان كل فرن - each kiln's tons
       kilnStatFontSize: 18, // عدد الطرحات وساعة آخر خروج تحت رسمة الفرن - exits count and last exit time under the kiln drawing
       kilnChipFontSize: 15, // شارة الحالة (شغالة / صيانة / متوقفة) - the status chip
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس المقاسات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
-        kpiHeight: 96,
         kpiTonsFontSize: 50,
         kpiFontSize: 32,
         kilnTonsFontSize: 20,
@@ -1044,33 +1042,36 @@ export const dashboardConfig = {
       },
     },
 
-    // صفحة الإنتاج — العمود الشمال بس ("آخر وزنة" + "طرحات النهارده")، كله بالبكسل
-    // The production page — left column only ("آخر وزنة" + "طرحات النهارده"), all in px
-    // لو العمود ضيق أوي (أضيق من 340 بكسل) الأرقام بتصغر خطوة واحدة بس عشان متطلعش برّه الكارت
-    // If the column gets very narrow (under 340 px) sizes step down once so nothing overflows
+    // صفحة الإنتاج: "آخر وزنة" (فوق الشمال) و"طرحات النهارده" (الكارت الكبير في النص)، كله بالبكسل
+    // لو عمود الشمال ضيق أوي (أضيق من 340 بكسل) أرقام "آخر وزنة" بتصغر خطوة واحدة عشان متطلعش برّه الكارت
+    // The production page: "آخر وزنة" (top left) and "طرحات النهارده" (the big middle card), all in px.
+    // If the left column gets very narrow (under 340 px) the "آخر وزنة" sizes step down once so nothing overflows
     production: {
-      lastCardHeight: 220, // ارتفاع كارت "آخر وزنة"، والقايمة بتاخد باقي العمود - "آخر وزنة" card height; the list takes the rest
+      lastCardHeight: 220, // ارتفاع كارت "آخر وزنة"، والأرقام تحته بتاخد الباقي - "آخر وزنة" height; the KPIs take the rest
       lastTitleFontSize: 20, // عنوان "آخر وزنة" - the card title
       lastIconSize: 30, // أيقونة الميزان - the scale icon
       lastWeightFontSize: 56, // رقم الوزن الكبير في النص - the big weight in the center
       lastNoWeightFontSize: 32, // "بدون وزن" مكان الرقم (رمادي) - "بدون وزن" instead of the number (gray)
-      lastChipFontSize: 22, // الفرن والنوع تحت الوزن - kiln and type under the weight
-      lastTimeFontSize: 20, // ساعة الطرحة - the exit time
+      lastChipFontSize: 22, // "دخلت فرن 4" والنوع تحت الوزن - "دخلت فرن 4" and the type under the weight
+      lastTimeFontSize: 20, // الساعة - the time
       lastAgoFontSize: 18, // "من X دقيقة" - how long ago
-      // سطر الطرحة = سطرين: الساعة والفرن والنوع والمجموع، وتحتهم شرايح الترولات - a batch row = two lines: time / kiln /
-      // type / total, and the trolley chips under them
-      exitRowHeight: 84, // ارتفاع سطر الطرحة العادي - a normal batch row height
-      exitRowMin: 66, // أقل ارتفاع لما الطرحات كتير (وبعدها "+N طرحة تانية") - minimum when there are many batches
-      exitRowMax: 112, // أكبر ارتفاع لما الطرحات قليلة - maximum when there are only a few batches
-      exitChipFontSize: 16, // شرايح "ترول 22: 580" تحت الطرحة - the "ترول 22: 580" chips under a batch
-      lastBatchFontSize: 18, // "ضمن طرحة فرن 4 (2 من 3)" في "آخر وزنة" - the batch line in "آخر وزنة"
-      exitTimeFontSize: 22, // الساعة - the time
-      exitKilnFontSize: 20, // اسم الفرن - the kiln chip
-      exitTypeFontSize: 22, // النوع - the charcoal type
+      lastBatchFontSize: 18, // "ضمن طرحة فرن 4 (2 من 3)" - the batch line
       exitDotSize: 14, // النقطة الملونة جنب النوع - the colored dot next to the type
-      exitWeightFontSize: 22, // الوزن - the weight
-      exitNoWeightFontSize: 16, // "بدون وزن" في القايمة (رمادي) - "بدون وزن" in the list (gray)
-      exitMoreFontSize: 16, // سطر "+N طرحة تانية" - the "+N طرحة تانية" line
+      // ===== طرحات النهارده: سطر لكل طرحة = راس (الساعة · الفرن · الغرفة · النوع · الترولات · المجموع) وتحته
+      // مربع لكل ترول "ترول 6 — 610 كجم". السطور بتملا الكارت بين batchRowMin و batchRowMax، والزيادة "+N طرحة تانية"
+      // Today's batches: one row per batch = a header (time · kiln · room · type · trolleys · total) and a box per
+      // trolley under it. Rows fill the card between batchRowMin and batchRowMax; the rest become "+N طرحة تانية"
+      batchRowMin: 116, // أقل ارتفاع للطرحة - minimum batch row height
+      batchRowMax: 168, // أكبر ارتفاع (لما الطرحات قليلة) - maximum (when there are only a few)
+      batchTimeFontSize: 32, // الساعة (كبيرة) - the time (big)
+      batchKilnFontSize: 28, // "فرن 4"
+      batchRoomFontSize: 22, // "غرفة 1"
+      batchTypeFontSize: 28, // النوع (الكلمة كاملة) - the type (full word)
+      batchDotSize: 16, // نقطة لون النوع - the type's colored dot
+      batchCountFontSize: 22, // "3 ترول" / "2 من 3"
+      batchTotalFontSize: 38, // المجموع "1,715 كجم" (الأكبر) - the total (biggest)
+      batchTrolleyFontSize: 22, // "ترول 6 — 610 كجم"
+      batchMoreFontSize: 20, // "+N طرحة تانية"
       // شاشة أضيق من 1600 (لابتوب 1366×768): نفس الحاجات أصغر - screens under 1600 wide (1366x768 laptop): smaller
       compact: {
         lastCardHeight: 170,
@@ -1081,18 +1082,19 @@ export const dashboardConfig = {
         lastChipFontSize: 17,
         lastTimeFontSize: 16,
         lastAgoFontSize: 14,
-        exitRowHeight: 68,
-        exitRowMin: 54,
-        exitRowMax: 92,
-        exitChipFontSize: 13,
         lastBatchFontSize: 14,
-        exitTimeFontSize: 18,
-        exitKilnFontSize: 15,
-        exitTypeFontSize: 17,
         exitDotSize: 12,
-        exitWeightFontSize: 18,
-        exitNoWeightFontSize: 13,
-        exitMoreFontSize: 13,
+        batchRowMin: 84,
+        batchRowMax: 120,
+        batchTimeFontSize: 22,
+        batchKilnFontSize: 19,
+        batchRoomFontSize: 15,
+        batchTypeFontSize: 19,
+        batchDotSize: 12,
+        batchCountFontSize: 15,
+        batchTotalFontSize: 26,
+        batchTrolleyFontSize: 16,
+        batchMoreFontSize: 15,
       },
     },
 

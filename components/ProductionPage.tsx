@@ -3,7 +3,6 @@
 import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Clock, Factory, Flame, PowerOff, Scale, Wrench } from "lucide-react";
 import KilnIllustration, { type KilnState } from "./KilnIllustration";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { ProductionData, ProductionExit } from "@/lib/types";
 import { formatNumber, toEnglishDigits } from "@/lib/format";
 import {
@@ -26,8 +25,10 @@ import { sameExit } from "@/lib/kiln-alert";
 import { useLiveScale } from "@/lib/useLiveScale";
 import { progressText } from "@/lib/batches";
 
-// صفحة الإنتاج والأفران: الأرقام فوق، آخر وزنة (ترول)، الأفران، بالساعة، طرحات النهارده (طرحة = 2 أو 3 ترولات)، ملخص الشهر
-// The production page: KPIs, the last weighing (a trolley), kilns, hourly, today's batches (2 or 3 trolleys each), the month
+// صفحة الإنتاج والأفران: الأفران (يمين)، طرحات النهارده (الكارت الكبير في النص)، آخر وزنة والأرقام (شمال).
+// الترولات بتتوزن وهي داخلة الفرن، والطرحة = 2 أو 3 ترولات. ملخص الشهر والإنتاج بالساعة في لوحة "📊 ملخص الشهر"
+// The production page: kilns (right), today's batches (the big middle card), the last weighing and KPIs (left).
+// Trolleys are weighed entering the kiln; a batch = 2 or 3 trolleys. Month + hourly live in the "📊 ملخص الشهر" panel
 
 export type ProductionTarget = { kind: "kiln" | "type"; name: string };
 
@@ -103,21 +104,25 @@ function Kpi({ label, children, sub, accent = false }: { label: string; children
   );
 }
 
-function KpiRow({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
+// الأرقام تحت "آخر وزنة" في عمود الشمال: "إنتاج النهارده" بعرض العمود، وتحته 2×2 - the KPIs under "آخر وزنة":
+// "إنتاج النهارده" full width, then a 2×2 grid
+function KpiStack({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
   const { compare } = s;
   const up = compare.pct !== null && compare.pct >= 0;
   const unweighed = s.today.count - s.today.weighed;
   return (
-    <div className="grid gap-3 min-[1600px]:gap-4 h-full" style={{ gridTemplateColumns: "1.5fr 1fr 1fr 1.1fr 1.2fr" }}>
-      <Kpi label="إنتاج النهارده" accent sub={unweighed > 0 ? `${unweighed} ترول بدون وزن` : undefined}>
-        <span
-          className="font-extrabold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent"
-          style={{ fontSize: sizes.kpiTonsFontSize }}
-        >
-          {num(tons(s.today))}
-        </span>
-        <span className="text-gray-300 font-bold text-[18px] min-[1600px]:text-[24px]"> طن</span>
-      </Kpi>
+    <div className="flex-1 min-h-0 grid gap-3 min-[1600px]:gap-4" style={{ gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1.25fr 1fr 1fr" }}>
+      <div className="col-span-2 min-h-0 grid">
+        <Kpi label="إنتاج النهارده" accent sub={unweighed > 0 ? `${unweighed} ترول بدون وزن` : undefined}>
+          <span
+            className="font-extrabold bg-gradient-to-r from-brandYellow via-brandOrange to-brandDeepOrange bg-clip-text text-transparent"
+            style={{ fontSize: sizes.kpiTonsFontSize }}
+          >
+            {num(tons(s.today))}
+          </span>
+          <span className="text-gray-300 font-bold text-[18px] min-[1600px]:text-[24px]"> طن</span>
+        </Kpi>
+      </div>
       <Kpi label="عدد الطرحات" sub={<>النهارده · {num(formatNumber(s.today.count))} ترول</>}>
         <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
           {num(formatNumber(s.today.batches))}
@@ -137,11 +142,7 @@ function KpiRow({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
       </Kpi>
       <Kpi
         label="مقارنة بإمبارح"
-        sub={
-          <>
-            امبارح: {compare.by === "tons" ? `${formatTons(compare.yesterday)} طن` : `${formatNumber(compare.yesterday)} طرحة`}
-          </>
-        }
+        sub={<>امبارح: {compare.by === "tons" ? `${formatTons(compare.yesterday)} طن` : `${formatNumber(compare.yesterday)} طرحة`}</>}
       >
         {compare.pct === null ? (
           <span className="font-extrabold text-gray-600" style={{ fontSize: sizes.kpiFontSize }}>—</span>
@@ -152,7 +153,7 @@ function KpiRow({ s, sizes }: { s: ProductionSummary; sizes: Sizes }) {
           </span>
         )}
       </Kpi>
-      <Kpi label="إنتاج الشهر" sub={`${formatNumber(s.month.batches)} طرحة · ${formatNumber(s.month.count)} ترول${s.month.count > s.month.weighed ? ` (${s.month.count - s.month.weighed} بدون وزن)` : ""}`}>
+      <Kpi label="إنتاج الشهر" sub={`${formatNumber(s.month.batches)} طرحة · ${formatNumber(s.month.count)} ترول`}>
         <span className="font-extrabold text-white" style={{ fontSize: sizes.kpiFontSize }}>
           {num(tons(s.month))}
         </span>
@@ -264,7 +265,7 @@ function LastExitCard({
           {/* الفرن · النوع · الساعة في سطر واحد - kiln · type · time in one row */}
           <div className="shrink-0 flex items-center justify-center gap-3 min-w-0 whitespace-nowrap font-bold">
             <span className="prod-fs rounded-lg bg-white/10 text-white px-2.5 leading-[1.5]" style={fs(sizes.lastChipFontSize)}>
-              {toEnglishDigits(last.kiln || "—")}
+              {last.kiln ? <>دخلت {toEnglishDigits(last.kiln)}</> : "—"}
             </span>
             <span className="prod-fs flex items-center gap-1.5 min-w-0" style={{ ...fs(sizes.lastChipFontSize), color }}>
               <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
@@ -288,7 +289,7 @@ function LastExitCard({
   );
 }
 
-// كارت فرن: رسمة الفرن بحالته (شغالة نار ودخان / صيانة / متوقفة)، وتحتها أطنان النهارده وعدد الطرحات وآخر خروج
+// كارت فرن: رسمة الفرن بحالته (شغالة نار ودخان / صيانة / متوقفة)، وتحتها أطنان النهارده وعدد الطرحات وساعة آخر طرحة
 // A kiln tile: the kiln drawing in its state (working fire + smoke / maintenance / stopped), then today's exits, tons, last exit
 function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: string; sizes: Sizes; onOpen: () => void }) {
   const state: KilnState = kiln.status === "working" ? "working" : kiln.status === "maintenance" ? "maintenance" : "stopped";
@@ -315,8 +316,8 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
       <div className={`flex-1 min-h-0 flex items-center justify-center pt-3 pb-1 ${state === "stopped" ? "opacity-50" : ""}`}>
         <KilnIllustration state={state} label={toEnglishDigits(kiln.name)} className="w-full h-full" />
       </div>
-      {/* طرحات النهارده · الأطنان · آخر خروج - today's exits · tons · last exit */}
-      <p className="shrink-0 flex items-baseline gap-3 whitespace-nowrap min-w-0 text-gray-400" style={{ fontSize: sizes.kilnStatFontSize }}>
+      {/* أطنان النهارده · الطرحات · ساعة آخر طرحة - today tons · batches · last batch time */}
+      <p className="shrink-0 flex items-baseline gap-2 min-[1600px]:gap-3 whitespace-nowrap min-w-0 text-gray-400" style={{ fontSize: sizes.kilnStatFontSize }}>
         <span>
           <span className={`font-extrabold ${active ? "text-white" : "text-gray-600"}`} style={{ fontSize: sizes.kilnTonsFontSize }}>
             {num(tons(kiln.today))}
@@ -324,7 +325,7 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
           طن
         </span>
         <span className={active ? "text-gray-100 font-bold" : ""}>{num(formatNumber(kiln.today.batches))} طرحة</span>
-        <span className="ms-auto truncate" title="آخر خروج">
+        <span className="ms-auto truncate" title="آخر طرحة دخلت">
           {kiln.last ? (
             <>
               <Clock size={sizes.kilnStatFontSize * 0.85} className="inline align-[-2px]" /> {num(kiln.last.time)}
@@ -339,12 +340,13 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
   );
 }
 
-/// طرحات النهارده: سطر لكل طرحة (ساعة أول ترول، الفرن، الغرفة، النوع، عدد الترولات، المجموع كبير) وتحته شرايح
-// "ترول 22: 580". الطرحة الناقصة عليها "2 من 3" كهرماني. السطور بتملا الكارت (بتكبر لحد exitRowMax لو قليلة،
-// وبتصغر لحد exitRowMin لو كتير) من غير scroll ولا قص: لو أكتر من اللي ياخد مكانه، الأحدث وتحتهم "+N طرحة تانية"
-// Today's batches: one row per batch (first trolley time, kiln, room, type, trolley count, big total) with
-// "ترول 22: 580" chips under it; an incomplete batch shows an amber "2 من 3". Rows fill the card (up to exitRowMax,
-// down to exitRowMin), never scroll or cut: when more than fit, the newest that fit and a "+N طرحة تانية" line
+/// طرحات النهارده (الكارت الكبير في النص): سطر لكل طرحة، كبير ويتقري من بعيد
+// - الراس: الساعة (كبيرة) · "فرن 4" · "غرفة 1" · النوع بنقطة لونه (الكلمة كاملة) · "3 ترول" · المجموع "1,715 كجم" على الشمال
+// - تحته مربع لكل ترول "ترول 6 — 610 كجم" في صف واحد. الطرحة الناقصة عليها "2 من 3" كهرماني
+// السطور بتملا الكارت (بين batchRowMin و batchRowMax) من غير scroll: لو أكتر، الأحدث وتحتهم "+N طرحة تانية"
+// Today's batches (the big middle card): one big row per batch, readable from a distance. Header: time · kiln ·
+// room · type (full word) · trolley count · total; under it one box per trolley in a single row. An incomplete batch
+// shows an amber "2 من 3". Rows fill the card (batchRowMin..batchRowMax), never scroll: the newest that fit + "+N"
 function BatchList({
   data,
   batches,
@@ -356,7 +358,7 @@ function BatchList({
   sizes: LeftSizes;
   alertExit?: ProductionExit | null;
 }) {
-  const gap = 6;
+  const gap = 10;
   // الطرحات الجديدة (بعد أول عرض) بتدخل بحركة ولمعة قصيرة - new batches (after the first render) slide in with a short flash
   const seen = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -378,7 +380,7 @@ function BatchList({
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys]);
-  const moreHeight = Math.round(sizes.exitMoreFontSize * 1.9);
+  const moreHeight = Math.round(sizes.batchMoreFontSize * 2);
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
@@ -393,24 +395,24 @@ function BatchList({
 
   const n = batches.length;
   let shown = n;
-  let row = sizes.exitRowHeight;
+  let row = sizes.batchRowMin;
   if (height > 0 && n > 0) {
-    const fitsAll = n * sizes.exitRowMin + (n - 1) * gap <= height;
-    if (fitsAll) {
-      row = Math.min(sizes.exitRowMax, Math.floor((height - (n - 1) * gap) / n));
+    if (n * sizes.batchRowMin + (n - 1) * gap <= height) {
+      row = Math.min(sizes.batchRowMax, Math.floor((height - (n - 1) * gap) / n));
     } else {
       // اللي ياخد مكانه بأقل ارتفاع، وسطر "+N" تحت - as many as fit at the minimum height, plus the "+N" line
-      shown = Math.max(0, Math.floor((height - moreHeight) / (sizes.exitRowMin + gap)));
-      row = shown > 0 ? Math.min(sizes.exitRowMax, Math.floor((height - moreHeight - shown * gap) / shown)) : sizes.exitRowMin;
+      shown = Math.max(0, Math.floor((height - moreHeight) / (sizes.batchRowMin + gap)));
+      row = shown > 0 ? Math.min(sizes.batchRowMax, Math.floor((height - moreHeight - shown * gap) / shown)) : sizes.batchRowMin;
     }
   }
   const hidden = n - shown;
+  const px = (v: number) => ({ fontSize: v });
   return (
     <div ref={ref} className="flex-1 min-h-0 overflow-hidden flex flex-col" style={{ gap }}>
       {n === 0 && (
         <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-cardBorder">
-          <p className="prod-fs text-gray-500 font-semibold" style={fs(sizes.exitTypeFontSize)}>
-            لم تخرج طرحات النهارده
+          <p className="text-gray-500 font-semibold" style={px(sizes.batchTypeFontSize)}>
+            مفيش طرحات دخلت الأفران النهارده
           </p>
         </div>
       )}
@@ -422,65 +424,82 @@ function BatchList({
           return (
             <div
               key={key}
-              className={`shrink-0 flex flex-col justify-center gap-1 px-3 rounded-xl border ${
-                index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_16px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
+              className={`shrink-0 flex flex-col justify-evenly px-4 rounded-2xl border-2 min-w-0 ${
+                index === 0 ? "border-brandOrange bg-brandOrange/10 shadow-[0_0_18px_2px_rgba(255,122,0,0.28)]" : "border-cardBorder bg-background/60"
               } ${fresh.has(key) ? "animate-exit-in" : ""} ${alerting ? "exit-alert-row" : ""}`}
               style={{ height: row }}
             >
-              {/* الساعة · الفرن · الغرفة والنوع · الترولات · المجموع - time · kiln · room and type · trolleys · total */}
-              <div className="grid items-center gap-2.5 min-w-0" style={{ gridTemplateColumns: "auto auto minmax(0,1fr) auto auto" }}>
-                <span className="prod-fs text-gray-100 font-bold tabular-nums" style={fs(sizes.exitTimeFontSize)}>
+              {/* الراس - the header */}
+              <div className="flex items-center gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
+                <span className="text-white font-extrabold" style={px(sizes.batchTimeFontSize)}>
                   {num(batch.time)}
                 </span>
-                <span className="prod-fs px-2 rounded-lg bg-white/10 text-white font-bold whitespace-nowrap leading-[1.5]" style={fs(sizes.exitKilnFontSize)}>
+                <span className="shrink-0 rounded-lg bg-white/10 text-white px-2.5 py-1" style={px(sizes.batchKilnFontSize)}>
                   {toEnglishDigits(batch.kiln || "—")}
-                  {batch.room && <span className="text-gray-400 font-semibold text-[0.8em]"> غ{num(toEnglishDigits(batch.room))}</span>}
                 </span>
-                <span className="prod-fs flex items-center gap-2 min-w-0 font-bold" style={{ ...fs(sizes.exitTypeFontSize), color }}>
-                  <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
-                  <span className="truncate" title={batch.type || "غير محدد"}>
-                    {batch.type || "غير محدد"}
-                  </span>
-                </span>
-                <span
-                  className={`prod-fs rounded-full px-2 font-bold whitespace-nowrap leading-[1.6] ${
-                    batch.complete ? "bg-white/10 text-gray-200" : "bg-statusAmber/20 text-statusAmber"
-                  }`}
-                  style={fs(sizes.exitChipFontSize)}
-                  title={batch.complete ? "عدد الترولات" : "الطرحة لسه ناقصة"}
-                >
-                  {num(batch.complete ? `${batch.count}` : progressText(batch))}
-                  {batch.complete && " ترول"}
-                </span>
-                {batch.weighed > 0 ? (
-                  <span className="prod-fs text-white font-extrabold whitespace-nowrap" style={fs(sizes.exitWeightFontSize * 1.15)}>
-                    {num(formatKg(batch.kg))} <span className="text-gray-500 font-semibold text-[0.6em]">كجم</span>
-                  </span>
-                ) : (
-                  <span className="prod-fs text-gray-500 font-semibold whitespace-nowrap" style={fs(sizes.exitNoWeightFontSize)}>
-                    بدون وزن
+                {batch.room && (
+                  <span className="shrink-0 text-gray-300" style={px(sizes.batchRoomFontSize)}>
+                    غرفة {num(toEnglishDigits(batch.room))}
                   </span>
                 )}
+                <span className="shrink-0 flex items-center gap-2" style={{ ...px(sizes.batchTypeFontSize), color }}>
+                  <span className="rounded-full shrink-0" style={{ width: sizes.batchDotSize, height: sizes.batchDotSize, backgroundColor: color }} />
+                  {batch.type || "غير محدد"}
+                </span>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 ${batch.complete ? "bg-white/10 text-gray-100" : "bg-statusAmber/20 text-statusAmber"}`}
+                  style={px(sizes.batchCountFontSize)}
+                  title={batch.complete ? "عدد الترولات" : "الطرحة لسه ناقصة"}
+                >
+                  {batch.complete ? (
+                    <>
+                      {num(String(batch.count))} ترول
+                    </>
+                  ) : (
+                    num(progressText(batch))
+                  )}
+                </span>
+                <span className="ms-auto shrink-0 font-extrabold text-white" style={px(sizes.batchTotalFontSize)}>
+                  {batch.weighed > 0 ? (
+                    <>
+                      {num(formatKg(batch.kg))} <span className="text-gray-400 font-bold text-[0.55em]">كجم</span>
+                    </>
+                  ) : (
+                    <span className="text-gray-500 text-[0.6em]">بدون وزن</span>
+                  )}
+                </span>
               </div>
-              {/* ترول ترول - trolley by trolley */}
-              <div className="flex items-center gap-1.5 min-w-0 overflow-hidden whitespace-nowrap">
+              {/* ترول ترول في صف واحد - the trolleys, one row */}
+              <div className="flex items-stretch gap-2 min-w-0">
                 {batch.trolleys.map((t, i) => (
                   <span
                     key={exitKey(t)}
-                    className={`prod-fs shrink-0 rounded-md px-1.5 leading-[1.5] text-gray-300 ${
-                      alertExit && sameExit(t, alertExit) ? "bg-brandOrange/30 text-white" : "bg-white/[0.06]"
+                    className={`flex-1 min-w-0 rounded-xl border px-2 py-1 text-center whitespace-nowrap overflow-hidden text-ellipsis font-bold ${
+                      alertExit && sameExit(t, alertExit) ? "border-brandOrange bg-brandOrange/25 text-white" : "border-white/10 bg-white/[0.06] text-gray-200"
                     }`}
-                    style={fs(sizes.exitChipFontSize)}
+                    style={px(sizes.batchTrolleyFontSize)}
                   >
-                    ترول {num(toEnglishDigits(t.trolley || String(i + 1)))}: <b className="text-gray-100">{num(t.kg !== null ? formatKg(t.kg) : "—")}</b>
+                    ترول {num(toEnglishDigits(t.trolley || String(i + 1)))} — <span className="text-white">{num(t.kg !== null ? formatKg(t.kg) : "—")}</span>{" "}
+                    <span className="text-gray-400 font-semibold text-[0.8em]">كجم</span>
                   </span>
                 ))}
+                {/* أماكن الترولات اللي لسه مجاتش - slots for the trolleys still to come */}
+                {batch.size !== null &&
+                  Array.from({ length: Math.max(0, batch.size - batch.count) }, (_, i) => (
+                    <span
+                      key={`slot-${i}`}
+                      className="flex-1 min-w-0 rounded-xl border border-dashed border-statusAmber/50 px-2 py-1 text-center whitespace-nowrap text-statusAmber/80 font-bold"
+                      style={px(sizes.batchTrolleyFontSize)}
+                    >
+                      ترول {num(String(batch.count + i + 1))} …
+                    </span>
+                  ))}
               </div>
             </div>
           );
         })}
       {height > 0 && hidden > 0 && (
-        <div className="prod-fs shrink-0 flex items-center justify-center text-gray-400 font-semibold" style={{ ...fs(sizes.exitMoreFontSize), height: moreHeight }}>
+        <div className="shrink-0 flex items-center justify-center text-gray-300 font-bold" style={{ ...px(sizes.batchMoreFontSize), height: moreHeight }}>
           {num(`+${formatNumber(hidden)}`)} طرحة تانية
         </div>
       )}
@@ -488,71 +507,7 @@ function BatchList({
   );
 }
 
-// رسم النهارده بالساعة - today's hourly chart
-function HourlyChart({ s }: { s: ProductionSummary }) {
-  const byTons = s.today.weighed > 0;
-  const now = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Cairo", hour: "numeric", hourCycle: "h23" }).format(new Date());
-  const current = Number(now);
-  const rows = s.hours.map((h) => ({ ...h, value: byTons ? Math.round(h.tons * 100) / 100 : h.count }));
-  return (
-    <div dir="ltr" className="flex-1 min-h-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 22, right: 6, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke="#232B40" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 13 }} tickLine={false} axisLine={{ stroke: "#232B40" }} interval={0} />
-          <YAxis
-            tick={{ fill: "#9CA3AF", fontSize: 12 }}
-            tickLine={false}
-            axisLine={false}
-            width={40}
-            allowDecimals={byTons}
-            tickFormatter={(v: number) => (byTons ? v.toFixed(1) : formatNumber(v))}
-          />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-            {rows.map((r) => (
-              <Cell key={r.hour} fill={r.hour === current ? "#FFC107" : "#FF7A00"} />
-            ))}
-            <LabelList
-              dataKey="value"
-              position="top"
-              fill="#E5E7EB"
-              fontSize={12}
-              formatter={(v: unknown) => (Number(v) > 0 ? (byTons ? Number(v).toFixed(2) : String(v)) : "")}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ملخص الشهر: أطنان كل نوع وكل فرن - the month summary: tons per type and per kiln
-function MonthTable({ title, rows, onOpen }: { title: string; rows: { key: string; label: ReactNode; t: Tally }[]; onOpen: (key: string) => void }) {
-  return (
-    <div className="min-w-0 min-h-0 flex flex-col">
-      <h3 className="text-gray-300 font-bold mb-1 shrink-0 text-[13px] min-[1600px]:text-[16px]">{title}</h3>
-      <div className="flex-1 min-h-0 flex flex-col justify-between">
-        {rows.map((r) => (
-          <button
-            key={r.key}
-            type="button"
-            onClick={() => onOpen(r.key)}
-            className="min-h-0 flex items-center gap-2 border-b border-cardBorder/60 last:border-0 hover:bg-white/5 px-1 text-start text-[13px] min-[1600px]:text-[16px]"
-          >
-            <span className="font-semibold text-gray-100 whitespace-nowrap">{r.label}</span>
-            <span className="ms-auto whitespace-nowrap">
-              <b className={r.t.count ? "text-white" : "text-gray-600"}>{num(tons(r.t))}</b>
-              <span className="text-gray-500 text-[0.85em]"> طن</span>
-            </span>
-            <span className="w-[4.2em] text-end text-gray-400 whitespace-nowrap">{num(formatNumber(r.t.batches))} طرحة</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/// كارت "🔥 ترول جديد" الكبير وقت التنبيه (بيشتغل لكل ترول): وزن الترول كبير، وتحته تقدم الطرحة بتاعته
+// كارت "🔥 ترول جديد" الكبير وقت التنبيه (بيشتغل لكل ترول): وزن الترول كبير، وتحته تقدم الطرحة بتاعته
 // "طرحة فرن 3 — ترول 2 من 3" بالشرايح والمجموع، و"✓ الطرحة كملت" لما تكمل (المقاسات ثابتة من production.alertCard)
 // The big alert card (fires per trolley): the trolley's weight, then its batch progress "طرحة فرن 3 — ترول 2 من 3"
 // with chips and the total, or "✓ الطرحة كملت" once complete (fixed sizes from production.alertCard)
@@ -594,7 +549,7 @@ function NewExitCard({
     >
       <div className="flex items-center gap-3 whitespace-nowrap">
         <span className="font-extrabold text-brandOrange leading-none" style={{ fontSize: c.titleFontSize }}>
-          🔥 {inBatch && inBatch.index > 1 ? "ترول جديد" : "طرحة جديدة"}
+          🔥 طرحة دخلت الفرن
         </span>
         <span className="text-gray-300 font-bold inline-flex items-center gap-1.5" style={{ fontSize: c.labelFontSize * 1.4 }}>
           <Clock size={c.labelFontSize * 1.3} />
@@ -660,7 +615,7 @@ function NewExitCard({
       )}
       {pending > 0 && (
         <span className="text-gray-300 font-bold" style={{ fontSize: c.labelFontSize }}>
-          {num(`+${formatNumber(pending)}`)} ترول جديد كمان
+          {num(`+${formatNumber(pending)}`)} ترول دخل كمان
         </span>
       )}
     </div>
@@ -701,8 +656,6 @@ export default function ProductionPage({
   }
 
   const s = summarize(data);
-  const byTonsToday = s.today.weighed > 0;
-  const byTonsMonth = s.month.weighed > 0;
   const gap = compact ? 12 : 16;
 
   return (
@@ -710,43 +663,18 @@ export default function ProductionPage({
       className="grid h-full"
       style={{
         gap,
-        // يمين: الأفران (الكارت الكبير)، النص: بالساعة + ملخص الشهر، شمال: آخر وزنة + طرحات النهارده
-        // Right: the kilns (the big card), middle: hourly + month summary, left: last weighing + today's exits
-        gridTemplateColumns: "minmax(0,1.45fr) minmax(0,1.2fr) minmax(0,0.95fr)",
-        gridTemplateRows: `${sizes.kpiHeight}px minmax(0,1fr) minmax(0,1fr)`,
+        // يمين: الأفران، النص: طرحات النهارده (الكارت الكبير بالطول كله)، شمال: آخر وزنة وتحتها الأرقام
+        // ملخص الشهر والإنتاج بالساعة في لوحة "📊 ملخص الشهر" (زرار في الهيدر)
+        // Right: the kilns, middle: today's batches (the big full-height card), left: the last weighing with the KPIs
+        // under it. The month summary and the hourly chart live in the "📊 ملخص الشهر" panel (a header button)
+        gridTemplateColumns: "minmax(0,1.18fr) minmax(0,1.42fr) minmax(0,0.8fr)",
+        gridTemplateRows: "minmax(0,1fr)",
       }}
     >
-      <div className="col-span-2 min-h-0">
-        <KpiRow s={s} sizes={sizes} />
-      </div>
-      {/* العمود الشمال كله: "آخر وزنة" فوق والقايمة باقي الطول - the whole left column: "آخر وزنة" on top, the list fills the rest */}
-      <div className="prod-left min-h-0 min-w-0 flex flex-col" style={{ gridColumn: 3, gridRow: "1 / span 3", gap }}>
-        <LastExitCard data={data} last={s.last} batches={s.batches} sizes={left} active={active} />
-        <Card
-          title="طرحات النهارده"
-          icon={<Factory className="text-brandOrange" size={compact ? 18 : 22} />}
-          extra={
-            <>
-              {lan && (
-                <span className="rounded-full bg-statusGreen/15 text-statusGreen px-2 font-bold whitespace-nowrap text-[12px] min-[1600px]:text-[14px] leading-[1.7]" title="الطرحات بتوصل على طول من الإيجنت">
-                  📡 مباشر
-                </span>
-              )}
-              <span className="text-gray-400 whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">
-                {num(formatNumber(s.today.batches))} طرحة · {num(formatNumber(s.today.count))} ترول
-              </span>
-            </>
-          }
-          className="flex-1"
-        >
-          <BatchList data={data} batches={s.todayBatches} sizes={left} alertExit={alertExit} />
-        </Card>
-      </div>
-
       <Card
         title="الأفران"
         icon={<Flame className="text-brandOrange" size={compact ? 18 : 22} />}
-        style={{ gridColumn: 1, gridRow: "2 / span 2" }}
+        style={{ gridColumn: 1, gridRow: 1 }}
         extra={
           <>
             {data.offline && <OfflineBadge />}
@@ -756,7 +684,7 @@ export default function ProductionPage({
           </>
         }
       >
-        {/* 6 أفران: عمودين × 3 صفوف (الرسمة عريضة) - 6 kilns: 2 columns × 3 rows (the drawing is wide) */}
+        {/* 6 أفران: عمودين × 3 صفوف - 6 kilns: 2 columns × 3 rows */}
         <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-3 gap-2 min-[1600px]:gap-3">
           {s.kilns.slice(0, 6).map((k) => (
             <KilnTile key={k.name} kiln={k} today={data.today} sizes={sizes} onOpen={() => onOpen({ kind: "kiln", name: k.name })} />
@@ -765,52 +693,34 @@ export default function ProductionPage({
       </Card>
 
       <Card
-        title="الإنتاج بالساعة النهارده"
-        style={{ gridColumn: 2, gridRow: 2 }}
-        icon={<Clock className="text-brandOrange" size={compact ? 18 : 22} />}
-        extra={<span className="text-gray-500 text-[13px] min-[1600px]:text-[15px] whitespace-nowrap">{byTonsToday ? "طن في الساعة" : "عدد الترولات (مفيش أوزان)"}</span>}
-      >
-        <HourlyChart s={s} />
-      </Card>
-
-
-      <Card
-        title="ملخص الشهر"
-        style={{ gridColumn: 2, gridRow: 3 }}
+        title="طرحات النهارده"
+        icon={<Factory className="text-brandOrange" size={compact ? 20 : 26} />}
+        style={{ gridColumn: 2, gridRow: 1 }}
         extra={
-          <span className="whitespace-nowrap text-[13px] min-[1600px]:text-[16px]">
-            <b className="text-brandOrange">{num(tons(s.month))}</b>
-            <span className="text-gray-400"> طن · {num(formatNumber(s.month.batches))} طرحة</span>
-            {!byTonsMonth && s.month.count > 0 && <span className="text-gray-500"> (بدون أوزان)</span>}
-          </span>
+          <>
+            {lan && (
+              <span className="rounded-full bg-statusGreen/15 text-statusGreen px-2 font-bold whitespace-nowrap text-[12px] min-[1600px]:text-[14px] leading-[1.7]" title="الطرحات بتوصل على طول من الإيجنت">
+                📡 مباشر
+              </span>
+            )}
+            <span className="text-gray-300 font-bold whitespace-nowrap text-[15px] min-[1600px]:text-[19px]">
+              {num(formatNumber(s.today.batches))} طرحة · {num(formatNumber(s.today.count))} ترول
+            </span>
+          </>
         }
       >
-        <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-          <MonthTable
-            title="حسب النوع"
-            rows={s.types.map((t) => ({
-              key: t.label,
-              label: (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-                  {t.label}
-                </span>
-              ),
-              t: t.month,
-            }))}
-            onOpen={(name) => onOpen({ kind: "type", name })}
-          />
-          <MonthTable
-            title="حسب الفرن"
-            rows={s.kilns.map((k) => ({ key: k.name, label: toEnglishDigits(k.name), t: k.month }))}
-            onOpen={(name) => onOpen({ kind: "kiln", name })}
-          />
-        </div>
+        <BatchList data={data} batches={s.todayBatches} sizes={left} alertExit={alertExit} />
       </Card>
+
+      {/* شمال: "آخر وزنة" صغيرة فوق، والأرقام تحتها - left: the small "آخر وزنة" on top, the KPIs under it */}
+      <div className="prod-left min-h-0 min-w-0 flex flex-col" style={{ gridColumn: 3, gridRow: 1, gap }}>
+        <LastExitCard data={data} last={s.last} batches={s.batches} sizes={left} active={active} />
+        <KpiStack s={s} sizes={sizes} />
+      </div>
 
       {/* التنبيه: الكارت الكبير فوق الأفران والنص (القايمة الشمال باينة وسطرها منور) - the alert card over the kilns and middle */}
       {alertExit && (
-        <div className="relative z-20 min-w-0 min-h-0 flex items-center justify-center pointer-events-none" style={{ gridColumn: "1 / span 2", gridRow: "1 / span 3" }}>
+        <div className="relative z-20 min-w-0 min-h-0 flex items-center justify-center pointer-events-none" style={{ gridColumn: "1 / span 2", gridRow: 1 }}>
           <NewExitCard data={data} exit={alertExit} batches={s.batches} pending={alertPending} onDismiss={() => onDismissAlert?.()} />
         </div>
       )}

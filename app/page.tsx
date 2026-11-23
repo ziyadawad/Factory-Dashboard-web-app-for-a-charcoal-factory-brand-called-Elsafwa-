@@ -11,6 +11,7 @@ import PageNav from "@/components/PageNav";
 import ProductionPage, { ProductionTarget } from "@/components/ProductionPage";
 import ActivityFeed from "@/components/ActivityFeed";
 import ProductionDetailsPanel from "@/components/ProductionDetailsPanel";
+import ProductionMonthPanel from "@/components/ProductionMonthPanel";
 import CharitySection from "@/components/CharitySection";
 import CharityDetailsPanel, { type CharityPanelTarget } from "@/components/CharityDetailsPanel";
 import SalesRepsSection from "@/components/SalesRepsSection";
@@ -116,10 +117,21 @@ export default function Dashboard() {
     return withLiveExits(base, liveExits.exits);
   }, [productionRaw, productionError, liveExits.exits]);
   const [operatorQrOpen, setOperatorQrOpen] = useState(false);
-  // صفحة تانية = الـ QR اتقفل (عشان التقليب ميفضلش واقف) - another page = the QR closes (so rotation never stays paused)
+  // لوحة "📊 ملخص الشهر" (زرار في هيدر صفحة الإنتاج) - the "📊 ملخص الشهر" panel (production page header button)
+  const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
+  // صفحة تانية = الـ QR واللوحة يتقفلوا (عشان التقليب ميفضلش واقف) - another page closes them (rotation never stays paused)
   useEffect(() => {
-    if (pageId !== "production") setOperatorQrOpen(false);
+    if (pageId !== "production") {
+      setOperatorQrOpen(false);
+      setMonthSummaryOpen(false);
+    }
   }, [pageId]);
+  const closeMonthSummary = useCallback(() => setMonthSummaryOpen(false), []);
+  // فرن / نوع من ملخص الشهر: تفاصيله يوم بيوم مكانه - a kiln / type from the month summary opens its day-by-day details
+  const openFromMonth = useCallback((target: ProductionTarget) => {
+    setMonthSummaryOpen(false);
+    setProductionTarget(target);
+  }, []);
   const closeProduction = useCallback(() => setProductionTarget(null), []);
 
   const [flashSection, setFlashSection] = useState<string | null>(null);
@@ -174,7 +186,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen || operatorQrOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen || operatorQrOpen || monthSummaryOpen;
 
   // تنبيه طرحة جديدة: بيستنى لو لوحة تفاصيل مفتوحة - the new kiln exit alert; waits while a details panel is open
   const chime = useChime();
@@ -457,6 +469,17 @@ export default function Dashboard() {
                 🔔 فعّل الصوت
               </button>
             )}
+            {pageId === "production" && (
+              <button
+                type="button"
+                onClick={() => setMonthSummaryOpen(true)}
+                className="px-2.5 py-1.5 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[14px] min-[1600px]:text-[15px] font-bold text-gray-200 whitespace-nowrap"
+                title="ملخص الشهر والإنتاج بالساعة"
+              >
+                📊<span className="hidden min-[1600px]:inline"> ملخص الشهر</span>
+                <span className="min-[1600px]:hidden"> الشهر</span>
+              </button>
+            )}
             {pageId === "production" && <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />}
           </>
         }
@@ -500,6 +523,7 @@ export default function Dashboard() {
       )}
       {wallet && <AccountDetailsPanel accountNumber={wallet.accountNumber} title={wallet.title} mode="months" onClose={closeWallet} />}
       {charityTarget && <CharityDetailsPanel target={charityTarget} onClose={closeCharity} />}
+      {monthSummaryOpen && production && <ProductionMonthPanel data={production} onClose={closeMonthSummary} onOpen={openFromMonth} />}
       {productionTarget && production && (
         <ProductionDetailsPanel data={production} target={productionTarget} onClose={closeProduction} />
       )}

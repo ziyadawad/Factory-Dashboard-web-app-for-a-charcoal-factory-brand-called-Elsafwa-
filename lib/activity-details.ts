@@ -297,7 +297,7 @@ function kilnBody(doc: Doc): Body {
       { label: "النوع", value: str(doc[typeField]) || "غير محدد" },
       { label: "الصافي", value: Number.isFinite(kg) && kg > 0 ? `${n(kg)} كجم (${(kg / 1000).toFixed(2)} طن)` : "بدون وزن" },
       ...extra,
-      { label: "وقت الخروج", value: exit || "—" },
+      { label: "وقت الدخول", value: exit || "—" },
     ],
     tables: [],
   };
