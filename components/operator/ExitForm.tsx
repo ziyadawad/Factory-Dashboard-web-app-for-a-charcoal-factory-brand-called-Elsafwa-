@@ -16,6 +16,7 @@ import { LiveScale } from "@/lib/useLiveScale";
 import { OperatorBatchSummary, OperatorOptions, OperatorSaveRequest, PendingWeighing } from "@/lib/types";
 import { Batch, cairoNowMinutes, isOpen } from "@/lib/batches";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { TypeBadge, TypeIcon, typeStyle } from "../TypeBadge";
 
 const RULES = { windowMinutes: dashboardConfig.production.batchWindowMinutes, maxTrolleys: dashboardConfig.production.maxTrolleysPerBatch };
 // اختيارات عدد الترولات: من 2 لحد maxTrolleysPerBatch - trolley count choices: 2..maxTrolleysPerBatch
@@ -89,7 +90,6 @@ export default function ExitForm({
   const grossKg = pending ? pending.grossKg : Number(gross) || 0;
   const tareKg = known ? known.emptyKg : Number(tare) || 0;
   const net = Math.round((grossKg - tareKg) * 10) / 10;
-  const typeColor = options.types.find((t) => t.label === type)?.color ?? "#9CA3AF";
   const index = STEPS.indexOf(step);
 
   const go = (next: Step) => {
@@ -329,10 +329,10 @@ export default function ExitForm({
                   go("trolley");
                 }}
                 className={`${bigBtn} flex h-[96px] items-center justify-center gap-3 text-[24px]`}
-                style={{ borderColor: type === t.label ? t.color : undefined, background: type === t.label ? `${t.color}22` : undefined }}
+                style={{ borderColor: type === t.label ? typeStyle(t.label).color : undefined, background: type === t.label ? `${typeStyle(t.label).color}22` : undefined }}
               >
-                <span className="h-4 w-4 rounded-full" style={{ background: t.color }} />
-                {t.label}
+                <TypeIcon label={t.label} size={34} />
+                <span style={{ color: typeStyle(t.label).color }}>{t.label}</span>
               </button>
             ))}
           </div>
@@ -461,8 +461,7 @@ export default function ExitForm({
               </p>
               <p className="flex items-center gap-2">
                 <span className="text-gray-400">النوع: </span>
-                <span className="h-3 w-3 rounded-full" style={{ background: typeColor }} />
-                {type}
+                <TypeBadge label={type} iconSize={22} className="font-bold" />
               </p>
               <p>
                 <span className="text-gray-400">الترول: </span>

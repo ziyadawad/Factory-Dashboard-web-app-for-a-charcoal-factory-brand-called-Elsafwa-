@@ -9,6 +9,7 @@ import { formatKg, formatTons, monthDays, typeColor } from "@/lib/production-sta
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import { ProductionTarget } from "./ProductionPage";
+import { TypeBadge, TypeIcon } from "./TypeBadge";
 
 // لوحة تفاصيل فرن أو نوع: طرحات الشهر ده يوم بيوم بالأوزان (من نفس بيانات الصفحة، بتتحدث معاها)
 // A kiln's or type's details: this month's exits day by day with weights (from the page data, refreshed with it)
@@ -65,7 +66,7 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center gap-4 px-5 py-3 border-b border-cardBorder">
-          {isKiln ? <Flame size={32} className="text-brandOrange shrink-0" /> : <span className="w-6 h-6 rounded-full shrink-0" style={{ backgroundColor: color }} />}
+          {isKiln ? <Flame size={32} className="text-brandOrange shrink-0" /> : <TypeIcon label={target.name} size={32} />}
           <h2 className="font-extrabold text-white text-[24px] min-[1600px]:text-[26px] leading-[1.5] whitespace-nowrap">
             {isKiln ? toEnglishDigits(target.name) : <span style={{ color }}>{target.name}</span>}
             <span className="text-gray-400 font-semibold text-[0.7em]">
@@ -141,16 +142,12 @@ export default function ProductionDetailsPanel({ data, target, onClose }: { data
                         </td>
                       </tr>
                       {day.exits.map((e) => {
-                        const c = typeColor(data, e.type);
                         return (
                           <tr key={e.liveId ?? e.id} className="hover:bg-white/5">
                             <td className={`${td} text-center text-gray-300`}>{n(e.time)}</td>
                             <td className={`${td} font-semibold`}>
                               {isKiln ? (
-                                <span className="inline-flex items-center gap-1.5" style={{ color: c }}>
-                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} />
-                                  {e.type || "غير محدد"}
-                                </span>
+                                <TypeBadge label={e.type} iconSize={20} />
                               ) : (
                                 <span className="text-gray-100">{toEnglishDigits(e.kiln || "—")}</span>
                               )}

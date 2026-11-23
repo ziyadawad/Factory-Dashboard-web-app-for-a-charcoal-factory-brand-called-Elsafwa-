@@ -23,6 +23,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import { sameExit } from "@/lib/kiln-alert";
 import TrolleyIllustration from "./TrolleyIllustration";
+import { GREEN_CHIP, TypeBadge } from "./TypeBadge";
 import { progressText } from "@/lib/batches";
 
 // صفحة الإنتاج والأفران: الأفران (يمين)، طرحات النهارده (الكارت الكبير في النص)، آخر وزنة والأرقام (شمال).
@@ -170,10 +171,10 @@ function batchOrdinal(batch: ProductionBatch, batches: ProductionBatch[]): strin
   return `الطرحة ${words[i] ?? String(i + 1)}`;
 }
 
-// آخر وزنة (ترول): الوزن الكبير، وتحته سطور واضحة: ترول 24 · دخلت فرن 4 — غرفة 1 · برتقال · الساعة ومن قد ايه ·
-// ضمن الطرحة التالتة (ترول 3 من 3). بتنور شوية لما ترول جديد يوصل
-// The last weighing (a trolley): the big weight, then clear lines (trolley · kiln — room · type · time and ago ·
-// its batch). Glows briefly when a new trolley arrives
+// آخر وزنة (ترول): الوزن كبير، وتحته سطرين شرايح: [ترول 24] [فرن 4] [غرفة 1] ثم النوع بأيقونته و"الطرحة التالتة —
+// ترول 3 من 3"، وبعدين الساعة و"من 1 ساعة و34 دقيقة". بتنور شوية لما ترول جديد يوصل
+// The last weighing (a trolley): the big weight, two lines of chips (trolley, kiln, room / type with its icon and the
+// batch), then the time and how long ago. Glows briefly when a new trolley arrives
 function LastExitCard({
   data,
   last,
@@ -202,11 +203,10 @@ function LastExitCard({
     seen.current = id;
   }, [lastKey]);
 
-  const color = last ? typeColor(data, last.type) : "#6B7280";
-  const line = "prod-fs font-bold whitespace-nowrap truncate max-w-full leading-[1.45]";
+  const chip = "prod-fs shrink-0 px-2.5 py-0.5 leading-[1.4]";
   return (
     <div
-      className={`flex-[1.7] min-h-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden transition-[box-shadow,border-color] duration-700 ${
+      className={`flex-[1.7] min-h-0 rounded-2xl border bg-card px-4 py-3 flex flex-col min-w-0 overflow-hidden select-none caret-transparent transition-[box-shadow,border-color] duration-700 ${
         glow ? "border-brandOrange shadow-[0_0_28px_6px_rgba(255,122,0,0.55)] animate-new-exit" : "border-cardBorder"
       }`}
     >
@@ -218,9 +218,10 @@ function LastExitCard({
         {glow && <span className="rounded-full bg-brandOrange text-black px-2 text-[14px] font-extrabold">جديدة</span>}
       </div>
       {last ? (
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-0.5">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2.5">
+          {/* الوزن الكبير - the big weight */}
           {last.kg !== null ? (
-            <p className="leading-none whitespace-nowrap mb-1">
+            <p className="leading-none whitespace-nowrap">
               <span className="prod-fs font-extrabold text-white" style={fs(sizes.lastWeightFontSize)}>
                 {num(formatKg(last.kg))}
               </span>
@@ -230,35 +231,48 @@ function LastExitCard({
               </span>
             </p>
           ) : (
-            <span className="prod-fs font-extrabold text-gray-500 mb-1" style={fs(sizes.lastNoWeightFontSize)}>
+            <span className="prod-fs font-extrabold text-gray-500" style={fs(sizes.lastNoWeightFontSize)}>
               بدون وزن
             </span>
           )}
-          {last.trolley && (
-            <p className={`${line} text-white`} style={fs(sizes.lastLineFontSize)}>
-              ترول {num(toEnglishDigits(last.trolley))}
-            </p>
-          )}
-          <p className={`${line} text-gray-100`} style={fs(sizes.lastLineFontSize)}>
-            {last.kiln ? <>دخلت {toEnglishDigits(last.kiln)}</> : "—"}
-            {last.room && <> — غرفة {num(toEnglishDigits(last.room))}</>}
-          </p>
-          <p className={`${line} inline-flex items-center justify-center gap-2`} style={{ ...fs(sizes.lastLineFontSize), color }}>
-            <span className="prod-dot rounded-full shrink-0" style={{ "--dot": `${sizes.exitDotSize}px`, backgroundColor: color } as CSSProperties} />
-            {last.type || "غير محدد"}
-          </p>
-          <p className={`${line} text-gray-300 inline-flex items-center justify-center gap-1.5`} style={fs(sizes.lastLineFontSize)}>
-            <Clock size={sizes.lastLineFontSize * 0.85} />
+          {/* سطر 1: الترول · الفرن · الغرفة - line 1: trolley · kiln · room */}
+          <div className="flex items-center justify-center gap-2 flex-wrap max-w-full">
+            {last.trolley && (
+              <span className={`${chip} rounded-lg border border-white/15 bg-white/10 text-white font-bold`} style={fs(sizes.lastLineFontSize)}>
+                ترول {num(toEnglishDigits(last.trolley))}
+              </span>
+            )}
+            {last.kiln && (
+              <span className={`${chip} ${GREEN_CHIP}`} style={fs(sizes.lastLineFontSize)}>
+                {toEnglishDigits(last.kiln)}
+              </span>
+            )}
+            {last.room && (
+              <span className={`${chip} ${GREEN_CHIP}`} style={fs(sizes.lastLineFontSize)}>
+                غرفة {num(toEnglishDigits(last.room))}
+              </span>
+            )}
+          </div>
+          {/* سطر 2: النوع بأيقونته · الطرحة - line 2: the type with its icon · the batch */}
+          <div className="flex items-center justify-center gap-x-3 gap-y-1 flex-wrap max-w-full">
+            <TypeBadge label={last.type} iconSize={Math.round(sizes.lastLineFontSize * 1.1)} className="prod-fs font-extrabold" style={fs(sizes.lastLineFontSize)} />
+            {inBatch && (
+              <span
+                className={`prod-fs font-extrabold whitespace-nowrap ${inBatch.batch.complete ? "text-brandOrange" : "text-statusAmber"}`}
+                style={fs(sizes.lastLineFontSize)}
+              >
+                {batchOrdinal(inBatch.batch, batches)} — ترول {num(String(inBatch.index))}
+                {inBatch.batch.size !== null && <> من {num(String(inBatch.batch.size))}</>}
+              </span>
+            )}
+          </div>
+          {/* الساعة ومن قد ايه - the time and how long ago */}
+          <p className="prod-fs font-bold whitespace-nowrap text-gray-300 inline-flex items-center gap-1.5" style={fs(sizes.lastLineFontSize * 0.9)}>
+            <Clock size={sizes.lastLineFontSize * 0.8} />
             {num(last.time)}
             {last.date !== data.today && <span className="text-gray-500"> ({num(shortDate(last.date))})</span>}
-            <span className="text-gray-400 font-semibold"> · {agoText(minutes)}</span>
+            <span className="text-gray-400 font-semibold"> — {agoText(minutes)}</span>
           </p>
-          {inBatch && (
-            <p className={`${line} ${inBatch.batch.complete ? "text-brandOrange" : "text-statusAmber"}`} style={fs(sizes.lastLineFontSize)}>
-              ضمن {batchOrdinal(inBatch.batch, batches)} (ترول {num(String(inBatch.index))}
-              {inBatch.batch.size !== null && <> من {num(String(inBatch.batch.size))}</>})
-            </p>
-          )}
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
@@ -332,13 +346,11 @@ function KilnTile({ kiln, today, sizes, onOpen }: { kiln: KilnSummary; today: st
 // trolley drawing per trolley with its number and weight (a missing one = a dashed "مستني"). Drawings scale with the
 // card height and the labels grow with it between trolleyLabelMin and trolleyLabelMax
 function BatchList({
-  data,
   batches,
   allBatches,
   sizes,
   alertExit,
 }: {
-  data: ProductionData;
   batches: ProductionBatch[];
   allBatches: ProductionBatch[];
   sizes: LeftSizes;
@@ -406,7 +418,6 @@ function BatchList({
       )}
       {height > 0 &&
         batches.slice(0, shown).map((batch, index) => {
-          const color = typeColor(data, batch.type);
           const key = batchKey(batch);
           const alerting = !!alertExit && batch.trolleys.some((t) => sameExit(t, alertExit));
           const missing = batch.size !== null ? Math.max(0, batch.size - batch.count) : 0;
@@ -419,7 +430,7 @@ function BatchList({
               style={{ height: row }}
             >
               {/* سطر العنوان - the title line */}
-              <div className="shrink-0 flex items-center gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
+              <div className="shrink-0 flex items-center gap-2 min-[1600px]:gap-3 min-w-0 whitespace-nowrap font-bold leading-none">
                 <span className={`font-extrabold ${batch.complete ? "text-brandOrange" : "text-statusAmber"}`} style={px(sizes.batchTitleFontSize)}>
                   {batchOrdinal(batch, allBatches)}
                   {!batch.complete && <span className="font-bold"> ({num(progressText(batch))})</span>}
@@ -427,18 +438,16 @@ function BatchList({
                 <span className="text-white font-extrabold" style={px(sizes.batchTimeFontSize)}>
                   {num(batch.time)}
                 </span>
-                <span className="shrink-0 rounded-lg bg-white/10 text-white px-2.5 py-1" style={px(sizes.batchKilnFontSize)}>
+                {/* الفرن والغرفة: شرايح خضرا بنفس المقاس - kiln and room: green chips, same size */}
+                <span className={`shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={px(sizes.batchKilnFontSize)}>
                   {toEnglishDigits(batch.kiln || "—")}
                 </span>
                 {batch.room && (
-                  <span className="shrink-0 text-gray-300" style={px(sizes.batchRoomFontSize)}>
+                  <span className={`shrink-0 px-2 py-1 ${GREEN_CHIP}`} style={px(sizes.batchKilnFontSize)}>
                     غرفة {num(toEnglishDigits(batch.room))}
                   </span>
                 )}
-                <span className="shrink-0 flex items-center gap-2" style={{ ...px(sizes.batchTypeFontSize), color }}>
-                  <span className="rounded-full shrink-0" style={{ width: sizes.batchDotSize, height: sizes.batchDotSize, backgroundColor: color }} />
-                  {batch.type || "غير محدد"}
-                </span>
+                <TypeBadge label={batch.type} iconSize={Math.round(sizes.batchTypeFontSize * 1.1)} className="shrink-0 font-extrabold" style={px(sizes.batchTypeFontSize)} />
                 <span className="ms-auto shrink-0 font-extrabold text-white" style={px(sizes.batchTotalFontSize)}>
                   {batch.weighed > 0 ? (
                     <>
@@ -558,7 +567,7 @@ function NewExitCard({
       <div className="grid grid-cols-4 gap-3 w-full">
         {field("الفرن", toEnglishDigits(exit.kiln || "—"))}
         {field("الغرفة", toEnglishDigits(exit.room || "—"))}
-        {field("النوع", exit.type || "غير محدد", { color })}
+        {field("النوع", <TypeBadge label={exit.type} iconSize={Math.round(c.chipFontSize * 0.95)} />, { color })}
         {field("الترول", toEnglishDigits(exit.trolley || "—"))}
       </div>
       {/* تقدم الطرحة - the batch progress */}
@@ -690,7 +699,7 @@ export default function ProductionPage({
           </>
         }
       >
-        <BatchList data={data} batches={s.todayBatches} allBatches={s.batches} sizes={left} alertExit={alertExit} />
+        <BatchList batches={s.todayBatches} allBatches={s.batches} sizes={left} alertExit={alertExit} />
       </Card>
 
       {/* شمال: "آخر وزنة" صغيرة فوق، والأرقام تحتها - left: the small "آخر وزنة" on top, the KPIs under it */}

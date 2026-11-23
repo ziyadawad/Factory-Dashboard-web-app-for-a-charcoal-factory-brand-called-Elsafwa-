@@ -9,6 +9,7 @@ import { formatTons, ProductionSummary, summarize, Tally } from "@/lib/productio
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import { ProductionTarget } from "./ProductionPage";
+import { TypeBadge } from "./TypeBadge";
 
 // لوحة "📊 ملخص الشهر" (من زرار في هيدر صفحة الإنتاج): الشهر حسب الفرن وحسب النوع (طرحات، ترولات، أطنان)،
 // ورسم إنتاج النهارده بالساعة. نفس بيانات الصفحة (بتتحدث معاها). الضغط على فرن / نوع بيفتح تفاصيله يوم بيوم
@@ -164,12 +165,7 @@ export default function ProductionMonthPanel({
               title="النوع"
               rows={s.types.map((t) => ({
                 key: t.label,
-                label: (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-                    {t.label}
-                  </span>
-                ),
+                label: <TypeBadge label={t.label} iconSize={20} />,
                 t: t.month,
               }))}
               onOpen={(name) => onOpen({ kind: "type", name })}

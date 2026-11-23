@@ -685,7 +685,9 @@ export type ConfigErpField = { source: "manual" } | { source: "erp"; account: st
 export type ConfigErpSource = { source: "erp" | "manual" };
 
 // نوع خشب معروف: الاسم، أسامي تانية بيتكتب بيها، ولونه - a known wood type: name, other spellings, color
-export type ConfigBatchType = { label: string; aliases?: string[]; color: string };
+// نوع خشب: الاسم، أسامي تانية، اللون، والأيقونة - a wood type: name, other spellings, color and icon
+export type TypeIconName = "orange" | "mango" | "guava" | "grill";
+export type ConfigBatchType = { label: string; aliases?: string[]; color: string; icon?: TypeIconName };
 
 // الطرحات: exitsDoctype = سجل لكل طرحة خرجت - Batches: exitsDoctype = one record per batch out
 export type ConfigErpBatches = (

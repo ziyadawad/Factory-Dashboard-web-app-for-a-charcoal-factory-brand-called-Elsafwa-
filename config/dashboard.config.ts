@@ -13,10 +13,25 @@ import type {
   ConfigErpField,
   ConfigErpSource,
   ConfigErpBatches,
+  ConfigBatchType,
   ConfigErpCharity,
   ConfigErpStockMap,
   ConfigAttendanceSection,
 } from "@/lib/types";
+
+// ===== أنواع الخشب (الفحم): لون وأيقونة كل نوع - wood (charcoal) types: each one's color and icon =====
+// القايمة دي هي production.types وهي نفسها erp.batches.types (الترتيب والأسامي التانية "aliases").
+// الأيقونة: "orange" برتقانة بورقة، "mango" مانجاية، "guava" جوافة (نصها مقطوع)، "grill" شواية بنار (الجازورينا للشوي).
+// أي نوع مش في القايمة بيظهر بنقطة رمادي (defaultTypeColor). اللون بالشكل "#RRGGBB"
+// This list is production.types and also erp.batches.types (order and alternative spellings). Icons: "orange",
+// "mango", "guava" (half cut), "grill" (a grill with a flame: جازورينا is for grilling). Unknown types get a gray dot
+const PRODUCTION_TYPES: ConfigBatchType[] = [
+  { label: "برتقال", color: "#F97316", icon: "orange" }, // برتقالي - orange
+  { label: "مانجا", aliases: ["مانجو"], color: "#FACC15", icon: "mango" }, // أصفر - yellow
+  { label: "جازورينا", aliases: ["كازوارينا", "كازورينا"], color: "#22C55E", icon: "grill" }, // أخضر - green
+  { label: "جوافة", color: "#F43F5E", icon: "guava" }, // أحمر وردي - pink red
+];
+const DEFAULT_TYPE_COLOR = "#9CA3AF"; // نوع مش معروف: نقطة رمادي - an unknown type: a gray dot
 
 export const dashboardConfig = {
   // ============================================================
@@ -302,13 +317,8 @@ export const dashboardConfig = {
       // واللي هنا بيحدد الترتيب واللون للأنواع المعروفة (الأسامي بتتطابق بعد توحيد الحروف: ة = ه، أ = ا ...)
       // Types are read from the DocType's charcoal_type options, so a new option shows up on its own with
       // defaultTypeColor; this list sets the order and color of the known ones (names matched after normalizing)
-      types: [
-        { label: "برتقال", color: "#FF7A00" },
-        { label: "مانجا", aliases: ["مانجو"], color: "#FFC107" },
-        { label: "جازورينا", aliases: ["كازوارينا", "كازورينا"], color: "#22C55E" },
-        { label: "جوافة", color: "#E8505B" },
-      ],
-      defaultTypeColor: "#38BDF8", // لون أي نوع جديد مش في القايمة - color of any new type not listed
+      types: PRODUCTION_TYPES, // الألوان والأيقونات فوق خالص (PRODUCTION_TYPES) - colors and icons at the top of this file
+      defaultTypeColor: DEFAULT_TYPE_COLOR, // لون أي نوع جديد مش في القايمة (رمادي) - any new type not listed (gray)
       optionsCacheMinutes: 10, // كل قد ايه نقرا خيارات النوع من ERPNext - how often to re-read the options
     } as ConfigErpBatches,
 
@@ -486,6 +496,10 @@ export const dashboardConfig = {
     batchWindowMinutes: 15, // دقايق بين ترول والتاني في نفس الطرحة - minutes between trolleys of one batch
     // ترتيب الطرحة في اليوم (بالوقت): "الطرحة الأولى"، "الطرحة التانية"... وبعد آخر كلمة "الطرحة 11"، "الطرحة 12"
     // A batch's order in its day (by time); past the end of this list "الطرحة 11", "الطرحة 12"...
+    // ألوان وأيقونات الأنواع (كروت الطرحات، آخر وزنة، التفاصيل، ملخص الشهر، شاشة الأوبريتر، التنبيه) - من PRODUCTION_TYPES فوق
+    // Type colors and icons (batch cards, last weighing, details, month summary, operator app, alert) - PRODUCTION_TYPES above
+    types: PRODUCTION_TYPES,
+    defaultTypeColor: DEFAULT_TYPE_COLOR,
     batchOrdinals: ["الأولى", "التانية", "التالتة", "الرابعة", "الخامسة", "السادسة", "السابعة", "التامنة", "التاسعة", "العاشرة"],
     maxTrolleysPerBatch: 3, // أكبر عدد ترولات في الطرحة (الأوبريتر بيختار من 2 لحد كده) - most trolleys per batch (operator picks 2..this)
     glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
@@ -1059,7 +1073,6 @@ export const dashboardConfig = {
       lastWeightFontSize: 92, // الوزن الكبير "563 كجم" - the big weight
       lastNoWeightFontSize: 36, // "بدون وزن" مكان الرقم (رمادي) - "بدون وزن" instead of the number (gray)
       lastLineFontSize: 27, // السطور تحت الوزن - the lines under the weight
-      exitDotSize: 14, // النقطة الملونة جنب النوع - the colored dot next to the type
       // ===== طرحات النهارده: كارت لكل طرحة بيملا ارتفاعه (طرحة واحدة = المساحة كلها، اتنين = النص، ...)، وفيه:
       // سطر العنوان (الطرحة الأولى · الساعة · الفرن · الغرفة · النوع · المجموع) ورسمة لكل ترول وتحتها رقمه ووزنه.
       // لو الطرحات أكتر من اللي ياخد مكانه (كل واحدة batchRowMin على الأقل): الأحدث وتحتهم "+N طرحة تانية"
@@ -1068,10 +1081,8 @@ export const dashboardConfig = {
       batchRowMin: 190, // أقل ارتفاع لكارت الطرحة - minimum batch card height
       batchTitleFontSize: 26, // "الطرحة الأولى"
       batchTimeFontSize: 30, // الساعة - the time
-      batchKilnFontSize: 26, // "فرن 4"
-      batchRoomFontSize: 21, // "غرفة 1"
-      batchTypeFontSize: 26, // النوع (الكلمة كاملة) - the type (full word)
-      batchDotSize: 15, // نقطة لون النوع - the type's colored dot
+      batchKilnFontSize: 24, // شرايح "فرن 4" و"غرفة 1" الخضرا (نفس المقاس) - the green kiln and room chips (same size)
+      batchTypeFontSize: 26, // النوع بأيقونته (الكلمة كاملة) - the type with its icon (full word)
       batchTotalFontSize: 36, // المجموع "1,715 كجم" - the total
       // تحت كل ترول "ترول 6" و"610 كجم": بيكبروا مع ارتفاع الكارت بين الرقمين دول - under each trolley: grows with the
       // card height between these two sizes
@@ -1085,15 +1096,12 @@ export const dashboardConfig = {
         lastWeightFontSize: 62,
         lastNoWeightFontSize: 26,
         lastLineFontSize: 17,
-        exitDotSize: 11,
         batchRowMin: 140,
-        batchTitleFontSize: 17,
-        batchTimeFontSize: 20,
-        batchKilnFontSize: 17,
-        batchRoomFontSize: 14,
-        batchTypeFontSize: 17,
-        batchDotSize: 11,
-        batchTotalFontSize: 24,
+        batchTitleFontSize: 16,
+        batchTimeFontSize: 19,
+        batchKilnFontSize: 15,
+        batchTypeFontSize: 16,
+        batchTotalFontSize: 22,
         trolleyLabelMin: 13,
         trolleyLabelMax: 22,
         batchMoreFontSize: 15,

@@ -14,6 +14,7 @@ import { useLiveScale } from "@/lib/useLiveScale";
 import { OperatorExit, OperatorOptions, PendingWeighing } from "@/lib/types";
 import { BatchMember, cairoNowMinutes, groupBatches, isOpen, kilnNumber, progressText } from "@/lib/batches";
 import ExitForm from "./ExitForm";
+import { TypeBadge } from "../TypeBadge";
 import OperatorShell from "./OperatorShell";
 
 const cfg = dashboardConfig.operator;
@@ -96,7 +97,6 @@ export default function OperatorApp() {
 
   const list = pending.data?.pending ?? [];
   const exits = today.data?.exits ?? [];
-  const typeColor = (label: string) => options.data?.types.find((t) => t.label === label)?.color ?? "#9CA3AF";
   const todayNet = exits.reduce((s, e) => s + (e.netKg ?? 0), 0);
   // الطرحات (الأحدث الأول) واللي لسه مفتوحة - batches (newest first) and the ones still open
   const batches = useMemo(() => groupBatches((today.data?.exits ?? []).map(member), RULES), [today.data]);
@@ -143,9 +143,9 @@ export default function OperatorApp() {
               </p>
               <span className="font-numbers text-[16px] font-bold text-gray-300">{b.time}</span>
             </div>
-            <p className="text-[15px] text-gray-300">
-              {b.room && `غرفة ${b.room} · `}
-              {b.type}
+            <p className="flex items-center gap-2 text-[15px] text-gray-300">
+              {b.room && <span>غرفة {b.room} ·</span>}
+              <TypeBadge label={b.type} iconSize={20} className="font-bold" />
             </p>
             <p className="font-numbers text-[16px] font-bold text-gray-100">
               {b.trolleys.map((t, i) => `ترول ${i + 1}: ${kg(t.kg)}`).join(" · ")} → المجموع {kg(b.kg)} كجم
@@ -267,10 +267,7 @@ export default function OperatorApp() {
                     <p className="flex flex-wrap items-center gap-x-2 text-[17px] font-bold text-white">
                       {b.kiln}
                       {b.room && <span className="text-[14px] font-semibold text-gray-400">غ {b.room}</span>}
-                      <span className="flex items-center gap-1.5 text-[15px] font-semibold text-gray-200">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: typeColor(b.type) }} />
-                        {b.type}
-                      </span>
+                      <TypeBadge label={b.type} iconSize={20} className="text-[15px] font-bold" />
                     </p>
                     <span
                       className={`mt-0.5 inline-block rounded-full px-2 text-[13px] font-bold ${
