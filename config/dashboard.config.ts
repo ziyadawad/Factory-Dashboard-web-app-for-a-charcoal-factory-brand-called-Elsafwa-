@@ -680,7 +680,9 @@ export const dashboardConfig = {
     // نقل جروب بالإيد لقسم: "id الجروب أو اسمه بالظبط": "id القسم" (packaging / treasury / production)
     // Move a group by hand: "group id or exact name": "section id"
     // مثال - example: { "120363040866284130@g.us": "treasury", "المشتريات": "packaging" }
-    sectionOverrides: {} as Record<string, string>,
+    sectionOverrides: {
+      "مجموعة المقترحات": "treasury", // المقترحات: من الإنتاج للخزنة والحضور - suggestions: moved from production to treasury
+    } as Record<string, string>,
   },
 
   pages: {
