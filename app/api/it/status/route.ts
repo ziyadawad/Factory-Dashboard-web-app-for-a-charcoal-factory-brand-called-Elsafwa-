@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         receivedAt: saved.receivedAt,
         storage: saved.storage,
-        counts: { routers: snapshot.routers.length, devices: snapshot.devices.length, cameras: snapshot.cameras.length, events: snapshot.events.length },
+        counts: { routers: snapshot.routers.length, devices: snapshot.devices.length, events: snapshot.events.length },
       },
       { headers: NO_STORE }
     );

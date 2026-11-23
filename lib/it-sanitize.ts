@@ -2,7 +2,7 @@
 // وفي المتصفح (status.json من الإيجنت على الشبكة المحلية) بنفس القواعد بالظبط
 // Sanitizes IT agent data to the agreed schema - no server-only imports, so the same rules run on the server
 // (POST /api/it/status) and in the browser (status.json read straight from the agent on the LAN)
-import { ItCamera, ItDevice, ItDeviceGroup, ItDeviceType, ItEvent, ItRouter, ItSnapshot } from "./types";
+import { ItDevice, ItDeviceGroup, ItDeviceType, ItEvent, ItRouter, ItSnapshot } from "./types";
 
 export const MAX_EVENTS = 200; // آخر 200 حدث - keep the last 200 events
 const EVENT_DAYS = 3; // والأحداث الأقدم من 3 أيام بتتمسح - and drop events older than 3 days
@@ -87,11 +87,6 @@ export function sanitizePayload(body: unknown): ItSnapshot {
   routers.splice(0, routers.length, ...unique(routers));
   devices.splice(0, devices.length, ...unique(devices));
 
-  // الكاميرات: id واسم وحالة بس - أي رابط أو باسورد بيترمي - cameras: id, name and status only; any URL / password is dropped
-  const cameras: ItCamera[] = list(b.cameras, 64)
-    .map((c) => ({ id: text(c.id, 64), name: text(c.name), online: optBool(c.online) }))
-    .filter((c) => /^[A-Za-z0-9_-]+$/.test(c.id) && c.name);
-
   const hiddenTargets = new Set(devices.filter((d) => d.group === "other" && !d.monitor).flatMap((d) => [d.name, d.ip].filter(Boolean)));
   const TARGETS = ["internet", "router", "ap", ...DEVICE_TYPES];
   const events: ItEvent[] = list(b.events, MAX_EVENTS)
@@ -107,8 +102,8 @@ export function sanitizePayload(body: unknown): ItSnapshot {
     // أجهزة other من غير monitor: true أحداثها مبتظهرش خالص - other devices without monitor: true never reach the events
     .filter((e) => !hiddenTargets.has(e.targetName) && !(e.ip && hiddenTargets.has(e.ip)));
 
-  if (!internet && routers.length === 0 && devices.length === 0 && cameras.length === 0 && events.length === 0) {
-    throw new ItPayloadError("payload has none of internet / routers / devices / cameras / events");
+  if (!internet && routers.length === 0 && devices.length === 0 && events.length === 0) {
+    throw new ItPayloadError("payload has none of internet / routers / devices / events");
   }
 
   return {
@@ -117,7 +112,6 @@ export function sanitizePayload(body: unknown): ItSnapshot {
     internet: internet ? { up: bool(internet.up), since: iso(internet.since), latencyMs: num(internet.latencyMs, 0, 60_000) } : null,
     routers,
     devices,
-    cameras,
     events,
   };
 }

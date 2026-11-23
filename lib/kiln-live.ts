@@ -12,7 +12,7 @@ import { usePageVisible } from "./usePolling";
 import { dashboardConfig } from "@/config/dashboard.config";
 
 const cfg = dashboardConfig.production;
-const BASE = dashboardConfig.it.cameraBaseUrl.replace(/\/+$/, "");
+const BASE = dashboardConfig.it.agentBaseUrl.replace(/\/+$/, "");
 const STATUS_URL = BASE ? `${BASE}/status.json` : "";
 const WS_URL = BASE && cfg.liveWsPath ? `${BASE.replace(/^http/, "ws")}${cfg.liveWsPath}` : "";
 const FAILS_TOLERATED = 1; // فشلة واحدة مش بتقلب للتحديث العادي - one missed answer is tolerated

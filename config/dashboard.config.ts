@@ -506,10 +506,10 @@ export const dashboardConfig = {
     // The "آخر وزنة" scale scene: one full loop (drop, count, blink, 2 s hold, lift off) in seconds
     scaleLoopSeconds: 6.5,
     glowSeconds: 6, // كارت "آخر وزنة" بينور كام ثانية لما طرحة جديدة تخرج - how long "آخر وزنة" glows on a new exit
-    // جوه المصنع: أحداث "kiln_exit" على طول من الإيجنت ({it.cameraBaseUrl}/status.json كل liveSeconds، مهلة liveTimeoutMs)
+    // جوه المصنع: أحداث "kiln_exit" على طول من الإيجنت ({it.agentBaseUrl}/status.json كل liveSeconds، مهلة liveTimeoutMs)
     // فالطرحة الجديدة بتظهر في "آخر وزنة" و"طرحات النهارده" على طول. برا المصنع = التحديث العادي (refreshSeconds)
     // liveWsPath: لو الإيجنت عنده WebSocket (مثلا "/ws") المتصفح بيشترك فيه، ولو وقع بيرجع لـ status.json. null = status.json بس
-    // Inside the factory: "kiln_exit" events straight from the agent ({it.cameraBaseUrl}/status.json every liveSeconds,
+    // Inside the factory: "kiln_exit" events straight from the agent ({it.agentBaseUrl}/status.json every liveSeconds,
     // timeout liveTimeoutMs), so a new exit shows in "آخر وزنة" and "طرحات النهارده" at once. Outside = the normal refresh.
     // liveWsPath: when the agent has a WebSocket (e.g. "/ws") the browser subscribes to it, falling back to status.json
     // when it drops. null = status.json only
@@ -577,61 +577,51 @@ export const dashboardConfig = {
   // ============================================================
 
   // ============================================================
-  // IT والمراقبة (آخر صفحة) - الشبكات والأجهزة والكاميرات من إيجنت على جهاز IT في المصنع
-  // الإيجنت بيبعت POST /api/it/status كل شوية (الشكل في docs/it-agent-payload.md) بالهيدر x-it-secret = IT_AGENT_SECRET
-  // IT & monitoring (last page) - networks, devices and cameras from an agent on the factory IT PC. The agent POSTs to
-  // /api/it/status (schema in docs/it-agent-payload.md) with header x-it-secret = env IT_AGENT_SECRET
+  // إيجنت IT على جهاز IT في المصنع (من غير صفحة دلوقتي - الصفحة 7 بقت "واتساب")
+  // الإيجنت بيبعت POST /api/it/status (الشكل في docs/it-agent-payload.md) بالهيدر x-it-secret = IT_AGENT_SECRET،
+  // وأحداثه بتظهر في "اللي بيحصل دلوقتي". نفس السر بيستخدمه للميزان والواتساب
+  // The IT agent on the factory IT PC (no page of its own now - page 7 is "واتساب"). It POSTs /api/it/status (schema in
+  // docs/it-agent-payload.md) with x-it-secret = IT_AGENT_SECRET; its events reach the activity feed. The same secret
+  // is used for the scale and WhatsApp endpoints
   // ============================================================
   it: {
-    // "أهم الأجهزة": كل جهاز هنا = جزء في الدايرة بلونه، وسطر تحتها. زوّد جهاز = جزء جديد لوحده
-    // name = الاسم اللي يظهر، type = الأيقونة (fingerprint بصمة / pc كمبيوتر / printer طابعة / nvr / scale ميزان / other)
-    // ip = عنوان الجهاز: فاضي = يظهر "متصل" مؤقتا. لما تكتب الـ ip والإيجنت يبعت الجهاز ده، الحالة بتبقى حقيقية
-    //      (مفصول = الجزء بيحمر وبينبض، والسطر يكتب "مفصول من X د")
-    // color = لون الجزء والسطر
-    // "أهم الأجهزة": each device here = one coloured ring segment plus a row under the ring; add one = a new segment.
-    // ip empty = shown as online (placeholder); once set and the agent reports that IP, the real status is used
-    criticalDevices: [
-      { name: "البصمة", type: "fingerprint", ip: "", color: "#A78BFA" }, // بنفسجي - violet
-      { name: "كمبيوتر IT", type: "pc", ip: "", color: "#3B82F6" }, // أزرق - blue
-      { name: "الطابعة", type: "printer", ip: "", color: "#F97316" }, // برتقالي - orange
-    ] as { name: string; type: "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other"; ip: string; color: string }[],
     // الإيجنت بيبعت مرة كل دقيقتين بالكتير (السيرفر بيرفض أسرع من كده بـ 429) - the agent posts at most once per 2 minutes
     agentMinPostSeconds: 120,
-    agentOfflineSeconds: 300, // مفيش تحديث من الإيجنت المدة دي (أكتر من دقيقتين ونص) = "الإيجنت مش متصل" - no update for this long = agent offline
-    refreshSeconds: 60, // الشاشة بتسأل كل 60 ثانية (وصفحة IT ظاهرة بس) - every 60 s, only while the IT page is shown
-    // الإيجنت المحلي: المتصفح بيجيب {cameraBaseUrl}/cameras.json والصور {cameraBaseUrl}/cameras/{id}/snapshot.jpg على طول
-    // (مش من Vercel)، فالكاميرات بتشتغل جوه المصنع بس. لازم HTTPS بشهادة elsafwa-ca متسطبة. مفيش باسورد في الرابط ده أبدا
-    // The local agent: the browser fetches {cameraBaseUrl}/cameras.json and {cameraBaseUrl}/cameras/{id}/snapshot.jpg
-    // directly (not via Vercel), so cameras only work inside the factory. HTTPS with the elsafwa-ca cert installed.
-    // Never a password in this URL
-    cameraBaseUrl: "https://192.168.1.200:8443",
-    // go2rtc للفيديو المباشر (WebRTC ثم MSE) في الصفحة الكاملة: {streamBaseUrl}/api/webrtc?src=… و /api/ws?src=…
-    // فاضي = نفس cameraBaseUrl. لو فشل، الصفحة الكاملة بترجع لصور كل ثانية
-    // go2rtc for live video (WebRTC, then MSE) in full page: {streamBaseUrl}/api/webrtc?src=… and /api/ws?src=….
-    // Empty = same as cameraBaseUrl. On failure the full page falls back to a snapshot every second
-    streamBaseUrl: "",
-    // شاشة الأوبريتر على الإيجنت (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها)
-    // The operator screen on the agent ("📱 شاشة الأوبريتر" on the production page opens a QR code for it)
-    // دلوقتي صفحة /operator في الداشبورد نفسه (شغالة من أي مكان) - now the dashboard's own /operator page (works anywhere)
+    agentOfflineSeconds: 300, // مفيش تحديث من الإيجنت المدة دي = "الإيجنت مش متصل" - no update for this long = agent offline
+    // عنوان الإيجنت على شبكة المصنع: المتصفح بيسأل {agentBaseUrl}/status.json على طول عشان الطرحات توصل في ساعتها
+    // (جوه المصنع بس، HTTPS بشهادة elsafwa-ca متسطبة). مفيش باسورد في الرابط ده أبدا
+    // The agent on the factory LAN: the browser asks {agentBaseUrl}/status.json directly so kiln exits show at once
+    // (inside the factory only, HTTPS with the elsafwa-ca cert installed). Never a password in this URL
+    agentBaseUrl: "https://192.168.1.200:8443",
+    // شاشة الأوبريتر (زرار "📱 شاشة الأوبريتر" في صفحة الإنتاج بيفتح QR ليها) - the operator screen (QR from the production page)
     operatorUrl: "https://elsafwadashboard.vercel.app/operator",
-    // الحالة من الشبكة المحلية الأول: المتصفح بيسأل {cameraBaseUrl}/status.json على طول كل localStatusSeconds (مهلة
-    // localStatusTimeoutMs). لو رد = كل حاجة منه ("📡 مباشر من الشبكة")، ولو فشل (برا المصنع) = /api/it/status ("☁️ من السحابة")
-    // LAN first: the browser asks {cameraBaseUrl}/status.json directly every localStatusSeconds (timeout localStatusTimeoutMs).
-    // If it answers it is used for everything; if not (outside the factory) the page falls back to /api/it/status
-    localStatusSeconds: 5,
-    localStatusTimeoutMs: 2000,
-    liveVideo: true, // false = الصفحة الكاملة صور بس من غير فيديو - false = full page uses snapshots only
-    cameraLayouts: [1, 4, 6, 9, 16, 32], // اختيارات العرض في هيدر الكاميرات - the layout choices in the cameras header
-    defaultCameraLayout: 4, // أول مرة (بعد كده بيتفتكر في المتصفح) - first time (then remembered in the browser)
-    cameraRotateSeconds: 8, // عرض كاميرا واحدة: بتتقلب كل 8 ثواني - single layout: switches camera every 8 s
-    cameraPageSeconds: 15, // عرض الشبكة: الصفحة بتتقلب كل 15 ثانية - grid layout: the page of cameras switches every 15 s
-    cameraRefreshSeconds: 2, // عرض كاميرا واحدة: الصورة (main) كل 2 ثانية - single layout: main snapshot every 2 s
-    gridRefreshSeconds: 2, // الشبكة: صورة الـ sub-stream كل 2 ثانية (متوزعة مش كلها مع بعض) - grid: sub-stream every 2 s, staggered
-    viewerSnapshotSeconds: 1, // الصفحة الكاملة لو الفيديو فشل: صورة كل ثانية - full page fallback: a snapshot every second
-    // أسامي الـ NVR في شرايح الفلتر (اسم الـ nvr في cameras.json ← الاسم اللي يظهر). مش مكتوب = يظهر زي ما هو
-    // NVR names on the filter chips (nvr value in cameras.json → label shown). Missing = shown as is
-    nvrLabels: {} as Record<string, string>,
-    eventsShown: 8, // أكتر عدد أحداث في "آخر الأحداث" (بيقل لو المكان مش كفاية) - most events listed (fewer when tight)
+  },
+
+  // ============================================================
+  // واتساب (الصفحة 7) - جروبات الواتساب قراية بس (مفيش إرسال خالص)
+  // كمبيوتر الـ IT بيبعت الرسايل لـ POST /api/wa/ingest والملفات لـ POST /api/wa/upload بالهيدر x-it-secret
+  // (الشكل في docs/whatsapp-agent.md). الرسايل في Neon Postgres (DATABASE_URL) والملفات في Vercel Blob (private)
+  // WhatsApp (page 7) - read-only WhatsApp groups (no sending at all). The IT PC posts messages to /api/wa/ingest and
+  // files to /api/wa/upload with x-it-secret (schema in docs/whatsapp-agent.md). Messages in Neon Postgres
+  // (DATABASE_URL), files in Vercel Blob (private)
+  // ============================================================
+  whatsapp: {
+    // الرسايل بتتمسح لوحدها بعد text يوم، والصور والملفات والفويسات بعد media يوم
+    // Messages are deleted automatically after `text` days; images, files and voice notes after `media` days
+    retentionDays: { text: 90, media: 30 },
+    gridRefreshSeconds: 30, // صفحة الجروبات بتسأل كل 30 ثانية (والصفحة ظاهرة بس) - the groups grid, only while visible
+    chatRefreshSeconds: 10, // جوه الشات كل 10 ثواني (والشات مفتوح وظاهر بس) - inside a chat, only while open and visible
+    staleSyncMinutes: 5, // مفيش مزامنة من كمبيوتر الـ IT المدة دي = تحذير - no sync for this long = a warning
+    pageSize: 50, // كام رسالة في كل مرة (والأقدم بتتحمل وانت طالع لفوق) - messages per page (older ones load scrolling up)
+    searchLimit: 100, // أكتر عدد نتايج للبحث - most search results
+    maxUploadMB: 4, // أكبر ملف (حد Vercel 4.5 ميجا للطلب) - the largest file (Vercel allows 4.5 MB per request)
+    // جروبات تظهر الأول بالترتيب ده (id أو الاسم بالظبط)، والباقي بآخر نشاط - groups shown first in this order (id or
+    // exact name); the rest by last activity
+    pinned: [] as string[],
+    hidden: [] as string[], // جروبات متتعرضش خالص (id أو الاسم) - groups never shown (id or name)
+    // لون كل جروب: بالاسم أو الـ id، والباقي بالترتيب من colors - a color per group by name or id; others cycle colors
+    groupColors: {} as Record<string, string>,
+    colors: ["#22C55E", "#3B82F6", "#F97316", "#A855F7", "#EC4899", "#14B8A6", "#EAB308", "#EF4444", "#06B6D4", "#84CC16"],
   },
 
   pages: {
@@ -648,9 +638,9 @@ export const dashboardConfig = {
       { id: "sales", title: "مبيعات المناديب", durationSeconds: 60 }, // الصفحة 4: مبيعات المناديب - page 4
       { id: "wallets", title: "الخزن والمحافظ", durationSeconds: 60 }, // الصفحة 5: الخزن والمحافظ - page 5
       { id: "charity", title: "الصدقات", durationSeconds: 60 }, // الصفحة 6 (الأخيرة): صناديق الصدقات - page 6 (last)
-      // IT والمراقبة: في الأسهم والنقط بس، والتقليب التلقائي بيعديها لحد ما الإيجنت يتربط (inRotation: true وقتها)
-      // IT & monitoring: arrows/dots only, skipped by auto-rotation until the agent is connected (then inRotation: true)
-      { id: "it", title: "IT والمراقبة", durationSeconds: 60, enabled: true, inRotation: false },
+      // الصفحة 7: واتساب (قراية بس) - في الأسهم والنقط بس، والتقليب التلقائي على التلفزيون بيعديها (inRotation: true = تدخل)
+      // Page 7: WhatsApp (read-only) - arrows/dots only; the TV auto-rotation skips it (inRotation: true = include it)
+      { id: "whatsapp", title: "واتساب", durationSeconds: 60, enabled: true, inRotation: false },
       // متوقفة — غيّرها لـ true لو عايز ترجّعها
       { id: "distributors", title: "الموزعين", durationSeconds: 60, enabled: false }, // الموزعين - distributors (disabled)
     ] as ConfigPage[],

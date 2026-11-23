@@ -1,7 +1,9 @@
 # إيجنت IT ← الداشبورد: شكل البيانات (IT agent → dashboard payload)
 
-الإيجنت على جهاز IT في المصنع بيبعت حالة النت والشبكات والأجهزة والكاميرات لصفحة **IT والمراقبة**.
-The agent on the factory IT PC sends the internet / network / device / camera status to the **IT والمراقبة** page.
+الإيجنت على جهاز IT في المصنع بيبعت حالة النت والشبكات والأجهزة (أحداثها بتظهر في "اللي بيحصل دلوقتي" في الرئيسية).
+صفحة "IT والمراقبة" والكاميرات اتشالوا من الداشبورد؛ الصفحة 7 بقت **واتساب** (الشكل في `docs/whatsapp-agent.md`).
+The agent on the factory IT PC sends the internet / network / device status (its events reach the main page live feed).
+The IT page and the cameras were removed from the dashboard; page 7 is now **واتساب** (see `docs/whatsapp-agent.md`).
 
 ## الإرسال (Sending)
 
@@ -13,8 +15,8 @@ x-it-secret: <IT_AGENT_SECRET>
 
 - **مرة كل دقيقتين بالكتير**: ابعت لما حاجة تتغير بس، أو كل **دقيقتين** كنبضة (heartbeat) لو مفيش تغيير. السيرفر بيرفض أي تحديث أسرع من دقيقتين بـ `429` (والهيدر `Retry-After` = كام ثانية تستنى). لو مفيش تحديث **5 دقايق** الصفحة بتكتب "الإيجنت مش متصل".
   **At most one POST per 2 minutes**: send only when something changed, or every **2 minutes** as a heartbeat when nothing did. The server refuses anything faster with `429` (`Retry-After` = seconds to wait). After **5 minutes** without an update the page shows the agent as offline.
-- **كل تحديث = الحالة كاملة**: `internet` و`routers` و`devices` و`cameras` بيتبدلوا بالموجود في آخر تحديث (أي حاجة مش مبعوتة بتختفي من الصفحة).
-  **Every update is the full state**: `internet`, `routers`, `devices` and `cameras` are replaced by the latest update (anything left out disappears from the page).
+- **كل تحديث = الحالة كاملة**: `internet` و`routers` و`devices` بيتبدلوا بالموجود في آخر تحديث (أي حاجة مش مبعوتة بتختفي من الصفحة).
+  **Every update is the full state**: `internet`, `routers` and `devices` are replaced by the latest update (anything left out disappears from the page).
 - **`events` بس بتتجمع**: السيرفر بيضيف الجديد على القديم بالـ `id` (من غير تكرار)، وبيحتفظ بآخر 200 حدث وآخر 3 أيام. فابعت الأحداث الجديدة (أو آخر شوية) — نفس الـ `id` مش بيتكرر.
   **Only `events` accumulate**: merged by `id` (no duplicates), keeping the last 200 and the last 3 days. Send new events (or the last few) — a repeated `id` is ignored.
 - أكبر حجم: 256 KB. Max size: 256 KB.
@@ -31,10 +33,10 @@ x-it-secret: <IT_AGENT_SECRET>
 | `429` | أسرع من مرة كل دقيقتين، استنى `Retry-After` ثانية — faster than once per 2 minutes; wait `Retry-After` seconds |
 | `503` | `IT_AGENT_SECRET` مش متظبط على السيرفر — the secret is not set on the server |
 
-## القراية المحلية (LAN-first): `GET {cameraBaseUrl}/status.json`
+## القراية المحلية (LAN-first): `GET {agentBaseUrl}/status.json`
 
-صفحة IT بتسأل الإيجنت **على طول من المتصفح** كل 5 ثواني (مهلة 2 ثانية). لو رد، الصفحة بتاخد منه كل حاجة (النت، أهم الأجهزة، الأحداث) وبتكتب "📡 مباشر من الشبكة". لو مردش (برا المصنع) بترجع لـ `/api/it/status` وبتكتب "☁️ من السحابة".
-The IT page asks the agent **directly from the browser** every 5 s (2 s timeout). If it answers, everything (internet, key devices, events) comes from it ("📡 مباشر من الشبكة"); otherwise the page falls back to `/api/it/status` ("☁️ من السحابة").
+صفحة "الإنتاج والأفران" بتسأل الإيجنت **على طول من المتصفح** (جوه المصنع بس) عشان أحداث `kiln_exit` توصل في ساعتها (تحت).
+The production page asks the agent **directly from the browser** (inside the factory only) so `kiln_exit` events arrive at once (below).
 
 - الرد = **نفس شكل الـ POST بالظبط** (تحت)، أو `{ "data": { ... } }`. بيتنضف بنفس قواعد السيرفر.
   The body is **exactly the POST payload** below (or `{ "data": { ... } }`), sanitized with the same rules.
@@ -42,7 +44,7 @@ The IT page asks the agent **directly from the browser** every 5 s (2 s timeout)
   `sentAt` = the agent's last check; older than 5 minutes = shown as agent offline.
 - `events`: آخر الأحداث (مثلا آخر 50)، والصفحة بتجمعها بالـ `id`.
   `events`: the latest events (e.g. the last 50); the page merges them by `id`.
-- هيدرز لازمة (نفس `cameras.json`) - required headers (same as `cameras.json`):
+- هيدرز لازمة - required headers:
   `Access-Control-Allow-Origin: https://<dashboard-domain>`، `Cache-Control: no-store`، وعلى طلب `OPTIONS`:
   `Access-Control-Allow-Private-Network: true` (Chrome بيطلبها لما موقع عام يكلم IP محلي - Chrome requires it when a public site calls a private IP).
 
@@ -94,12 +96,6 @@ Every section is optional, but at least one is required. **Any field not listed 
     }
   ],
 
-  // الكاميرات: id واسم وحالة بس. ممنوع أي باسورد أو رابط RTSP هنا
-  // Cameras: id, name and status only. Never a password or an RTSP URL here
-  "cameras": [
-    { "id": "cam-01", "name": "البوابة الرئيسية", "online": true }  // id: حروف إنجليزي وأرقام و - و _ بس
-  ],
-
   // الأحداث (فصل / رجع)، بتظهر في الصفحة وفي "اللي بيحصل دلوقتي" في الرئيسية
   // Events (down / up); shown on the page and in the main page live feed
   "events": [
@@ -115,35 +111,14 @@ Every section is optional, but at least one is required. **Any field not listed 
 }
 ```
 
-حدود: الاسم 120 حرف، الـ IP أو اسم الجهاز بس (حروف وأرقام و `. : - [ ]` — مفيش `user:pass@`)، 50 راوتر، 300 جهاز، 64 كاميرا، 200 حدث.
-Limits: names 120 chars; `ip` must be a bare IP or host name (no `user:pass@`); 50 routers, 300 devices, 64 cameras, 200 events.
-
-## الكاميرات (Cameras)
-
-الكاميرات **مش** بتعدي على الداشبورد ولا على Vercel. المتصفح بيطلبها مباشرة من الإيجنت المحلي (`it.cameraBaseUrl` = `https://192.168.1.200:8443`)، فبتشتغل جوه المصنع بس.
-Cameras never pass through the dashboard or Vercel: the browser loads them straight from the local agent, so they only work inside the factory.
-
-| الطلب (Request) | الرد (Response) |
-|---|---|
-| `GET /cameras.json` | `[{ "id", "name", "nvr"?, "online"?, "stream"? }]` أو `{ "cameras": [...] }`. `nvr` = اسم شريحة الفلتر (مثلا "المصنع" / "التعبئة والمخزن")، `stream` = اسم الـ stream في go2rtc (مش موجود = `id`) |
-| `GET /cameras/{id}/snapshot.jpg` | صورة الـ main stream (عرض كاميرا واحدة، وفي الصفحة الكاملة لو الفيديو فشل) |
-| `GET /cameras/{id}/snapshot.jpg?stream=sub` | صورة الـ **sub-stream** الصغيرة (قناة X02 على الـ NVR، مثلا ISAPI `/Streaming/channels/{n}02/picture`) للشبكة والصور الصغيرة |
-| `POST /api/webrtc?src={stream}` | go2rtc WebRTC (WHEP): الطلب SDP offer بـ `Content-Type: application/sdp`، والرد SDP answer |
-| `WSS /api/ws?src={stream}` | go2rtc MSE (لو WebRTC فشل) |
-
-- **CORS**: `cameras.json` و `/api/webrtc` لازم يرجعوا `Access-Control-Allow-Origin` بعنوان الداشبورد، و`/api/webrtc` لازم يرد على طلب `OPTIONS` (preflight) بـ `Access-Control-Allow-Methods: POST` و `Access-Control-Allow-Headers: Content-Type`. الصور مش محتاجة CORS.
-  `cameras.json` and `/api/webrtc` must send `Access-Control-Allow-Origin` (and answer the `OPTIONS` preflight for `/api/webrtc`). Images need no CORS.
-- **HTTPS بشهادة elsafwa-ca** على كل حاجة (ومنها الـ wss). HTTPS with the elsafwa-ca certificate everywhere, wss included.
-- go2rtc ممكن يبقى على عنوان تاني: `it.streamBaseUrl` في الكونفج (فاضي = نفس `cameraBaseUrl`). go2rtc may live elsewhere: set `it.streamBaseUrl`.
-- الصفحة الكاملة: WebRTC ← MSE ← صورة كل ثانية. الشبكة: sub-stream كل 4 ثواني، متوزعة، وللمربعات الظاهرة بس.
-  Full page: WebRTC → MSE → a snapshot every second. Grid: sub-stream every 4 s, staggered, visible tiles only.
-- **الباسورد عمره ما بيتبعت للداشبورد ولا بيتكتب في الكونفج.** No camera / NVR password ever reaches the dashboard or the config.
+حدود: الاسم 120 حرف، الـ IP أو اسم الجهاز بس (حروف وأرقام و `. : - [ ]` — مفيش `user:pass@`)، 50 راوتر، 300 جهاز، 200 حدث.
+Limits: names 120 chars; `ip` must be a bare IP or host name (no `user:pass@`); 50 routers, 300 devices, 200 events.
 
 ## طرحات الأفران على طول (Live kiln exits): `kiln_exit`
 
-صفحة "الإنتاج والأفران" جوه المصنع بتقرا `{cameraBaseUrl}/status.json` كل 5 ثواني (مهلة 2 ثانية) وبتدور على أحداث `kiln_exit`،
+صفحة "الإنتاج والأفران" جوه المصنع بتقرا `{agentBaseUrl}/status.json` كل 5 ثواني (مهلة 2 ثانية) وبتدور على أحداث `kiln_exit`،
 فالطرحة اللي الأوبريتر وزنها بتظهر في "آخر وزنة" و"طرحات النهارده" على طول من غير ما تستنى ERPNext. برا المصنع = التحديث العادي.
-Inside the factory the production page reads `{cameraBaseUrl}/status.json` every 5 s (2 s timeout) and picks up `kiln_exit`
+Inside the factory the production page reads `{agentBaseUrl}/status.json` every 5 s (2 s timeout) and picks up `kiln_exit`
 events, so a weighed exit shows at once. Outside the factory it uses the normal refresh.
 
 الأحداث بتتحط في `events` (جنب أحداث up/down) أو في ليستة `kilnExits` — الاتنين شغالين. خلّي أحداث النهارده كلها في الملف (أو آخر 200).

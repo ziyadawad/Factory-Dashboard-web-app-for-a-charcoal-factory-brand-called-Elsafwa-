@@ -1084,7 +1084,7 @@ export interface ActivityData {
 }
 
 // ===== IT والمراقبة: اللي بيبعته الإيجنت من جهاز IT في المصنع - IT & monitoring: what the factory IT agent sends =====
-// مفيش أي باسورد هنا خالص (ولا للكاميرات) - never any password here (cameras included)
+// مفيش أي باسورد هنا خالص - never any password here
 export type ItDeviceType = "fingerprint" | "nvr" | "printer" | "pc" | "scale" | "other";
 
 export interface ItInternet {
@@ -1123,15 +1123,6 @@ export interface ItDevice {
   since: string | null; // ISO
 }
 
-export interface ItCamera {
-  id: string; // بيتحط في رابط الصورة: {cameraBaseUrl}/cameras/{id}/snapshot.jpg - used in the snapshot URL
-  name: string;
-  nvr?: string | null; // اسم الـ NVR (من cameras.json المحلي) - the NVR name (from the local cameras.json)
-  online: boolean | null;
-  stream?: string | null; // اسم الـ stream في go2rtc (main) - the go2rtc stream name (main); missing = id
-
-}
-
 export interface ItEvent {
   id: string;
   at: string; // ISO
@@ -1147,7 +1138,6 @@ export interface ItSnapshot {
   internet: ItInternet | null;
   routers: ItRouter[];
   devices: ItDevice[];
-  cameras: ItCamera[];
   events: ItEvent[]; // الأحدث الأول (السيرفر بيجمعها من كل التحديثات) - newest first (merged across updates)
 }
 
@@ -1235,4 +1225,52 @@ export interface LiveScaleReading {
   online: boolean; // الميزان نفسه متوصل بالإيجنت - the scale itself is connected to the agent
   at: string; // ISO - وقت القراية - reading time
   receivedAt: string; // ISO - وصلت السيرفر امتى - when the server got it
+}
+
+// ===== واتساب (الصفحة 7، قراية بس) - WhatsApp (page 7, read-only) =====
+export type WaMessageType = "text" | "image" | "video" | "audio" | "voice" | "document" | "sticker" | "system";
+
+export interface WaMedia {
+  id: string;
+  mime: string | null;
+  fileName: string | null;
+  size: number | null;
+  available: boolean; // false = الملف مش متخزن أو اتمسح (أقدم من retentionDays.media) - not stored or already deleted
+}
+
+export interface WaMessage {
+  id: string;
+  groupId: string;
+  sender: string;
+  at: string; // ISO
+  type: WaMessageType;
+  text: string | null;
+  reply: { id: string | null; sender: string; text: string } | null;
+  media: WaMedia | null;
+  deleted: boolean;
+  groupName?: string; // في نتايج البحث بس - search results only
+}
+
+export interface WaGroup {
+  id: string;
+  name: string;
+  participants: number | null;
+  pictureId: string | null; // صورة الجروب (id في wa_media) - the group picture (a wa_media id)
+  lastAt: string | null; // ISO
+  lastSender: string | null;
+  lastText: string | null; // معاينة آخر رسالة - the last message preview
+  lastType: WaMessageType | null;
+  unread: number; // من آخر زيارة (اللي المتصفح بعتها) - since the last visit (sent by the browser)
+}
+
+export interface WaGroupsResponse {
+  groups: WaGroup[];
+  lastSyncAt: string | null; // ISO: آخر مرة كمبيوتر الـ IT بعت حاجة - when the IT PC last sent anything
+}
+
+export interface WaMessagesResponse {
+  group: WaGroup | null;
+  messages: WaMessage[]; // before = الأحدث الأول، after = الأقدم الأول - before: newest first; after: oldest first
+  hasMore: boolean;
+  lastSyncAt: string | null;
 }

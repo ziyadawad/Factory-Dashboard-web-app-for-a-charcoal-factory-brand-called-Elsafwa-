@@ -20,7 +20,7 @@ import AccountDetailsPanel from "@/components/AccountDetailsPanel";
 import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
-import ItPage from "@/components/ItPage";
+import WhatsAppPage from "@/components/whatsapp/WhatsAppPage";
 import OperatorQrButton from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
@@ -82,7 +82,7 @@ export default function Dashboard() {
   // /api/dashboard بيغذي كل الصفحات ما عدا الإنتاج و IT، فبيقف وهما على الشاشة (أو والتاب مستخبي)
   // Polls every refreshSeconds without reloading (old data stays until new data arrives). It feeds every page except
   // production and IT, so it stops while those are on screen, and whenever the tab is hidden
-  const { data: serverData, error } = usePolling<DashboardData>("/api/dashboard", fetcher, REFRESH_MS, pageId !== "production" && pageId !== "it", {
+  const { data: serverData, error } = usePolling<DashboardData>("/api/dashboard", fetcher, REFRESH_MS, pageId !== "production" && pageId !== "whatsapp", {
     // النت رجع = اسأل حالا - internet back = refetch right away
     revalidateOnReconnect: true,
     // يفضل يسأل وهو أوفلاين: الطلب بيفشل فتظهر "غير متصل" والأرقام القديمة فاضلة - keep polling offline so the badge shows
@@ -166,8 +166,8 @@ export default function Dashboard() {
   // تفاصيل كارت في أرصدة المخازن - the open stock card details
   const [stockItem, setStockItem] = useState<StockPanelTarget | null>(null);
   const closeStockItem = useCallback(() => setStockItem(null), []);
-  // كاميرا مفتوحة صفحة كاملة (صفحة IT) - a camera open full-page (IT page)
-  const [itViewerOpen, setItViewerOpen] = useState(false);
+  // شات واتساب مفتوح صفحة كاملة (صفحة واتساب) - a WhatsApp chat open full page (the WhatsApp page)
+  const [waChatOpen, setWaChatOpen] = useState(false);
   // تثبيت الصفحة (محفوظ في المتصفح عشان يفضل بعد الريفرش، وقفل اللوحة مش بيلغيه)
   // Page pin, kept in localStorage so it survives a refresh (closing a panel never unpins)
   const [pinned, setPinned] = useState(false);
@@ -186,7 +186,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || itViewerOpen || operatorQrOpen || monthSummaryOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || operatorQrOpen || monthSummaryOpen;
 
   // تنبيه طرحة جديدة: بيستنى لو لوحة تفاصيل مفتوحة - the new kiln exit alert; waits while a details panel is open
   const chime = useChime();
@@ -398,8 +398,8 @@ export default function Dashboard() {
             data={data.wallets ?? null}
             onOpenWallet={(card) => setWallet({ accountNumber: card.accountNumber, title: card.name })}
           />;
-      case "it":
-        return <ItPage active={pageId === "it"} onOverlayChange={setItViewerOpen} />;
+      case "whatsapp":
+        return <WhatsAppPage active={pageId === "whatsapp"} onOverlayChange={setWaChatOpen} />;
       case "charity":
         return (
           <div className={`h-full ${flashClass("charity")}`}>
