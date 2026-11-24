@@ -688,3 +688,66 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c) 55%, transparent);
   }
 }
+
+/* spotlight رسالة واتساب جديدة: دخول بتكبير ونور بلون القسم، وخروج، وعداد رفيع
+   The new WhatsApp message spotlight: scale-in with a glow in the section color, scale-out, and a thin countdown */
+.wa-spot-in {
+  animation: wa-spot-in 0.45s cubic-bezier(0.22, 1, 0.36, 1), wa-spot-glow 2s ease-in-out 0.45s infinite;
+  box-shadow: 0 0 50px 8px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.wa-spot-out {
+  animation: wa-spot-out 0.3s ease-in forwards;
+}
+.wa-spot-fade-in {
+  animation: wa-spot-fade 0.3s ease-out;
+}
+.wa-spot-fade-out {
+  animation: wa-spot-fade 0.3s ease-in reverse forwards;
+}
+.wa-spot-bar {
+  animation-name: wa-spot-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes wa-spot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+@keyframes wa-spot-out {
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+@keyframes wa-spot-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes wa-spot-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 40px 6px color-mix(in srgb, var(--c) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 80px 18px color-mix(in srgb, var(--c) 70%, transparent);
+  }
+}
+@keyframes wa-spot-bar {
+  from {
+    transform: scaleX(var(--from, 1));
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-spot-in,
+  .wa-spot-out,
+  .wa-spot-fade-in,
+  .wa-spot-fade-out {
+    animation: none;
+  }
+}

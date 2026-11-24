@@ -15,8 +15,9 @@ import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
 import { sectionOf } from "@/lib/wa-sections";
-import { WaAlertItem } from "@/lib/wa-alert";
+import { WaFlash, WaSpotGroup } from "@/lib/wa-alert";
 import {
+  asWaGroup,
   cairoTime,
   groupColor,
   loadSeen,
@@ -136,7 +137,7 @@ function GroupColumn({
 }: {
   section: (typeof cfg.sections)[number];
   groups: WaGroup[];
-  alert: WaAlertItem | null;
+  alert: WaFlash | null;
   onOpen: (g: WaGroup) => void;
 }) {
   const color = section.color;
@@ -169,7 +170,8 @@ function GroupColumn({
   }, [order]);
 
   // تنبيه لجروب في العمود ده: نطلع لفوق - an alert for a group in this column: scroll to the top
-  const alerted = alert && groups.some((g) => g.id === alert.groupId) ? alert : null;
+  // اللمعة بعد الـ spotlight لجروب في العمود ده: نطلع لفوق - the flash after the spotlight for a group here: scroll up
+  const alerted = alert && groups.some((g) => alert.groupIds.includes(g.id)) ? alert : null;
   useEffect(() => {
     if (alerted) scroller.current?.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" });
   }, [alerted?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -204,7 +206,7 @@ function GroupColumn({
           <p className="py-8 text-center text-[14px] text-gray-500">مفيش جروبات هنا لسه</p>
         ) : (
           groups.map((g) => (
-            <GroupRow key={g.id} group={g} color={color} pulse={alerted && alerted.groupId === g.id ? alerted.nonce : null} onOpen={() => onOpen(g)} />
+            <GroupRow key={g.id} group={g} color={color} pulse={alerted && alerted.groupIds.includes(g.id) ? alerted.nonce : null} onOpen={() => onOpen(g)} />
           ))
         )}
       </div>
@@ -218,12 +220,14 @@ const byLast = (a: WaGroup, b: WaGroup) => (b.lastAt ?? "").localeCompare(a.last
 export default function WhatsAppPage({
   active,
   onOverlayChange,
-  alert = null,
+  flash = null,
+  openRequest = null,
   refreshKey = 0,
 }: {
   active: boolean;
   onOverlayChange: (open: boolean) => void;
-  alert?: WaAlertItem | null; // تنبيه رسالة جديدة دلوقتي - the current new-message alert
+  flash?: WaFlash | null; // الجروبات اللي بتلمع بعد الـ spotlight - the groups flashing after the spotlight
+  openRequest?: { group: WaSpotGroup; nonce: number } | null; // الضغط على كارت الـ spotlight = افتح الشات
   refreshKey?: number; // بيزيد مع أي رسايل جديدة = تحديث على طول - bumps on new messages = refresh now
 }) {
   const [open, setOpen] = useState<WaGroup | null>(null);
@@ -245,7 +249,7 @@ export default function WhatsAppPage({
   // رسالة جديدة (من التنبيه) والصفحة ظاهرة: تحديث على طول عشان الجروب يطلع فوق - new message while shown: refresh now
   useEffect(() => {
     if (active && refreshKey > 0) mutate();
-  }, [refreshKey, active, alert?.nonce, mutate]);
+  }, [refreshKey, active, flash?.nonce, mutate]);
 
   // أول رد بيقول الجروبات إيه، فالطلب الجاي بيبعت آخر زيارة لكل واحد - the first answer lists the groups; next requests send each visit
   const groupIds = (data?.groups ?? []).map((g) => g.id).sort().join("|");
@@ -267,6 +271,13 @@ export default function WhatsAppPage({
     setSeenState((s) => (s ? { ...s, seen: markSeen(g.id) } : s));
     setOpen(g);
   }, []);
+  // كارت الـ spotlight اتضغط: افتح شات الجروب ده - the spotlight card was clicked: open that group's chat
+  useEffect(() => {
+    if (!openRequest) return;
+    const g = data?.groups.find((x) => x.id === openRequest.group.id) ?? asWaGroup(openRequest.group);
+    openGroup(g);
+  }, [openRequest?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const closeChat = useCallback(() => {
     if (open) setSeenState((s) => (s ? { ...s, seen: markSeen(open.id) } : s));
     setOpen(null);
@@ -318,7 +329,7 @@ export default function WhatsAppPage({
         // 3 أعمدة جنب بعض (من اليمين)، والصفحة نفسها مش بتعمل سكرول - 3 columns side by side (from the right); the page never scrolls
         <div className="flex-1 min-h-0 grid grid-cols-3 gap-4">
           {columns.map(({ section, list }) => (
-            <GroupColumn key={section.id} section={section} groups={list} alert={alert} onOpen={openGroup} />
+            <GroupColumn key={section.id} section={section} groups={list} alert={flash} onOpen={openGroup} />
           ))}
         </div>
       )}

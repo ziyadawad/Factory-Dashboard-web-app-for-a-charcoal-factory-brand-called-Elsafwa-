@@ -341,9 +341,11 @@ export async function latestEvents(since: string | null): Promise<{ cursor: stri
   if (eventsConfigured()) return eventsSince(since);
   if (latestCache && latestCache.since === since && Date.now() - latestCache.at < 10_000) return latestCache.value;
   const rows = await q(
+    // الـ cursor بالملي ثانية وPostgres بالمايكرو: المقارنة بالملي، وإلا نفس الرسايل بترجع كل مرة (الصوت اللي بيتكرر)
+    // The cursor has milliseconds, Postgres microseconds: compare at ms, or the same messages come back every time
     `SELECT m.group_id, g.name, count(*)::int AS n, max(m.at) AS at, max(m.received_at) AS received
      FROM wa_messages m JOIN wa_groups g ON g.id = m.group_id
-     WHERE m.received_at > $1::timestamptz AND NOT m.deleted AND m.type <> 'system'
+     WHERE date_trunc('milliseconds', m.received_at) > $1::timestamptz AND NOT m.deleted AND m.type <> 'system'
        AND m.at > now() - make_interval(mins => $2::int)
      GROUP BY m.group_id, g.name`,
     [since ?? new Date().toISOString(), cfg.alertMaxAgeMinutes]
@@ -355,6 +357,31 @@ export async function latestEvents(since: string | null): Promise<{ cursor: stri
   const value = { cursor: latest, events };
   latestCache = { at: Date.now(), since, value };
   return value;
+}
+
+// الرسايل الجديدة نفسها للـ spotlight: اللي وصلت بعد since في الجروبات دي (مش نظام ولا ممسوحة، وأحدث من alertMaxAgeMinutes)
+// The new messages themselves for the spotlight: received after `since` in these groups (no system / deleted messages,
+// newer than alertMaxAgeMinutes). The page drops ids it already showed, so an overlapping window is fine
+export async function newMessages(since: string, groupIds: string[]): Promise<{ groups: { id: string; name: string; pictureId: string | null }[]; messages: WaMessage[] }> {
+  const hidden = new Set(cfg.hidden);
+  const ids = groupIds.map((id) => str(id, 120)).filter((id) => id && !hidden.has(id)).slice(0, 30);
+  if (ids.length === 0) return { groups: [], messages: [] };
+  const rows = await q(
+    `SELECT ${MESSAGE_SELECT}, g.name AS group_name, g.picture_media_id AS group_picture
+     FROM wa_messages m JOIN wa_groups g ON g.id = m.group_id LEFT JOIN wa_media md ON md.id = m.media_id
+     WHERE m.group_id = ANY($1::text[]) AND date_trunc('milliseconds', m.received_at) > $2::timestamptz
+       AND NOT m.deleted AND m.type <> 'system' AND m.at > now() - make_interval(mins => $3::int)
+     ORDER BY m.at ASC, m.id ASC LIMIT 60`,
+    [ids, since, cfg.alertMaxAgeMinutes]
+  );
+  const groups = new Map<string, { id: string; name: string; pictureId: string | null }>();
+  for (const r of rows) {
+    const id = String(r.group_id);
+    if (!groups.has(id)) groups.set(id, { id, name: String(r.group_name || id), pictureId: r.group_picture ? String(r.group_picture) : null });
+  }
+  const list = Array.from(groups.values()).filter((g) => !hidden.has(g.name));
+  const shown = new Set(list.map((g) => g.id));
+  return { groups: list, messages: rows.map(toMessage).filter((m) => shown.has(m.groupId)) };
 }
 
 // ===== الحالة: الجداول والأرقام وآخر طلب - status: tables, row counts and the last request =====

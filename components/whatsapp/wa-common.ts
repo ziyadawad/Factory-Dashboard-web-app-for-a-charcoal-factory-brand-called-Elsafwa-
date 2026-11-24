@@ -116,6 +116,18 @@ export function typePreview(type: WaMessage["type"] | null): string {
   }
 }
 
+// جروب من كارت الـ spotlight (id واسم وصورة بس) لشكل WaGroup - a spotlight card's group (id, name, picture) as a WaGroup
+export const asWaGroup = (g: Pick<WaGroup, "id" | "name" | "pictureId">): WaGroup => ({
+  ...g,
+  participants: null,
+  lastAt: null,
+  lastSender: null,
+  lastText: null,
+  lastType: null,
+  unread: 0,
+  perDay: 0,
+});
+
 export const mediaUrl = (id: string, download = false) => `/api/wa/media/${encodeURIComponent(id)}${download ? "?download=1" : ""}`;
 
 export function fileSize(bytes: number | null): string {

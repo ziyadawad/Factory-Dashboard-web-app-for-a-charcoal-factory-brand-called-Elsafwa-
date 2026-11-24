@@ -632,22 +632,29 @@ export const dashboardConfig = {
     // ة = ه, أ / إ / آ = ا, ى = ي, ئ = ي, ؤ = و, English lower-case
     // ===== الأعمدة: كل قسم عمود لوحده جنب بعض (من اليمين للشمال بالترتيب ده) - one column per section (right to left) =====
     columnOrder: ["packaging", "production", "treasury"],
-    // ===== تنبيه "رسالة جديدة" (على كل الصفحات) =====
-    // الشاشة بتسأل كل latestPollSeconds سؤال صغير بس (آخر رسالة جت امتى، من Redis)، والتحميل الكامل في صفحة الواتساب بس.
-    // رسالة جديدة: صوت هادي (غير صوت الطرحة)، والشاشة بتروح لصفحة الواتساب وتقف عليها alertHoldSeconds، والجروب بيطلع
-    // فوق في عموده ويلمع مرتين، وبعدين بترجع للصفحة اللي كانت عليها. كذا جروب = ورا بعض alertQueueSeconds لكل جروب.
-    // تنبيه الطرحة ليه الأولوية. مفيش تنبيه أول ما الصفحة تفتح، ولا ولوحة تفاصيل أو شات مفتوح (بيستنى لحد ما يتقفل).
+    // ===== تنبيه "رسالة جديدة" (على كل الصفحات): spotlight =====
+    // الشاشة بتسأل كل latestPollSeconds سؤال صغير بس (آخر رسالة جت امتى، من Redis)، ولو فيه جديد بتجيب الرسايل نفسها.
+    // رسالة جديدة: صوت هادي واحد بس لكل كارت (عمره ما بيتكرر لنفس الرسايل)، والشاشة بتروح لصفحة الواتساب وبيظهر كارت كبير
+    // في النص (صورة الجروب واسمه وقسمه، الراسل، الساعة، والرسايل نفسها: نص كامل، صور، ملفات، فويس). رسايل نفس الراسل في نفس
+    // الجروب خلال spotlightGroupMinutes = كارت واحد، والباقي طابور ورا بعض. كل كارت spotlightSeconds (+spotlightExtraSeconds
+    // لو فيه صور أو نص أطول من spotlightLongText حرف)، وبعد آخر كارت الجروب بيلمع مرتين spotlightFlashSeconds والشاشة بترجع
+    // للصفحة اللي كانت عليها. تنبيه الطرحة ليه الأولوية. مفيش تنبيه أول ما الصفحة تفتح، ولا ولوحة تفاصيل أو شات مفتوح.
     // رسايل أقدم من alertMaxAgeMinutes (زي التاريخ القديم المستورد) مش بتعمل تنبيه
-    // "New message" alert (every page): the screen polls a tiny check every latestPollSeconds (from Redis); the full
-    // load happens on the WhatsApp page only. A new message: a soft chime (not the kiln one), jump to the WhatsApp page
-    // for alertHoldSeconds, the group moves to the top of its column and flashes twice, then back to the previous page.
-    // Several groups = one after another, alertQueueSeconds each. Kiln alerts have priority. Never on page load, or
-    // while a details panel / chat is open (waits until it closes). Messages older than alertMaxAgeMinutes never alert
+    // "New message" alert (every page): a spotlight. A tiny check every latestPollSeconds (from Redis); when something is
+    // new the messages themselves are fetched. ONE soft chime per card (never repeated for the same messages), jump to the
+    // WhatsApp page and a big centered card (group picture, name, section, sender, time and the content: full text,
+    // images, files, voice notes). The same sender in the same group within spotlightGroupMinutes = one card; others queue.
+    // Each card spotlightSeconds (+spotlightExtraSeconds with images or text longer than spotlightLongText); after the
+    // last one the group flashes spotlightFlashSeconds and the screen returns to its page. Kiln alerts win. Never on page
+    // load, or while a details panel / chat is open. Messages older than alertMaxAgeMinutes never alert
     latestPollSeconds: 15,
     alertEnabled: true,
     alertSound: true, // false = من غير صوت - no chime
-    alertHoldSeconds: 20,
-    alertQueueSeconds: 3,
+    spotlightSeconds: 6,
+    spotlightExtraSeconds: 2,
+    spotlightLongText: 220,
+    spotlightGroupMinutes: 2,
+    spotlightFlashSeconds: 2,
     alertMaxAgeMinutes: 60,
     // ساعات الهدوء بتوقيت القاهرة: لا صوت ولا نقل للصفحة (الرسايل بتتحفظ عادي). null = من غير ساعات هدوء
     // Quiet hours (Cairo time): no chime, no jump (messages are still saved). null = no quiet hours

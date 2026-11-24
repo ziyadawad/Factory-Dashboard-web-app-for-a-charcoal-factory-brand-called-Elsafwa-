@@ -21,12 +21,13 @@ import DistributorsSection from "@/components/DistributorsSection";
 import WalletsSection from "@/components/WalletsSection";
 import StockDetailsPanel, { StockPanelTarget } from "@/components/StockDetailsPanel";
 import WhatsAppPage from "@/components/whatsapp/WhatsAppPage";
+import WaSpotlight from "@/components/whatsapp/WaSpotlight";
 import SuppliersPage from "@/components/SuppliersPage";
 import SupplierDetailsPanel from "@/components/SupplierDetailsPanel";
 import OperatorQrButton from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
-import { useWhatsAppAlerts } from "@/lib/wa-alert";
+import { useWhatsAppAlerts, WaSpotGroup } from "@/lib/wa-alert";
 import { useViewportFit, CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/useViewportFit";
 import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
@@ -200,7 +201,9 @@ export default function Dashboard() {
   const alertOn = alert.current !== null;
   // تنبيه الواتساب: بعد الطرحة (الطرحة ليها الأولوية)، وبيستنى لو لوحة أو شات مفتوح - the WhatsApp alert (kiln first)
   const waAlert = useWhatsAppAlerts({ blocked: paused, kilnBusy: alertOn || alert.pending > 0, playChime: chime.playSoft });
-  const waOn = waAlert.current !== null;
+  const waOn = waAlert.active;
+  // الضغط على الكارت بيفتح الشات بتاعه في صفحة الواتساب - clicking the card opens its chat on the WhatsApp page
+  const [waOpenRequest, setWaOpenRequest] = useState<{ group: WaSpotGroup; nonce: number } | null>(null);
   // الطرحة بآخر بياناتها (الوزن ممكن يوصل بعدين من ERPNext) - the exit with its latest values (ERPNext may add the weight later)
   const alertExit = useMemo(() => {
     const cur = alert.current;
@@ -239,10 +242,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertOn, alert.current]);
 
-  // تنبيه الواتساب: يروح لصفحة الواتساب alertHoldSeconds، وبعدين يرجع للصفحة اللي كان عليها (والمتثبتة بتفضل متثبتة).
-  // لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده
-  // The WhatsApp alert: go to the WhatsApp page for alertHoldSeconds, then back to the previous page (a pinned page
-  // stays pinned). A kiln alert in between wins; WhatsApp resumes after it
+  // تنبيه الواتساب (spotlight): يروح لصفحة الواتساب طول ما الكروت شغالة واللمعة، وبعدين يرجع للصفحة اللي كان عليها
+  // (والمتثبتة بتفضل متثبتة). لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده
+  // The WhatsApp spotlight: on the WhatsApp page while cards play and the flash runs, then back to the previous page
+  // (a pinned page stays pinned). A kiln alert in between wins; WhatsApp resumes after it
   const whatsappIndex = PAGES.findIndex((p) => p.id === "whatsapp");
   const waReturnRef = useRef<number | null>(null);
   const wasWaOn = useRef(false);
@@ -264,7 +267,18 @@ export default function Dashboard() {
       if (back !== null) changePage(back, -1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waOn, waAlert.current?.nonce, alertOn]);
+  }, [waOn, alertOn]);
+  const openFromSpotlight = useCallback(
+    (group: WaSpotGroup) => {
+      // نفضل على صفحة الواتساب والشات مفتوح - stay on the WhatsApp page with the chat open
+      waReturnRef.current = null;
+      setWaChatOpen(true);
+      waAlert.drop();
+      setWaOpenRequest({ group, nonce: Date.now() });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [waAlert.drop]
+  );
 
   // الكيبورد: تحت / PageDown / الشمال = الجاية، فوق / PageUp / اليمين = اللي فاتت (وبتلف)
   // Keyboard: ArrowDown / PageDown / ArrowLeft = next, ArrowUp / PageUp / ArrowRight = previous (wraps around)
@@ -438,7 +452,13 @@ export default function Dashboard() {
         return <SuppliersPage active={pageId === "suppliers"} onOpen={setSupplierName} />;
       case "whatsapp":
         return (
-          <WhatsAppPage active={pageId === "whatsapp"} onOverlayChange={setWaChatOpen} alert={waAlert.current} refreshKey={waAlert.activity} />
+          <WhatsAppPage
+            active={pageId === "whatsapp"}
+            onOverlayChange={setWaChatOpen}
+            flash={waAlert.flash}
+            openRequest={waOpenRequest}
+            refreshKey={waAlert.activity}
+          />
         );
       case "charity":
         return (
@@ -577,6 +597,8 @@ export default function Dashboard() {
         )}
       </main>
 
+      {/* رسالة واتساب جديدة: الكارت الكبير - a new WhatsApp message: the big card */}
+      <WaSpotlight spot={waAlert.current} pending={waAlert.pending} onDismiss={waAlert.dismiss} onOpen={openFromSpotlight} />
       {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
       {treasuryOpen && (
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
