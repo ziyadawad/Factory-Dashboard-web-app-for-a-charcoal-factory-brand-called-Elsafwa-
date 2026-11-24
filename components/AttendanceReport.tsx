@@ -20,19 +20,20 @@ const T = {
   card: "#f6f8fb",
   border: "#d5dde8",
   text: "#0f172a",
-  muted: "#55627a",
+  muted: "#4b5870",
+  heading: "#1e293b",
   green: "#15803d",
   red: "#dc2626",
   amber: "#b45309",
   sky: "#0369a1",
   gray: "#6b7280",
   cell: {
-    present: { bg: "#dcfce7", border: "#22a355", text: "#0f172a", note: "#166534" },
-    absent: { bg: "#fee2e2", border: "#e04848", text: "#0f172a", note: "#991b1b" },
-    half: { bg: "#fef3c7", border: "#e0950f", text: "#0f172a", note: "#92400e" },
-    friday: { bg: "#e0f2fe", border: "#1593d6", text: "#0f172a", note: "#075985" },
-    off: { bg: "#eef0f3", border: "#b3bac5", text: "#374151", note: "#4b5563" },
-    empty: { bg: "#ffffff", border: "#e3e8ef", text: "#b6c0cf", note: "#b6c0cf" },
+    present: { bg: "#16A34A", border: "#128a3e", text: "#ffffff", note: "#ecfdf3" },
+    absent: { bg: "#DC2626", border: "#b91c1c", text: "#ffffff", note: "#fff1f1" },
+    half: { bg: "#F59E0B", border: "#d98a06", text: "#1f1300", note: "#3b2500" },
+    friday: { bg: "#2563EB", border: "#1d4ed8", text: "#ffffff", note: "#eaf1ff" },
+    off: { bg: "#9CA3AF", border: "#868e9b", text: "#ffffff", note: "#f8fafc" },
+    empty: { bg: "#ffffff", border: "#d9e0ea", text: "#a3aec0", note: "#a3aec0" },
   } satisfies Record<string, Tone>,
 };
 
@@ -68,7 +69,7 @@ function Calendar({ person, openToday }: { person: EmployeeAttendance; openToday
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
         {WEEK_HEADER.map((d) => (
-          <p key={d} style={{ textAlign: "center", color: T.muted, fontWeight: 700, fontSize: 14, margin: 0 }}>
+          <p key={d} style={{ textAlign: "center", color: T.heading, fontWeight: 800, fontSize: 14, margin: 0 }}>
             {d}
           </p>
         ))}
@@ -102,7 +103,7 @@ function Calendar({ person, openToday }: { person: EmployeeAttendance; openToday
                 {half && <span style={{ fontSize: 14, color: tone.note }}> ½</span>}
               </span>
               {note && (
-                <span dir={punch ? "ltr" : undefined} style={{ fontSize: 13, fontWeight: 600, color: tone.note }}>
+                <span dir={punch ? "ltr" : undefined} style={{ fontSize: 13, fontWeight: 700, color: tone.note }}>
                   {note}
                 </span>
               )}
@@ -118,7 +119,7 @@ function Calendar({ person, openToday }: { person: EmployeeAttendance; openToday
 function Legend() {
   const item = (tone: Tone, label: string) => (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-      <i style={{ width: 13, height: 13, borderRadius: 4, background: tone.bg, border: `1.5px solid ${tone.border}`, display: "inline-block" }} />
+      <i style={{ width: 14, height: 14, borderRadius: 4, background: tone.bg, border: `1.5px solid ${tone.border}`, display: "inline-block" }} />
       {label}
     </span>
   );
@@ -134,7 +135,7 @@ function Legend() {
   );
 }
 
-type Row = [label: string, value: number, sign: "" | "+" | "−", color: string];
+type Row = [label: string, value: number, sign: "" | "+" | "−", color: string, unit?: string];
 
 // ملخص المرتب (نفس أرقام لوحة المرتب) - the salary summary (same numbers as the salary panel)
 // salary: undefined = مش متسجل، null = المرتبات مش متاحة - undefined = not recorded, null = salaries unavailable
@@ -142,14 +143,14 @@ function SalaryBox({ salary }: { salary: EmployeeSalary | null | undefined }) {
   const box = {
     flex: 1,
     minHeight: 0,
-    border: `1.5px solid ${T.amber}`,
+    border: `2.5px solid ${T.amber}`,
     borderRadius: 12,
     background: "#fffbf3",
     padding: "10px 16px",
     display: "flex",
     flexDirection: "column",
   } as const;
-  const title = <p style={{ margin: "0 0 4px", color: T.amber, fontWeight: 800, fontSize: 17 }}>💰 ملخص المرتب</p>;
+  const title = <p style={{ margin: "0 0 4px", color: "#92400e", fontWeight: 900, fontSize: 18 }}>💰 ملخص المرتب</p>;
   if (!salary || salary.kind === "none") {
     return (
       <div style={box}>
@@ -164,7 +165,7 @@ function SalaryBox({ salary }: { salary: EmployeeSalary | null | undefined }) {
   const week = daily ? salary.weeks.find((w) => w.shown) : undefined;
   const rows: Row[] = daily
     ? [
-        ["اليومية", salary.dailyRate, "", T.text],
+        ["قيمة اليوم (اليومية)", salary.dailyRate, "", T.text, " ج.م / يوم"],
         ["أيام الحضور", salary.presentDays, "", T.green],
         ["أيام الغياب", salary.absentDays, "", T.red],
         ["أجر الأيام (الأيام × اليومية)", salary.presentDays * salary.dailyRate, "", T.text],
@@ -175,6 +176,7 @@ function SalaryBox({ salary }: { salary: EmployeeSalary | null | undefined }) {
       ]
     : [
         ["الأجر الشامل", salary.total, "", T.text],
+        ["قيمة اليوم (الشامل ÷ 30)", salary.perDay, "", T.text, " ج.م / يوم"],
         ["أيام الغياب", salary.absentDays, "", T.red],
         ["خصم الغياب", salary.absence, "−", T.red],
         ["الخصومات", salary.deductions, "−", T.red],
@@ -188,15 +190,16 @@ function SalaryBox({ salary }: { salary: EmployeeSalary | null | undefined }) {
     <div style={box}>
       {title}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
-        {rows.map(([label, value, sign, color]) => (
+        {rows.map(([label, value, sign, color, unit]) => (
           <p
             key={label}
             style={{ margin: 0, display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${T.border}`, padding: "2px 0", fontSize: 15 }}
           >
-            <span style={{ color: T.muted }}>{label}</span>
-            <span dir="ltr" style={{ fontWeight: 700, color: value ? color : T.muted }}>
+            <span style={{ color: T.heading, fontWeight: 600 }}>{label}</span>
+            <span dir="ltr" style={{ fontWeight: 800, color: value ? color : T.muted }}>
               {value && sign ? `${sign} ` : ""}
               {fmt(value)}
+              {unit && <span dir="rtl">{unit}</span>}
             </span>
           </p>
         ))}
@@ -215,17 +218,17 @@ function SalaryBox({ salary }: { salary: EmployeeSalary | null | undefined }) {
         style={{
           marginTop: 6,
           borderRadius: 10,
-          background: "#ecfdf3",
-          border: `1.5px solid ${T.cell.present.border}`,
+          background: "#16A34A",
+          border: "2px solid #128a3e",
           padding: "2px 14px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: 19, color: T.text }}>المرتب حتى الآن</span>
-        <span style={{ fontWeight: 800, fontSize: 34, color: T.green, lineHeight: 1.5 }}>
-          <span dir="ltr">{fmt(salary.earned)}</span> <span style={{ fontSize: 16, color: T.muted }}>ج.م</span>
+        <span style={{ fontWeight: 900, fontSize: 20, color: "#ffffff" }}>المرتب حتى الآن</span>
+        <span style={{ fontWeight: 900, fontSize: 34, color: "#ffffff", lineHeight: 1.5 }}>
+          <span dir="ltr">{fmt(salary.earned)}</span> <span style={{ fontSize: 16, color: "#e7f8ee" }}>ج.م</span>
         </span>
       </div>
     </div>
@@ -243,16 +246,20 @@ export function AttendanceReport({
   openToday: string | null;
   salary: EmployeeSalary | null | undefined;
 }) {
+  // قيمة اليوم: الشامل ÷ 30 (زي لوحة المرتب)، أو اليومية لعمال اليومية - the day value (the daily rate for daily workers)
+  const dayValue = !salary || salary.kind === "none" ? 0 : salary.kind === "daily" ? salary.dailyRate : salary.perDay;
   const fridays = person.days.reduce((s, d) => s + (d.fridayWork ?? 0), 0);
   const halves = person.days.filter((d) => d.half).length;
   const now = new Date();
   const date = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", day: "2-digit", month: "2-digit", year: "numeric" }).format(now);
   const stat = (label: string, value: number, color: string) => (
-    <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 12, textAlign: "center", padding: "2px 4px" }}>
-      <p dir="ltr" style={{ margin: 0, fontSize: 28, fontWeight: 800, lineHeight: 1.4, color: value ? color : T.muted }}>
+    <div
+      style={{ background: T.card, border: `1.5px solid ${T.border}`, borderTop: `6px solid ${color}`, borderRadius: 12, textAlign: "center", padding: "0 4px 2px" }}
+    >
+      <p dir="ltr" style={{ margin: 0, fontSize: 30, fontWeight: 900, lineHeight: 1.4, color: value ? color : T.muted }}>
         {fmt(value)}
       </p>
-      <p style={{ margin: 0, fontSize: 12.5, color: T.muted, fontWeight: 700, whiteSpace: "nowrap" }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 12.5, color: T.heading, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</p>
     </div>
   );
   const info = (label: string, value: string | null, ltr = false) => (
@@ -285,11 +292,21 @@ export function AttendanceReport({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="" width={58} height={58} style={{ width: 58, height: 58, objectFit: "contain" }} />
         <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 14, color: T.muted, fontWeight: 700 }}>تقرير حضور — شهر {reportMonth(month)}</p>
+          <p style={{ margin: 0, fontSize: 14, color: T.heading, fontWeight: 800 }}>تقرير حضور — شهر {reportMonth(month)}</p>
           <p style={{ margin: 0, fontSize: 25, fontWeight: 800, lineHeight: 1.45 }}>{person.name}</p>
         </div>
         <div style={{ marginInlineStart: "auto", flexShrink: 0, display: "flex", gap: 8, fontSize: 14, lineHeight: 2 }}>
           {info("كود البصمة", person.code, true)}
+          {dayValue > 0 && (
+            <span
+              style={{ display: "inline-flex", gap: 6, whiteSpace: "nowrap", background: "#fff7e6", border: `1.5px solid ${T.amber}`, borderRadius: 999, padding: "0 12px" }}
+            >
+              <span style={{ color: "#92400e", fontWeight: 700 }}>قيمة اليوم</span>
+              <span style={{ color: T.text, fontWeight: 800 }}>
+                <span dir="ltr">{fmt(dayValue)}</span> ج.م / يوم
+              </span>
+            </span>
+          )}
           {info("Employee ID", person.id, true)}
           {info("القسم", person.section)}
         </div>
@@ -306,7 +323,7 @@ export function AttendanceReport({
             {stat("نص يوم", halves, T.amber)}
           </div>
           <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "4px 14px" }}>
-            <p style={{ margin: 0, fontWeight: 800, color: T.muted, fontSize: 14 }}>أيام الغياب</p>
+            <p style={{ margin: 0, fontWeight: 900, color: T.heading, fontSize: 14 }}>أيام الغياب</p>
             <p style={{ margin: 0, lineHeight: 1.7, fontSize: 14, fontWeight: 600, color: person.absentDates.length ? T.red : T.muted }}>
               {person.absentDates.length ? person.absentDates.map(formatDayName).join("، ") : "مفيش غياب الشهر ده"}
             </p>
