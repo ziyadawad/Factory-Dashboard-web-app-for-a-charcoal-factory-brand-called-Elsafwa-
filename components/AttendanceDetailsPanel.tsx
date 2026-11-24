@@ -1217,7 +1217,6 @@ function ReportMenu({
   className: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [withSalary, setWithSalary] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const single = people.length === 1;
@@ -1227,9 +1226,11 @@ function ReportMenu({
     setFailed(false);
     setBusy(single ? "جاري التجهيز..." : `0/${people.length}`);
     try {
-      const salaries = withSalary ? await loadSalaries() : null;
-      const items = people.map((person) => ({ person, salary: salaries?.people.find((s) => s.id === person.id) }));
-      const common = { month, openToday, includeSalary: withSalary };
+      // ملخص المرتب دايما؛ لو المرتبات مجتش التقرير بيطلع برضه ومكتوب فيه "مش متاحة"
+      // The salary summary is always in; if salaries fail the report still comes out, marked "unavailable"
+      const salaries = await loadSalaries().catch(() => null);
+      const items = people.map((person) => ({ person, salary: salaries ? salaries.people.find((s) => s.id === person.id) : null }));
+      const common = { month, openToday };
       if (kind === "png") await exportPng(items[0], common);
       else await exportPdf(items, common, title, (done) => !single && setBusy(`${done}/${people.length}`));
     } catch {
@@ -1252,7 +1253,7 @@ function ReportMenu({
         {busy ?? (failed ? "⚠ جرب تاني" : "تحميل")}
       </button>
       {open && (
-        <div className="absolute z-30 top-full mt-2 end-0 w-[250px] rounded-xl border border-cardBorder bg-card p-2 shadow-2xl flex flex-col gap-1">
+        <div className="absolute z-30 top-full mt-2 end-0 w-[240px] rounded-xl border border-cardBorder bg-card p-2 shadow-2xl flex flex-col gap-1">
           {single && (
             <button type="button" className={option} onClick={() => run("png")}>
               🖼️ صورة (PNG)
@@ -1261,10 +1262,6 @@ function ReportMenu({
           <button type="button" className={option} onClick={() => run("pdf")}>
             📄 ملف (PDF){!single && <span className="text-gray-400 text-[14px]"> — كل الموظفين</span>}
           </button>
-          <label className="flex items-center gap-2 border-t border-cardBorder mt-1 pt-2 px-3 text-[15px] text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={withSalary} onChange={(e) => setWithSalary(e.target.checked)} className="w-4 h-4 accent-amber-400" />
-            تضمين المرتب
-          </label>
         </div>
       )}
     </div>
