@@ -615,9 +615,15 @@ export const dashboardConfig = {
     pageSize: 50, // كام رسالة في كل مرة (والأقدم بتتحمل وانت طالع لفوق) - messages per page (older ones load scrolling up)
     searchLimit: 100, // أكتر عدد نتايج للبحث - most search results
     maxUploadMB: 4, // أكبر ملف (حد Vercel 4.5 ميجا للطلب) - the largest file (Vercel allows 4.5 MB per request)
-    // جروبات تظهر الأول بالترتيب ده (id أو الاسم بالظبط)، والباقي بآخر نشاط - groups shown first in this order (id or
-    // exact name); the rest by last activity
-    pinned: [] as string[],
+    // جروبات متثبتة فوق في عمود كل قسم (المفتاح = id القسم)، بالترتيب ده بالظبط ودايما فوق. الجروب بيتكتب بالـ id أو
+    // بالاسم (بالظبط أو بعد التوحيد زي الكلمات). المتثبت بيلمع عادي لما تجيله رسالة بس مش بيتحرك من مكانه، والباقي
+    // تحته بآخر رسالة. قسم مش مكتوب هنا = كله بآخر رسالة
+    // Groups pinned at the top of each section column (key = section id), always on top in exactly this order. A group
+    // is written by id or name (exact or normalized like the keywords). A pinned group still flashes on a new message
+    // but never moves; the rest follow by last message. A section not listed = all by last message
+    pinned: {
+      treasury: ["بنوك مصنع الصفوة", "مصروفات مصنع الصفوة"],
+    } as Record<string, string[]>,
     hidden: [] as string[], // جروبات متتعرضش خالص (id أو الاسم) - groups never shown (id or name)
     // لون كل جروب: بالاسم أو الـ id، والباقي بالترتيب من colors - a color per group by name or id; others cycle colors
     groupColors: {} as Record<string, string>,

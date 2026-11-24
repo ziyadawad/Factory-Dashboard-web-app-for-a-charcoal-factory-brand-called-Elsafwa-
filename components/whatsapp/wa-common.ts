@@ -4,6 +4,7 @@
 import { dashboardConfig } from "@/config/dashboard.config";
 import { WaGroup, WaMessage } from "@/lib/types";
 import { formatTime12 } from "@/lib/format";
+import { normalizeName } from "@/lib/wa-sections";
 
 const cfg = dashboardConfig.whatsapp;
 
@@ -70,23 +71,13 @@ export function groupColor(g: Pick<WaGroup, "id" | "name">): string {
 const SENDER_COLORS = ["#34D399", "#60A5FA", "#F472B6", "#FBBF24", "#A78BFA", "#F87171", "#2DD4BF", "#FB923C", "#A3E635", "#38BDF8"];
 export const senderColor = (name: string) => SENDER_COLORS[hash(name) % SENDER_COLORS.length];
 
-// الترتيب: المتثبت في الكونفج (whatsapp.pinned) الأول، وبعدين الجروبات اللي ليها صورة، وبعدين اللي من غير صورة. وجوه كل جزء
-// الأنشط الأول (متوسط الرسايل في اليوم آخر 30 يوم)، وبعدين آخر رسالة
-// The order: pinned in config first, then groups with a picture, then those without. Inside each part the most active
-// first (average messages per day over the last 30 days), then the latest message
-export function sortGroups(groups: WaGroup[]): WaGroup[] {
-  const pinIndex = (g: WaGroup) => {
-    const i = cfg.pinned.findIndex((p) => p === g.id || p === g.name);
-    return i < 0 ? Infinity : i;
-  };
-  const noPicture = (g: WaGroup) => (g.pictureId ? 0 : 1);
-  return [...groups].sort(
-    (a, b) =>
-      pinIndex(a) - pinIndex(b) ||
-      noPicture(a) - noPicture(b) ||
-      (b.perDay ?? 0) - (a.perDay ?? 0) ||
-      (b.lastAt ?? "").localeCompare(a.lastAt ?? "")
-  );
+// ترتيب الجروب المتثبت في عمود قسمه (whatsapp.pinned[sectionId])، أو Infinity لو مش متثبت
+// A group's pinned position in its section column (whatsapp.pinned[sectionId]), or Infinity when not pinned
+export function pinIndex(g: Pick<WaGroup, "id" | "name">, sectionId: string): number {
+  const list = cfg.pinned[sectionId] ?? [];
+  const name = normalizeName(g.name);
+  const i = list.findIndex((p) => p === g.id || p === g.name || normalizeName(p) === name);
+  return i < 0 ? Infinity : i;
 }
 
 // "2.3 رسالة/يوم" - messages per day

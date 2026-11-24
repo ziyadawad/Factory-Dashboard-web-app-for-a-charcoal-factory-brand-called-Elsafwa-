@@ -18,6 +18,7 @@ import { sectionOf } from "@/lib/wa-sections";
 import { WaFlash, WaSpotGroup } from "@/lib/wa-alert";
 import {
   asWaGroup,
+  pinIndex,
   cairoTime,
   groupColor,
   loadSeen,
@@ -258,13 +259,20 @@ export default function WhatsAppPage({
   }, [groupIds]);
 
   const groups = useMemo(() => (data?.groups ?? []).filter(Boolean), [data]);
-  // الأعمدة بترتيب whatsapp.columnOrder (من اليمين)، وجوه كل عمود الأحدث فوق - columns in columnOrder, newest first inside
+  // الأعمدة بترتيب whatsapp.columnOrder (من اليمين)، وجوه كل عمود: المتثبت (whatsapp.pinned) بترتيبه، وبعدين الأحدث فوق
+  // Columns in columnOrder; inside each: the pinned groups (whatsapp.pinned) in their order, then newest first
   const columns = useMemo(() => {
     const ids = cfg.columnOrder.filter((id) => cfg.sections.some((s) => s.id === id));
     const rest = cfg.sections.filter((s) => !ids.includes(s.id)).map((s) => s.id);
     return [...ids, ...rest].map((id) => {
       const section = cfg.sections.find((s) => s.id === id)!;
-      return { section, list: groups.filter((g) => sectionOf(g).id === id).sort(byLast) };
+      const pinned = (g: WaGroup) => pinIndex(g, id);
+      const list = groups.filter((g) => sectionOf(g).id === id).sort((a, b) => {
+        const pa = pinned(a);
+        const pb = pinned(b);
+        return pa !== pb ? (pa < pb ? -1 : 1) : byLast(a, b);
+      });
+      return { section, list };
     });
   }, [groups]);
   const openGroup = useCallback((g: WaGroup) => {
