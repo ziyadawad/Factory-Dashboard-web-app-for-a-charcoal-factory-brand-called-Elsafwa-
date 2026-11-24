@@ -33,6 +33,7 @@ import { DashboardData, ProductionData } from "@/lib/types";
 import { OfflineCard } from "@/components/OfflineBadge";
 import { useLastGood } from "@/lib/useLastGood";
 import { dashboardConfig } from "@/config/dashboard.config";
+import AlertToasts, { type AlertToast } from "@/components/AlertToasts";
 
 // لو الـ API رجّع error بنرمي عشان SWR يسيب آخر داتا سليمة - throw on an error status so SWR keeps the last good data
 const fetcher = async (url: string) => {
@@ -195,6 +196,16 @@ export default function Dashboard() {
   const paused =
     salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || supplierName !== null || operatorQrOpen || monthSummaryOpen;
 
+  // تنبيهات صغيرة في الركن وقت ما الصفحة متثبتة (📌) - corner toasts while page is pinned
+  const [toasts, setToasts] = useState<AlertToast[]>([]);
+  const addToast = useCallback((toast: Omit<AlertToast, "id">) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { ...toast, id }]);
+  }, []);
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   // تنبيه طرحة جديدة: بيستنى لو لوحة تفاصيل مفتوحة - the new kiln exit alert; waits while a details panel is open
   const chime = useChime();
   const alert = useKilnExitAlerts(production, paused, chime.play);
@@ -209,6 +220,7 @@ export default function Dashboard() {
     const cur = alert.current;
     if (!cur) return null;
     return production?.exits.find((e) => sameExit(e, cur)) ?? cur;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alert.current, production]);
 
   const changePage = useCallback((index: number, dir: 1 | -1 = 1) => {
@@ -230,9 +242,21 @@ export default function Dashboard() {
   useEffect(() => {
     if (productionIndex < 0) return;
     if (alertOn) {
-      if (!wasAlertOn.current) returnPageRef.current = pinned && pageIndex !== productionIndex ? pageIndex : null;
+      if (!wasAlertOn.current) {
+        // لو الصفحة متثبتة: عرض توست بدل من التنقل - if pinned: show toast instead of navigating
+        if (pinned && alert.current) {
+          addToast({
+            icon: "🔥",
+            title: `طرحة دخلت ${alert.current.kiln}`,
+            sub: alert.current.type,
+            color: "#ff6c00",
+            onGo: () => changePage(productionIndex, 1),
+          });
+        }
+        returnPageRef.current = pinned && pageIndex !== productionIndex ? pageIndex : null;
+      }
       wasAlertOn.current = true;
-      if (pageIndex !== productionIndex) changePage(productionIndex, 1);
+      if (!pinned && pageIndex !== productionIndex) changePage(productionIndex, 1);
     } else if (wasAlertOn.current) {
       wasAlertOn.current = false;
       const back = returnPageRef.current;
@@ -240,7 +264,7 @@ export default function Dashboard() {
       if (back !== null && pinned) changePage(back, -1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertOn, alert.current]);
+  }, [alertOn, alert.current, pinned, addToast, changePage, productionIndex, pageIndex]);
 
   // تنبيه الواتساب (spotlight): يروح لصفحة الواتساب طول ما الكروت شغالة واللمعة، وبعدين يرجع للصفحة اللي كان عليها
   // (والمتثبتة بتفضل متثبتة). لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده
@@ -249,6 +273,7 @@ export default function Dashboard() {
   const whatsappIndex = PAGES.findIndex((p) => p.id === "whatsapp");
   const waReturnRef = useRef<number | null>(null);
   const wasWaOn = useRef(false);
+  const shownWaToasts = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (whatsappIndex < 0) return;
     if (alertOn) {
@@ -257,17 +282,35 @@ export default function Dashboard() {
       return;
     }
     if (waOn) {
-      if (!wasWaOn.current) waReturnRef.current = pageIndex !== whatsappIndex ? pageIndex : null;
+      if (!wasWaOn.current) {
+        // لو الصفحة متثبتة: عرض توست لكل كارت - if pinned: show toast for each card
+        if (pinned && waAlert.current) {
+          const card = waAlert.current.card;
+          const key = card.group.id;
+          if (!shownWaToasts.current.has(key)) {
+            shownWaToasts.current.add(key);
+            addToast({
+              icon: "💬",
+              title: `رسالة جديدة في ${card.group.name}`,
+              sub: card.sender,
+              color: "#25D366",
+              onGo: () => changePage(whatsappIndex, 1),
+            });
+          }
+        }
+        waReturnRef.current = pageIndex !== whatsappIndex ? pageIndex : null;
+      }
       wasWaOn.current = true;
-      if (pageIndex !== whatsappIndex) changePage(whatsappIndex, 1);
+      if (!pinned && pageIndex !== whatsappIndex) changePage(whatsappIndex, 1);
     } else if (wasWaOn.current) {
       wasWaOn.current = false;
+      shownWaToasts.current.clear();
       const back = waReturnRef.current;
       waReturnRef.current = null;
       if (back !== null) changePage(back, -1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waOn, alertOn]);
+  }, [waOn, alertOn, pinned, addToast, changePage, whatsappIndex, pageIndex, waAlert.current]);
   const openFromSpotlight = useCallback(
     (group: WaSpotGroup) => {
       // نفضل على صفحة الواتساب والشات مفتوح - stay on the WhatsApp page with the chat open
@@ -606,6 +649,8 @@ export default function Dashboard() {
         onExtend={waAlert.extend}
         onHold={waAlert.hold}
       />
+      {/* تنبيهات صغيرة في الركن وقت ما الصفحة متثبتة (📌) - corner toasts while page is pinned */}
+      <AlertToasts toasts={toasts} onClose={removeToast} />
       {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
       {treasuryOpen && (
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
