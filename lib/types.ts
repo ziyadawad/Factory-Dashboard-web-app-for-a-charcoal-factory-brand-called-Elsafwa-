@@ -1261,6 +1261,8 @@ export interface WaGroup {
   lastSender: string | null;
   lastText: string | null; // معاينة آخر رسالة - the last message preview
   lastType: WaMessageType | null;
+  // صورة آخر رسالة لو كانت صورة (للصورة الصغيرة في كارت الجروب) - the last message's image id (the row thumbnail)
+  lastMediaId?: string | null;
   unread: number; // من آخر زيارة (اللي المتصفح بعتها) - since the last visit (sent by the browser)
   perDay: number; // متوسط الرسايل في اليوم آخر 30 يوم - average messages per day over the last 30 days
 }
@@ -1271,6 +1273,8 @@ export interface WaStatus {
   counts: { groups: number; messages: number; media: number };
   latestReceivedAt: string | null; // آخر رسالة وصلت السيرفر - the latest message to reach the server
   latestMessageAt: string | null;
+  // صور النهارده (بتوقيت القاهرة): كام واحدة ليها ملف مترفع وكام لأ - today's images (Cairo): with an uploaded file or not
+  imagesToday?: { total: number; uploaded: number; mediaIdNotUploaded: number; noMediaId: number };
   lastSyncAt: string | null;
   // آخر طلب من الإيجنت: اتبعت كام واتحفظ كام وليه اترفض - the agent's last request: sent / saved / why rejected
   lastIngest: {

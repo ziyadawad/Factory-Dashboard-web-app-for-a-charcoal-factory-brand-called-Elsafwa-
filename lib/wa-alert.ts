@@ -24,7 +24,8 @@ const cfg = dashboardConfig.whatsapp;
 
 export type WaSpotGroup = { id: string; name: string; pictureId: string | null };
 export type WaSpotCard = { key: string; group: WaSpotGroup; sender: string; messages: WaMessage[] };
-export type WaSpotShown = { card: WaSpotCard; startedAt: number; endsAt: number };
+// held = صورة مفتوحة كبيرة: الوقت واقف - held = an image is open full size: the countdown is paused
+export type WaSpotShown = { card: WaSpotCard; startedAt: number; endsAt: number; held?: boolean };
 export type WaFlash = { groupIds: string[]; nonce: number };
 type LatestEvent = { receivedAt: string; groupId: string; groupName: string; count: number; at: string };
 
@@ -56,7 +57,9 @@ type Action =
   | { type: "start"; now: number }
   | { type: "requeue" } // الطرحة: الكارت يرجع أول الطابور - a kiln alert: the card goes back to the queue front
   | { type: "drop" } // لوحة / شات اتفتح: الكارت يختفي - a panel / chat opened: the card goes away
-  | { type: "flashDone" };
+  | { type: "flashDone" }
+  | { type: "extend"; key: string; ms: number } // صورة وصلت متأخر: الكارت بيتمد - a late image: the card gets longer
+  | { type: "hold"; key: string; on: boolean; now: number };
 
 const show = (card: WaSpotCard, now: number): WaSpotShown => ({ card, startedAt: now, endsAt: now + cardSeconds(card) * 1000 });
 
@@ -107,6 +110,16 @@ function reducer(state: State, action: Action): State {
       return { ...state, current: null, flash: null, run: [] };
     case "flashDone":
       return { ...state, flash: null };
+    case "extend":
+      if (state.current?.card.key !== action.key) return state;
+      return { ...state, current: { ...state.current, endsAt: state.current.endsAt + action.ms } };
+    case "hold":
+      if (state.current?.card.key !== action.key) return state;
+      // الصورة اتقفلت: 3 ثواني كمان على الأقل - the image closed: at least 3 more seconds
+      return {
+        ...state,
+        current: { ...state.current, held: action.on, endsAt: action.on ? state.current.endsAt : Math.max(state.current.endsAt, action.now + 3000) },
+      };
   }
 }
 
@@ -117,6 +130,8 @@ export type WaSpotlight = {
   active: boolean; // الشاشة لازم تفضل على صفحة الواتساب - the screen must stay on the WhatsApp page
   activity: number; // بيزيد مع أي رسايل جديدة (حتى في الهدوء) - bumps on any new messages (even in quiet hours)
   dismiss: () => void; // ✕ / Esc: اللي بعده - close early: the next card
+  extend: (key: string, ms: number) => void; // صورة وصلت متأخر - a late image
+  hold: (key: string, on: boolean) => void; // صورة مفتوحة كبيرة - an image open full size
   drop: () => void; // فتح الشات من الكارت - opening the chat from the card
 };
 
@@ -195,6 +210,7 @@ export function useWhatsAppAlerts({
       return;
     }
     const now = Date.now();
+    if (state.current?.held) return;
     if (state.current) {
       const wait = state.current.endsAt - now;
       if (wait <= 0) {
@@ -230,6 +246,8 @@ export function useWhatsAppAlerts({
 
   const dismiss = useCallback(() => dispatch({ type: "next", now: Date.now(), canStart: true }), []);
   const drop = useCallback(() => dispatch({ type: "drop" }), []);
+  const extend = useCallback((key: string, ms: number) => dispatch({ type: "extend", key, ms }), []);
+  const hold = useCallback((key: string, on: boolean) => dispatch({ type: "hold", key, on, now: Date.now() }), []);
 
   return {
     current: state.current,
@@ -239,5 +257,7 @@ export function useWhatsAppAlerts({
     activity,
     dismiss,
     drop,
+    extend,
+    hold,
   };
 }

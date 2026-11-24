@@ -384,14 +384,26 @@ export async function newMessages(since: string, groupIds: string[]): Promise<{ 
   return { groups: list, messages: rows.map(toMessage).filter((m) => shown.has(m.groupId)) };
 }
 
+// صور النهارده (القاهرة): ليها ملف في wa_media ولا لأ - today's images (Cairo): with a file in wa_media or not
+export const IMAGES_TODAY_SQL = `
+  SELECT count(*)::int AS total,
+         count(md.id)::int AS uploaded,
+         count(*) FILTER (WHERE m.media_id IS NOT NULL AND md.id IS NULL)::int AS media_id_not_uploaded,
+         count(*) FILTER (WHERE m.media_id IS NULL)::int AS no_media_id
+  FROM wa_messages m LEFT JOIN wa_media md ON md.id = m.media_id
+  WHERE m.type = 'image' AND NOT m.deleted
+    AND (m.at AT TIME ZONE 'Africa/Cairo')::date = (now() AT TIME ZONE 'Africa/Cairo')::date`;
+
 // ===== الحالة: الجداول والأرقام وآخر طلب - status: tables, row counts and the last request =====
 export async function waStatus(): Promise<WaStatus> {
-  const [counts, meta] = await Promise.all([
+  const [counts, meta, images] = await Promise.all([
     q(`SELECT (SELECT count(*) FROM wa_groups)::int AS groups, (SELECT count(*) FROM wa_messages)::int AS messages,
               (SELECT count(*) FROM wa_media)::int AS media, (SELECT max(received_at) FROM wa_messages) AS latest_received_at,
               (SELECT max(at) FROM wa_messages) AS latest_message_at`),
     q(`SELECT key, value FROM wa_meta WHERE key IN ('last_sync', 'last_ingest')`),
+    q(IMAGES_TODAY_SQL),
   ]);
+  const img = images[0] ?? {};
   const c = counts[0] ?? {};
   const get = (k: string) => meta.find((r) => r.key === k)?.value;
   let lastIngest: WaStatus["lastIngest"] = null;
@@ -403,6 +415,12 @@ export async function waStatus(): Promise<WaStatus> {
     counts: { groups: Number(c.groups ?? 0), messages: Number(c.messages ?? 0), media: Number(c.media ?? 0) },
     latestReceivedAt: iso(c.latest_received_at),
     latestMessageAt: iso(c.latest_message_at),
+    imagesToday: {
+      total: Number(img.total ?? 0),
+      uploaded: Number(img.uploaded ?? 0),
+      mediaIdNotUploaded: Number(img.media_id_not_uploaded ?? 0),
+      noMediaId: Number(img.no_media_id ?? 0),
+    },
     lastSyncAt: get("last_sync") ? String(get("last_sync")) : null,
     lastIngest,
   };
@@ -507,11 +525,11 @@ function toMessage(r: Row): WaMessage {
 export async function listGroups(seen: Record<string, string>): Promise<WaGroup[]> {
   const rows = await q(`
     SELECT g.id, g.name, g.participants, g.picture_media_id,
-           m.at AS last_at, m.sender AS last_sender, m.body AS last_body, m.type AS last_type, m.deleted AS last_deleted,
+           m.at AS last_at, m.sender AS last_sender, m.body AS last_body, m.type AS last_type, m.deleted AS last_deleted, m.media_id AS last_media,
            (SELECT count(*) FROM wa_messages r WHERE r.group_id = g.id AND r.at > now() - interval '30 days' AND NOT r.deleted)::int AS recent
     FROM wa_groups g
     LEFT JOIN LATERAL (
-      SELECT at, sender, body, type, deleted FROM wa_messages WHERE group_id = g.id ORDER BY at DESC, id DESC LIMIT 1
+      SELECT at, sender, body, type, deleted, media_id FROM wa_messages WHERE group_id = g.id ORDER BY at DESC, id DESC LIMIT 1
     ) m ON true`);
   const seenIds = Object.keys(seen).filter((k) => iso(seen[k]));
   const unread = new Map<string, number>();
@@ -536,6 +554,7 @@ export async function listGroups(seen: Record<string, string>): Promise<WaGroup[
       lastSender: r.last_sender ? String(r.last_sender) : null,
       lastText: r.last_deleted ? "🚫 الرسالة اتمسحت" : r.last_body ? String(r.last_body).slice(0, 160) : null,
       lastType: r.last_type ? (String(r.last_type) as WaMessageType) : null,
+      lastMediaId: !r.last_deleted && (r.last_type === "image" || r.last_type === "sticker") && r.last_media ? String(r.last_media) : null,
       unread: unread.get(String(r.id)) ?? 0,
       // متوسط الرسايل في اليوم آخر 30 يوم - average messages per day over the last 30 days
       perDay: Math.round((Number(r.recent ?? 0) / 30) * 10) / 10,

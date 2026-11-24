@@ -8,6 +8,7 @@
 // download, voice notes play. Search by text / sender / day. New messages are polled every chatRefreshSeconds,
 // only while the page is visible
 
+import WaImage from "./WaImage";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowRight, Download, ExternalLink, FileText, Mic, Search, Users, X } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
@@ -35,20 +36,24 @@ function MediaView({ m, onImage, onLoaded }: { m: WaMessage; onImage: (src: stri
   const media = m.media;
   // رسالة نص عمرها ما تتعرض كملف - a text message is never shown as a file
   if (!media || m.type === "text" || m.type === "system") return null;
+  // الصورة: دايما بنحاول (ممكن تكون لسه بتترفع) - an image: always tried (it may still be uploading)
+  if (m.type === "image" || m.type === "sticker") {
+    return (
+      <button type="button" onClick={() => onImage(mediaUrl(media.id))} className="block overflow-hidden rounded-lg" title="افتح الصورة كبيرة">
+        <WaImage
+          mediaId={media.id}
+          onLoad={onLoaded}
+          className={`rounded-lg text-[14px] ${m.type === "sticker" ? "max-h-40" : "max-h-80 max-w-full object-contain"}`}
+        />
+      </button>
+    );
+  }
   // ملف مش متخزن ومعاه كلام: الكلام بس (زي الرسايل القديمة) - a missing file with words: just the words (old messages)
   if (!media.available && m.text) return null;
   if (!media.available) {
     return <p className="rounded-lg bg-black/20 px-3 py-2 text-[14px] text-gray-400">📎 الملف مش متاح (اتمسح بعد {cfg.retentionDays.media} يوم أو لسه ما اترفعش)</p>;
   }
   const src = mediaUrl(media.id);
-  if (m.type === "image" || m.type === "sticker") {
-    return (
-      <button type="button" onClick={() => onImage(src)} className="block overflow-hidden rounded-lg" title="افتح الصورة كبيرة">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" loading="lazy" onLoad={onLoaded} className={m.type === "sticker" ? "max-h-40" : "max-h-80 max-w-full object-contain"} />
-      </button>
-    );
-  }
   if (m.type === "video") return <video src={src} controls preload="metadata" onLoadedMetadata={onLoaded} className="max-h-80 max-w-full rounded-lg bg-black" />;
   if (m.type === "audio" || m.type === "voice") {
     return (
@@ -133,7 +138,7 @@ function Bubble({ m, onImage, onLoaded, showGroup = false }: { m: WaMessage; onI
 }
 
 // الصورة كبيرة - the image full size
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+export function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);

@@ -115,6 +115,7 @@ export const asWaGroup = (g: Pick<WaGroup, "id" | "name" | "pictureId">): WaGrou
   lastSender: null,
   lastText: null,
   lastType: null,
+  lastMediaId: null,
   unread: 0,
   perDay: 0,
 });

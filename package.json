@@ -10,7 +10,8 @@
     "audit:production": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/production-audit.ts",
     "audit:stock": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/stock-reconciliation.ts",
     "audit:issues": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/issue-comparison.ts",
-    "audit:snapshot": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/erp-snapshot.ts"
+    "audit:snapshot": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/erp-snapshot.ts",
+    "audit:wa-images": "node --env-file=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/wa-image-stats.ts"
   },
   "dependencies": {
     "@fontsource-variable/cairo": "^5.3.0",

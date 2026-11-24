@@ -14,6 +14,7 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
+import WaImage from "./WaImage";
 import { sectionOf } from "@/lib/wa-sections";
 import { WaFlash, WaSpotGroup } from "@/lib/wa-alert";
 import {
@@ -108,6 +109,12 @@ function GroupRow({ group, color, pulse, onOpen }: { group: WaGroup; color: stri
           </span>
         </div>
         <div className="flex items-start gap-2 min-w-0">
+          {/* آخر رسالة صورة: صورة صغيرة حقيقية - the last message is an image: a real small thumbnail */}
+          {group.lastMediaId && (
+            <span className="shrink-0 mt-0.5 w-10 h-10 overflow-hidden rounded-md">
+              <WaImage mediaId={group.lastMediaId} compact retrySeconds={0} className="w-10 h-10 rounded-md object-cover text-[16px]" />
+            </span>
+          )}
           <p className="flex-1 min-w-0 text-[13px] min-[1600px]:text-[14px] text-gray-300 line-clamp-2 leading-[1.35]" dir="auto">
             {group.lastSender && <span className="font-bold text-gray-200">{group.lastSender}: </span>}
             {preview}

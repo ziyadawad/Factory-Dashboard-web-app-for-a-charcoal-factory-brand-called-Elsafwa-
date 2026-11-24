@@ -751,3 +751,23 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     animation: none;
   }
 }
+
+/* صورة واتساب لسه بتتحمل - a WhatsApp image still loading */
+.wa-shimmer {
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.05) 30%, rgba(255, 255, 255, 0.16) 50%, rgba(255, 255, 255, 0.05) 70%);
+  background-size: 300% 100%;
+  animation: wa-shimmer 1.3s linear infinite;
+}
+@keyframes wa-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-shimmer {
+    animation: none;
+  }
+}

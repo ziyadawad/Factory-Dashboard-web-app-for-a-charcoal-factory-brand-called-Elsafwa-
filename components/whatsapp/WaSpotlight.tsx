@@ -11,6 +11,8 @@ import { X } from "lucide-react";
 import { WaMessage } from "@/lib/types";
 import { WaSpotGroup, WaSpotShown } from "@/lib/wa-alert";
 import { sectionOf } from "@/lib/wa-sections";
+import WaImage from "./WaImage";
+import { Lightbox } from "./WhatsAppChat";
 import { asWaGroup, cairoTime, fileSize, mediaUrl, senderColor, typePreview } from "./wa-common";
 import { GroupAvatar } from "./WhatsAppPage";
 
@@ -42,19 +44,21 @@ function Voice({ m }: { m: WaMessage }) {
   );
 }
 
-function Images({ list }: { list: WaMessage[] }) {
-  const h = list.length === 1 ? 380 : list.length === 2 ? 300 : 220;
+// الصور كبيرة (لحد ~60% من طول الكارت)، والضغط بيفتحها بحجمها - large images (up to ~60% of the card), click = full size
+type ImageHandlers = { onArrive: () => void; onZoom: (src: string) => void };
+function Images({ list, h }: { list: WaMessage[]; h: ImageHandlers }) {
+  const height = list.length === 1 ? "50vh" : list.length === 2 ? "40vh" : "28vh";
   return (
     <div className="flex flex-wrap gap-3">
       {list.map((m) =>
-        m.media?.available ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+        m.media ? (
+          <WaImage
             key={m.id}
-            src={mediaUrl(m.media.id)}
-            alt=""
-            className="rounded-2xl object-cover border border-white/10 bg-black/30"
-            style={{ height: h, maxWidth: list.length === 1 ? "100%" : `calc(${100 / Math.min(list.length, 3)}% - 8px)` }}
+            mediaId={m.media.id}
+            className="rounded-2xl object-cover border border-white/10 bg-black/30 text-[22px] font-bold"
+            style={{ height, maxWidth: list.length === 1 ? "100%" : `calc(${100 / Math.min(list.length, 3)}% - 8px)` }}
+            onArrive={h.onArrive}
+            onClick={() => h.onZoom(mediaUrl(m.media!.id))}
           />
         ) : (
           <span key={m.id} className="rounded-2xl bg-white/[0.07] px-5 py-3 text-[24px] text-gray-300">
@@ -90,7 +94,7 @@ function TextBubble({ text, size }: { text: string; size: number }) {
 }
 
 // فقاعة: الصور المتتالية بتتجمع في صف واحد - bubbles; consecutive images share one row
-function Bubbles({ messages }: { messages: WaMessage[] }) {
+function Bubbles({ messages, h }: { messages: WaMessage[]; h: ImageHandlers }) {
   const totalText = messages.reduce((n, m) => n + (m.text?.length ?? 0), 0);
   const size = totalText < 120 ? 34 : totalText < 300 ? 28 : totalText < 600 ? 23 : 20;
   const blocks: { key: string; images?: WaMessage[]; m?: WaMessage }[] = [];
@@ -107,7 +111,7 @@ function Bubbles({ messages }: { messages: WaMessage[] }) {
         <div key={b.key} className="rounded-2xl bg-white/[0.04] border border-white/[0.08] px-5 py-3 flex flex-col gap-3">
           {b.images ? (
             <>
-              <Images list={b.images} />
+              <Images list={b.images} h={h} />
               {b.images.map((m) => m.text && <TextBubble key={`t${m.id}`} text={m.text} size={size} />)}
             </>
           ) : (
@@ -152,12 +156,17 @@ export default function WaSpotlight({
   pending,
   onDismiss,
   onOpen,
+  onExtend,
+  onHold,
 }: {
   spot: WaSpotShown | null;
   pending: number;
   onDismiss: () => void;
   onOpen: (group: WaSpotGroup) => void;
+  onExtend: (key: string, ms: number) => void;
+  onHold: (key: string, on: boolean) => void;
 }) {
+  const [zoom, setZoom] = useState<string | null>(null);
   // الكارت بيخرج بحركة قبل ما اللي بعده يدخل - the card animates out before the next one comes in
   const [shown, setShown] = useState<WaSpotShown | null>(spot);
   const [leaving, setLeaving] = useState(false);
@@ -178,11 +187,14 @@ export default function WaSpotlight({
   useEffect(() => {
     if (!spot) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onDismiss();
+      if (e.key === "Escape" && !zoom) onDismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [spot, onDismiss]);
+  }, [spot, onDismiss, zoom]);
+  // الكارت اتغير: الصورة الكبيرة تتقفل - the card changed: the full-size image closes
+  const spotKey = spot?.card.key ?? null;
+  useEffect(() => setZoom(null), [spotKey]);
 
   if (!shown) return null;
   const { card } = shown;
@@ -192,6 +204,14 @@ export default function WaSpotlight({
   const last = card.messages[card.messages.length - 1];
   const total = shown.endsAt - shown.startedAt;
   const remaining = Math.max(0, shown.endsAt - Date.now());
+  const handlers: ImageHandlers = {
+    // صورة وصلت متأخر: 3 ثواني زيادة - a late image: 3 more seconds
+    onArrive: () => onExtend(card.key, 3000),
+    onZoom: (src) => {
+      setZoom(src);
+      onHold(card.key, true);
+    },
+  };
 
   return (
     <div
@@ -249,7 +269,7 @@ export default function WaSpotlight({
 
         {/* الرسايل - the messages */}
         <div className="min-h-0 flex-1 overflow-hidden px-7 py-5">
-          <Bubbles messages={card.messages} />
+          <Bubbles messages={card.messages} h={handlers} />
         </div>
 
         {/* تحت: الطابور والتلميح - bottom: the queue and the hint */}
@@ -266,10 +286,28 @@ export default function WaSpotlight({
           <div
             key={shown.endsAt}
             className="wa-spot-bar h-full origin-right"
-            style={{ background: color, "--from": total > 0 ? remaining / total : 0, animationDuration: `${remaining}ms` } as CSSProperties}
+            style={
+              {
+                background: color,
+                "--from": total > 0 ? remaining / total : 0,
+                animationDuration: `${remaining}ms`,
+                animationPlayState: shown.held ? "paused" : "running",
+              } as CSSProperties
+            }
           />
         </div>
       </div>
+      {zoom && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Lightbox
+            src={zoom}
+            onClose={() => {
+              setZoom(null);
+              onHold(card.key, false);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

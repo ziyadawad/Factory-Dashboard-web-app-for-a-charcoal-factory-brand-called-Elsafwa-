@@ -598,7 +598,14 @@ export default function Dashboard() {
       </main>
 
       {/* رسالة واتساب جديدة: الكارت الكبير - a new WhatsApp message: the big card */}
-      <WaSpotlight spot={waAlert.current} pending={waAlert.pending} onDismiss={waAlert.dismiss} onOpen={openFromSpotlight} />
+      <WaSpotlight
+        spot={waAlert.current}
+        pending={waAlert.pending}
+        onDismiss={waAlert.dismiss}
+        onOpen={openFromSpotlight}
+        onExtend={waAlert.extend}
+        onHold={waAlert.hold}
+      />
       {attendanceSection && <AttendanceDetailsPanel section={attendanceSection} onClose={closeAttendance} />}
       {treasuryOpen && (
         <AccountDetailsPanel accountNumber={TREASURY_ACCOUNT_NUMBER} title="رصيد الخزنة" mode="recent" onClose={closeTreasury} />
