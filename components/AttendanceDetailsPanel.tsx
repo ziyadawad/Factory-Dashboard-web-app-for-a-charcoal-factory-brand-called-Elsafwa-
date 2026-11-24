@@ -24,6 +24,7 @@ import { formatDayName, formatNumber, formatTime12 } from "@/lib/format";
 import { useIdleClose } from "@/lib/useIdleClose";
 import { monthName } from "./SalesCommon";
 import AdvanceDueBox from "./AdvanceDueBox";
+import { exportPdf, exportPng } from "./AttendanceReport";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -1198,6 +1199,78 @@ function MonthlySalaryTable({ people, salaries, onPick }: { people: EmployeeAtte
   );
 }
 
+// زرار "📥 تحميل": تقرير حضور الشهر (PNG / PDF) لموظف، أو PDF لكل موظفين القسم (صفحة لكل موظف)
+// The "📥 تحميل" button: the month's attendance report (PNG / PDF) for one employee, or a PDF of the whole section
+function ReportMenu({
+  people,
+  month,
+  openToday,
+  title,
+  loadSalaries,
+  className,
+}: {
+  people: EmployeeAttendance[];
+  month: string;
+  openToday: string | null;
+  title: string; // اسم الملف: اسم الموظف أو القسم - the file name: the employee or the section
+  loadSalaries: () => Promise<SectionSalaries>;
+  className: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [withSalary, setWithSalary] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const single = people.length === 1;
+  const run = async (kind: "png" | "pdf") => {
+    if (busy) return;
+    setOpen(false);
+    setFailed(false);
+    setBusy(single ? "جاري التجهيز..." : `0/${people.length}`);
+    try {
+      const salaries = withSalary ? await loadSalaries() : null;
+      const items = people.map((person) => ({ person, salary: salaries?.people.find((s) => s.id === person.id) }));
+      const common = { month, openToday, includeSalary: withSalary };
+      if (kind === "png") await exportPng(items[0], common);
+      else await exportPdf(items, common, title, (done) => !single && setBusy(`${done}/${people.length}`));
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const option = "w-full text-start rounded-lg px-3 py-1.5 text-[16px] font-semibold text-gray-100 hover:bg-white/10";
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => !busy && setOpen((v) => !v)}
+        disabled={!!busy}
+        title={failed ? "التحميل فشل — جرب تاني" : undefined}
+        className={`${className} flex items-center gap-2 border border-cardBorder bg-background/70 text-gray-200 hover:border-gray-500`}
+      >
+        {busy ? <Loader2 size={18} className="animate-spin" /> : <span>📥</span>}
+        {busy ?? (failed ? "⚠ جرب تاني" : "تحميل")}
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-2 end-0 w-[250px] rounded-xl border border-cardBorder bg-card p-2 shadow-2xl flex flex-col gap-1">
+          {single && (
+            <button type="button" className={option} onClick={() => run("png")}>
+              🖼️ صورة (PNG)
+            </button>
+          )}
+          <button type="button" className={option} onClick={() => run("pdf")}>
+            📄 ملف (PDF){!single && <span className="text-gray-400 text-[14px]"> — كل الموظفين</span>}
+          </button>
+          <label className="flex items-center gap-2 border-t border-cardBorder mt-1 pt-2 px-3 text-[15px] text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={withSalary} onChange={(e) => setWithSalary(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+            تضمين المرتب
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // تفاصيل موظف - one employee
 function EmployeeView({
   person,
@@ -1207,9 +1280,13 @@ function EmployeeView({
   salary,
   salaryState,
   openToday,
+  month,
+  loadSalaries,
 }: {
   person: EmployeeAttendance;
   openToday: string | null;
+  month: string;
+  loadSalaries: () => Promise<SectionSalaries>;
   onBack: () => void;
   showSalary: boolean;
   onToggleSalary: () => void;
@@ -1272,15 +1349,25 @@ function EmployeeView({
         </div>
         <div className="flex flex-col gap-4">
           <MonthCalendar person={person} openToday={openToday} />
-          <button
-            type="button"
-            onClick={onToggleSalary}
-            className={`self-start rounded-xl border px-4 py-1.5 font-bold text-[17px] ${
-              showSalary ? "border-amber-400/60 bg-amber-400/15 text-amber-300" : "border-cardBorder bg-background/70 text-gray-200 hover:border-gray-500"
-            }`}
-          >
-            💰 المرتب
-          </button>
+          <div className="self-start flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onToggleSalary}
+              className={`rounded-xl border px-4 py-1.5 font-bold text-[17px] ${
+                showSalary ? "border-amber-400/60 bg-amber-400/15 text-amber-300" : "border-cardBorder bg-background/70 text-gray-200 hover:border-gray-500"
+              }`}
+            >
+              💰 المرتب
+            </button>
+            <ReportMenu
+              people={[person]}
+              month={month}
+              openToday={openToday}
+              title={person.name}
+              loadSalaries={loadSalaries}
+              className="rounded-xl px-4 py-1.5 font-bold text-[17px]"
+            />
+          </div>
           {showSalary && <SalaryCard salary={salary} state={salaryState} />}
         </div>
       </div>
@@ -1364,6 +1451,13 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
     };
   }, [showSalary, salaryLoaded, section]);
   const toggleSalary = () => setShowSalary((v) => !v);
+  // للتقرير: المرتبات اللي اتجابت، أو تتجاب دلوقتي من غير ما تتخزن - for the report: the loaded salaries, or fetched now
+  const loadSalaries = async (): Promise<SectionSalaries> => {
+    if (salaryState.data) return salaryState.data;
+    const res = await fetch(`/api/salaries?section=${encodeURIComponent(section)}`, { cache: "no-store", credentials: "same-origin" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
 
   const person = employeeId ? data?.people.find((p) => p.id === employeeId) : undefined;
   const pill = "flex items-center gap-2 rounded-full px-4 font-bold text-[18px] leading-[1.9]";
@@ -1397,6 +1491,16 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
                   >
                     💰 المرتبات
                   </button>
+                )}
+                {!person && data.people.length > 0 && (
+                  <ReportMenu
+                    people={data.people}
+                    month={data.month}
+                    openToday={section === "daily" ? data.today : null}
+                    title={data.section.label}
+                    loadSalaries={loadSalaries}
+                    className={pill}
+                  />
                 )}
                 {/* تصدير الكشوف (بيظهر مع المرتبات بس) - sheet exports (only with the salaries on) */}
                 {/* كشف المرتبات (كل الشهريين) في لوحة "خارج البصمة" بس - the full salary sheet, only in the outside panel */}
@@ -1434,6 +1538,8 @@ export default function AttendanceDetailsPanel({ section, onClose }: { section: 
               salary={salaryState.data?.people.find((p) => p.id === person.id)}
               salaryState={salaryState}
               openToday={section === "daily" ? data.today : null}
+              month={data.month}
+              loadSalaries={loadSalaries}
             />
           ) : showSalary ? (
             <SectionSalaryList data={data} state={salaryState} onPick={setEmployeeId} />
