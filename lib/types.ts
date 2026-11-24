@@ -716,6 +716,7 @@ export type ConfigErpCharity = {
   auto: { treasuryAccounts: string[]; since: string; fundWords: Record<string, string[]> };
   expenseClaimTypes: string[]; // أنواع مصروفات الموظفين اللي بتتحسب صدقة - Expense Claim Types counted as charity
   expenseClaimSince: string; // من التاريخ ده بس في الأرصدة - counted in the balances from this date
+  excludeKeywords: string[]; // مش صدقة للصناديق (بتتشال من الصفحة) - not charity for the funds (removed from the page)
 };
 
 // رقم مخزن: مجموع actual_qty لكل itemCodes في warehouses (فاضية = كل المخازن)

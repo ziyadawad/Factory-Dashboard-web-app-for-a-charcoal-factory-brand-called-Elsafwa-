@@ -47,6 +47,36 @@ export function detectFunds(text: string): string[] {
   return found;
 }
 
+// ===== مش صدقة للصناديق (charity.excludeKeywords) - not charity for the funds =====
+
+// الكلام من غير "ال" / "لل" / "بال" في أول الكلمة ومن غير مسافات - the text without a leading article and without spaces
+const bare = (word: string) => word.replace(/^(?:وال|بال|فال|كال|لل|ال)(?=\S{2,})/, "");
+const squash = (text: string) => fundText(text).split(" ").map(bare).join("");
+
+// كل كلمة استبعاد: الكلمات الطويلة (4 حروف أو أكتر) لازم كلها تكون موجودة - each keyword: its long words must all appear
+const EXCLUDE = (dashboardConfig.erp.charity.excludeKeywords ?? []).map((k) => {
+  const words = fundText(k).split(" ").map(bare).filter(Boolean);
+  const long = words.filter((w) => w.length >= 4);
+  return { keyword: k, parts: long.length ? long : words };
+}).filter((k) => k.parts.length > 0);
+
+// الكلمة اللي خلت الكلام ده مش صدقة (أو null) - the keyword that makes this text not charity (or null)
+export function excludedBy(...texts: unknown[]): string | null {
+  if (EXCLUDE.length === 0) return null;
+  const t = squash(texts.map(plain).join(" "));
+  if (!t) return null;
+  return EXCLUDE.find((k) => k.parts.every((p) => t.includes(p)))?.keyword ?? null;
+}
+
+// السطور اللي اتشالت بتتكتب في اللوج مرة واحدة - excluded rows are logged once each
+const loggedExcluded = new Set<string>();
+function logExcluded(kind: string, id: string, date: string, amount: number, keyword: string, text: string) {
+  const key = `${kind}|${id}`;
+  if (loggedExcluded.has(key)) return;
+  loggedExcluded.add(key);
+  console.log(`[charity] excluded (${keyword}): ${kind} ${id} · ${date} · ${amount} · ${text.slice(0, 120)}`);
+}
+
 // ===== Charity Transaction: الحقول المخصوصة (source_voucher أو custom_source_voucher) =====
 
 type SourceFields = { type: string | null; voucher: string | null };
@@ -102,7 +132,14 @@ export async function loadCharityRaw(order: "asc" | "desc"): Promise<CharityRaw[
     }),
     claimCharity(),
   ]);
-  const records = message.map((r) => ({ ...r, source_voucher_type: r.source_voucher_type ?? null, source_voucher: r.source_voucher ?? null }));
+  const records = message
+    .map((r) => ({ ...r, source_voucher_type: r.source_voucher_type ?? null, source_voucher: r.source_voucher ?? null }))
+    .filter((r) => {
+      // مش صدقة للصناديق (charity.excludeKeywords) - not charity for the funds
+      const keyword = excludedBy(r.details, r.beneficiary);
+      if (keyword) logExcluded("Charity Transaction", String(r.name), String(r.txn_date ?? ""), Number(r.amount) || 0, keyword, plain(r.details) || plain(r.beneficiary));
+      return !keyword;
+    });
   // السكربت عمل سجل للمصروف ده خلاص (نفس المستند والمبلغ) = نفس العملية، مش بنعدها تاني
   // A Server Script already made a record for this claim (same voucher and amount) = the same operation, not added again
   const fromScript = new Set(records.filter((r) => r.source_voucher).map((r) => `${String(r.source_voucher).trim()}|${cents(r.amount)}`));
@@ -180,6 +217,12 @@ export async function claimCharity(): Promise<ClaimCharity[]> {
           };
         })
         .filter((c) => c.amount > 0 && c.date)
+        .filter((c) => {
+          // مش صدقة للصناديق (charity.excludeKeywords) - not charity for the funds
+          const keyword = excludedBy(c.text);
+          if (keyword) logExcluded("Expense Claim", c.id, c.date, c.amount, keyword, c.text);
+          return !keyword;
+        })
         .sort((a, b) => a.date.localeCompare(b.date) || a.claim.localeCompare(b.claim) || a.row - b.row);
       claimCache = { at: Date.now(), value };
       return value;
@@ -384,6 +427,11 @@ export async function treasuryCharity(since: string): Promise<TreasuryCharity[]>
         const amount = Number(r.sanctioned_amount) || Number(r.amount) || 0;
         if (!amount) continue;
         const text = plain(r.description) || plain(doc.remark) || str(r.expense_type);
+        const keyword = excludedBy(r.description, doc.remark);
+        if (keyword) {
+          logExcluded(vt, `${vn} #${str(r.idx)}`, date, amount, keyword, text);
+          continue;
+        }
         out.push(item(vt, vn, date, "out", amount, text, [r.description, r.expense_type, doc.remark].map(plain).join(" ")));
       }
       continue;
@@ -401,6 +449,11 @@ export async function treasuryCharity(since: string): Promise<TreasuryCharity[]>
     } else {
       texts = [doc.custom_remarks ? doc.remarks : "", doc.reference_no, doc.party, doc.party_name, doc.paid_from, doc.paid_to];
       shown = (doc.custom_remarks ? plain(doc.remarks) : "") || plain(doc.party_name) || plain(doc.party);
+    }
+    const keyword = excludedBy(...texts);
+    if (keyword) {
+      logExcluded(vt, vn, date, Math.abs(net), keyword, shown);
+      continue;
     }
     out.push(item(vt, vn, date, net > 0 ? "out" : "in", Math.abs(net), shown, texts.map(plain).join(" ")));
   }

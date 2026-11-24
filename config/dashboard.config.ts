@@ -371,6 +371,16 @@ export const dashboardConfig = {
       // من التاريخ ده بس بيتحسب في الأرصدة: اللي قبله داخل في الرصيد الافتتاحي (1/10/2026)
       // Counted in the balances from this date only: anything earlier is inside the opening balance (1 Oct 2026)
       expenseClaimSince: "2026-10-01",
+      // ===== حاجات مش صدقة للصناديق الأربعة (بتتشال من صفحة الصدقات خالص) =====
+      // أي سجل صدقات / سطر مصروف موظف / مستند خزنة كلامه فيه كلمة من دول مش بيتحسب: لا في الصناديق ولا في الإجماليات
+      // ولا في "⚠ صدقة من غير صندوق". المقارنة بعد توحيد العربي (ة = ه، أ/إ/آ = ا، ى = ي، من غير تشكيل ولا مسافات)
+      // ومن غير "ال" في أول الكلمة، والكلمات القصيرة (3 حروف أو أقل زي "بيت") مش لازم تكون موجودة.
+      // يعني "بيت الصوالحة" بتمسك: بيت الصوالحه / الصوالحة / صوالحه / لبيت صوالحة. ضيف كلمات تانية هنا براحتك
+      // Not charity for the 4 funds (removed from the charity page completely): any Charity Transaction / Expense
+      // Claim row / treasury voucher whose text has one of these is excluded from the funds, the totals and
+      // "صدقة من غير صندوق". Matched after Arabic normalization, without a leading "ال"; short words (3 letters or
+      // fewer, like "بيت") are optional. So "بيت الصوالحة" also catches الصوالحه / صوالحه / لبيت صوالحة
+      excludeKeywords: ["بيت الصوالحة"],
     } as ConfigErpCharity,
 
     // أرصدة المخازن (الصفحة 2) - stock balances (page 2)
