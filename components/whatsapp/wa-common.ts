@@ -152,3 +152,16 @@ export function markSeen(groupId: string): Record<string, string> {
   } catch {}
   return seen;
 }
+
+// علامة كل الجروبات كمقروءة مرة واحدة - mark all groups as read at once
+export function markAllSeen(groupIds: string[]): Record<string, string> {
+  const { seen } = loadSeen();
+  const now = new Date().toISOString();
+  for (const id of groupIds) {
+    seen[id] = now;
+  }
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
+  } catch {}
+  return seen;
+}

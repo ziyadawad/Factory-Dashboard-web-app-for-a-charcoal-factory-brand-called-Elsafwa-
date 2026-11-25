@@ -9,7 +9,7 @@
 // arrives
 
 import { CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Eye, RefreshCw, BookOpen } from "lucide-react";
+import { AlertTriangle, Eye, RefreshCw, BookOpen, CheckCheck } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
@@ -25,6 +25,7 @@ import {
   groupColor,
   loadSeen,
   markSeen,
+  markAllSeen,
   mediaUrl,
   minutesSince,
   shortWhen,
@@ -291,6 +292,13 @@ export default function WhatsAppPage({
     setSeenState((s) => (s ? { ...s, seen: markSeen(g.id) } : s));
     setOpen(g);
   }, []);
+
+  // علامة كل الجروبات كمقروءة - mark all groups as read
+  const markAllAsRead = useCallback(() => {
+    const allGroupIds = groups.map((g) => g.id);
+    setSeenState((s) => (s ? { ...s, seen: markAllSeen(allGroupIds) } : s));
+    mutate();
+  }, [groups, mutate]);
   // كارت الـ spotlight اتضغط: افتح شات الجروب ده - the spotlight card was clicked: open that group's chat
   useEffect(() => {
     if (!openRequest) return;
@@ -330,6 +338,18 @@ export default function WhatsAppPage({
           <BookOpen size={16} />
           ملخص الصباح
         </button>
+        {/* زرار علامة الكل كمقروء - mark all as read button */}
+        {data && groups.some((g) => g.unread > 0) && (
+          <button
+            type="button"
+            onClick={markAllAsRead}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-green-500/60 bg-green-500/10 text-green-400 text-sm font-bold whitespace-nowrap hover:bg-green-500/20 transition-colors"
+            title="علامة كل الجروبات كمقروءة"
+          >
+            <CheckCheck size={16} />
+            علامة الكل كمقروء
+          </button>
+        )}
         {/* آخر طلب من كمبيوتر الـ IT اترفض فيه رسايل: نقول ليه - the last IT request had rejected messages: say why */}
         {data?.status?.lastIngest && data.status.lastIngest.messages.rejected > 0 && (
           <span
