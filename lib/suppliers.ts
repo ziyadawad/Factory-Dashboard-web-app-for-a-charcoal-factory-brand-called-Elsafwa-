@@ -127,15 +127,19 @@ async function loadOverview(): Promise<SuppliersData> {
   // الرصيد وآخر دفعة - balance and the last payment
   const balance = new Map<string, number>();
   const payments = new Map<string, Map<string, { date: string; created: string; amount: number }>>();
+  // خريطة: الاسم الموحد ← الاسم الأصلي من GL - map: normalized name ← original GL name
+  const normalizedPartyMap = new Map<string, string>();
   for (const g of gl) {
     const party = str(g.party);
-    balance.set(party, (balance.get(party) ?? 0) + num(g.credit) - num(g.debit));
+    const normalizedParty = norm(party);
+    normalizedPartyMap.set(normalizedParty, party);
+    balance.set(normalizedParty, (balance.get(normalizedParty) ?? 0) + num(g.credit) - num(g.debit));
     if (num(g.debit) > 0 && str(g.voucher_type) !== "Purchase Invoice") {
-      const byVoucher = payments.get(party) ?? new Map();
+      const byVoucher = payments.get(normalizedParty) ?? new Map();
       const v = byVoucher.get(str(g.voucher_no)) ?? { date: str(g.posting_date), created: str(g.creation), amount: 0 };
       v.amount += num(g.debit);
       byVoucher.set(str(g.voucher_no), v);
-      payments.set(party, byVoucher);
+      payments.set(normalizedParty, byVoucher);
     }
   }
 
@@ -143,16 +147,20 @@ async function loadOverview(): Promise<SuppliersData> {
   let hiddenCount = 0;
   for (const s of suppliers) {
     const name = str(s.name);
+    const normalized = norm(name);
     const group = str(s.supplier_group) || null;
     const sup = supply.get(name);
     const category = categoryOf(name, group, !!sup?.wood);
-    const bal = round(balance.get(name) ?? 0);
+    // البحث عن الرصيد بالاسم الموحد أو بالاسم الأصلي - search balance by normalized name or original name
+    const bal = round(balance.get(normalized) ?? balance.get(name) ?? 0);
     // مستخبي: مش خشب ولا بلاستيك، أو رصيده صفر ومورّدش من activeDays يوم - hidden: other, or zero balance and inactive
     if (!category || (Math.abs(bal) < 0.5 && !(sup && sup.lastDate >= activeFrom))) {
       hiddenCount++;
       continue;
     }
-    const lastPay = Array.from(payments.get(name)?.values() ?? []).sort((a, b) => (b.date + b.created).localeCompare(a.date + a.created))[0];
+    // البحث عن الدفعات بالاسم الموحد أو بالاسم الأصلي - search payments by normalized name or original name
+    const payMap = payments.get(normalized) ?? payments.get(name);
+    const lastPay = Array.from(payMap?.values() ?? []).sort((a, b) => (b.date + b.created).localeCompare(a.date + a.created))[0];
     cards.push({
       name,
       group,
