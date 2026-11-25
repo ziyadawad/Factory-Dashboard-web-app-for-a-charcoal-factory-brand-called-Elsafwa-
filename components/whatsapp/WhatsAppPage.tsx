@@ -9,12 +9,13 @@
 // arrives
 
 import { CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Eye, RefreshCw } from "lucide-react";
+import { AlertTriangle, Eye, RefreshCw, BookOpen } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePolling } from "@/lib/usePolling";
 import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
 import WaImage from "./WaImage";
+import AllMessagesModal from "./AllMessagesModal";
 import { sectionOf } from "@/lib/wa-sections";
 import { WaFlash, WaSpotGroup } from "@/lib/wa-alert";
 import {
@@ -240,11 +241,15 @@ export default function WhatsAppPage({
 }) {
   const [open, setOpen] = useState<WaGroup | null>(null);
   const [seenState, setSeenState] = useState<{ seen: Record<string, string>; baseline: string } | null>(null);
+  const [allMessagesOpen, setAllMessagesOpen] = useState(false);
   useEffect(() => setSeenState(loadSeen()), []);
-  useEffect(() => onOverlayChange(open !== null), [open, onOverlayChange]);
+  useEffect(() => onOverlayChange(open !== null || allMessagesOpen), [open, allMessagesOpen, onOverlayChange]);
   // الصفحة اتقفلت (صفحة تانية) = الشات يتقفل - leaving the page closes the chat
   useEffect(() => {
-    if (!active) setOpen(null);
+    if (!active) {
+      setOpen(null);
+      setAllMessagesOpen(false);
+    }
   }, [active]);
 
   const [ids, setIds] = useState<string[]>([]);
@@ -315,6 +320,16 @@ export default function WhatsAppPage({
             <span className="font-numbers font-bold text-gray-200">{data.status?.counts.messages ?? 0}</span> رسالة محفوظة
           </span>
         )}
+        {/* زرار ملخص الصباح - morning summary button */}
+        <button
+          type="button"
+          onClick={() => setAllMessagesOpen(true)}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-brandOrange/60 bg-brandOrange/10 text-brandOrange text-sm font-bold whitespace-nowrap hover:bg-brandOrange/20 transition-colors"
+          title="عرض جميع الرسائل من كل الجروبات"
+        >
+          <BookOpen size={16} />
+          ملخص الصباح
+        </button>
         {/* آخر طلب من كمبيوتر الـ IT اترفض فيه رسايل: نقول ليه - the last IT request had rejected messages: say why */}
         {data?.status?.lastIngest && data.status.lastIngest.messages.rejected > 0 && (
           <span
@@ -350,6 +365,7 @@ export default function WhatsAppPage({
       )}
 
       {open && <WhatsAppChat group={open} active={active} onClose={closeChat} />}
+      {allMessagesOpen && <AllMessagesModal open={allMessagesOpen} onClose={() => setAllMessagesOpen(false)} />}
     </div>
   );
 }

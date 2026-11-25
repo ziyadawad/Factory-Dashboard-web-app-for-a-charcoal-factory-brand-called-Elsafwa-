@@ -590,6 +590,44 @@ export async function listMessages(groupId: string, cursor: { before?: { at: str
   return { group: groupRows[0] ?? null, messages: rows.slice(0, limit).map(toMessage), hasMore: rows.length > limit };
 }
 
+// قراءة جميع الرسائل من كل الجروبات (لملخص الصباح): رسائل محدودة لكل جروب، مرتبة حسب الوقت
+// Read all messages from all groups (for morning summary): limited messages per group, sorted by time
+export async function listAllMessages(options: { since?: string; limitPerGroup?: number }): Promise<{ groups: { id: string; name: string; pictureId: string | null }[]; messages: WaMessage[] }> {
+  const { since, limitPerGroup = 50 } = options;
+  const hidden = new Set(cfg.hidden);
+  const rows = await q(
+    `SELECT ${MESSAGE_SELECT}, g.name AS group_name, g.picture_media_id AS group_picture
+     FROM wa_messages m JOIN wa_groups g ON g.id = m.group_id LEFT JOIN wa_media md ON md.id = m.media_id
+     WHERE NOT m.deleted AND m.type <> 'system' ${since ? `AND m.at > $1::timestamptz` : ''}
+     ORDER BY m.at DESC, m.id DESC LIMIT 500`,
+    since ? [since] : []
+  );
+  const groups = new Map<string, { id: string; name: string; pictureId: string | null }>();
+  const messagesByGroup = new Map<string, WaMessage[]>();
+  for (const r of rows) {
+    const groupId = String(r.group_id);
+    if (hidden.has(groupId) || hidden.has(String(r.group_name))) continue;
+    if (!groups.has(groupId)) {
+      groups.set(groupId, { id: groupId, name: String(r.group_name || groupId), pictureId: r.group_picture ? String(r.group_picture) : null });
+      messagesByGroup.set(groupId, []);
+    }
+    const groupMessages = messagesByGroup.get(groupId)!;
+    if (groupMessages.length < limitPerGroup) {
+      groupMessages.push(toMessage(r));
+    }
+  }
+  const allMessages: WaMessage[] = [];
+  messagesByGroup.forEach((msgs) => {
+    allMessages.push(...msgs);
+  });
+  // Sort all messages by time descending (newest first)
+  allMessages.sort((a, b) => b.at.localeCompare(a.at));
+  return {
+    groups: Array.from(groups.values()),
+    messages: allMessages,
+  };
+}
+
 // البحث: كلام / اسم الراسل / يوم (بتوقيت القاهرة)، في جروب واحد أو كلهم - search by text / sender / day, one group or all
 export async function search(input: { q: string; sender: string; date: string; groupId: string }): Promise<WaMessage[]> {
   const where: string[] = ["NOT m.deleted"];
