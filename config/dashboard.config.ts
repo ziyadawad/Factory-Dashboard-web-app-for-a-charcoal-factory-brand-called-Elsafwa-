@@ -953,7 +953,16 @@ export const dashboardConfig = {
     repApp: {
       company: "ALSafwa Coal", // الشركة في ERPNext - the ERPNext company
       companyName: "مصنع الصفوة للفحم", // الاسم على الفاتورة المطبوعة - the name on the printed receipt
-      modeOfPayment: "Cash", // طريقة الدفع للمدفوع لو المندوب ملوش خزنة (Mode of Payment) - the fallback Mode of Payment
+      // طريقة الدفع للكاش لو المندوب ملوش خزنة ("Cash" متقفلة في ERPNext، فالخزينة = نفس حساب 1110)
+      // The cash Mode of Payment for a rep without his own cash box ("Cash" is disabled in ERPNext; الخزينة = account 1110)
+      modeOfPayment: "الخزينة",
+      // مجموعات أصناف مش بتظهر في التطبيق: "sacks" = الشكاير (المناديب مش بيبيعوا شكاير). الباقي: packets (باكتات عادي)
+      // و cartons (كامل / كراتين) - item groups hidden in the app: sacks (reps don't sell them); the others: packets, cartons
+      excludeGroups: ["sacks"] as ("packets" | "cartons" | "sacks")[],
+      // طرق الدفع: كاش = خزنة المندوب، فودافون كاش = محافظ الكاش (wallets.accounts اللي kind "cash")، انستاباي = حسابات
+      // البنك (kind "bank"). كل محفظة / حساب بيتربط بالـ Mode of Payment اللي حسابه الافتراضي في الشركة هو نفس الحساب
+      // Payment methods: cash = the rep's cash box, Vodafone Cash = the cash wallets (wallets.accounts kind "cash"),
+      // InstaPay = the bank accounts (kind "bank"); each is linked to the Mode of Payment whose company default account is it
       customerGroup: "", // مجموعة العميل الجديد (فاضي = الافتراضي في Selling Settings) - new customer group (empty = default)
       territory: "", // منطقة العميل الجديد (فاضي = الافتراضي) - new customer territory (empty = default)
       sessionDays: 30, // الدخول بيفضل 30 يوم - the login lasts 30 days

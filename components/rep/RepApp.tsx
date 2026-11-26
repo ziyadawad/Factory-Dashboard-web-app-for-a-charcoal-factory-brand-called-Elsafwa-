@@ -9,7 +9,7 @@ import { LogOut, RefreshCw } from "lucide-react";
 import OperatorShell from "../operator/OperatorShell";
 import { RepOptions, RepReceipt, RepToday } from "@/lib/rep-types";
 import { dropQueued, flushQueue, newUuid, putQueued, QueuedInvoice, queued } from "@/lib/rep-queue";
-import InvoiceForm, { Draft, emptyDraft, totalsOf } from "./InvoiceForm";
+import InvoiceForm, { Draft, emptyDraft, methodText, totalsOf } from "./InvoiceForm";
 import { PrinterSettings, ReceiptSheet } from "./Printing";
 import { money, repFetch, RepFetchError } from "./api";
 
@@ -188,7 +188,9 @@ export default function RepApp() {
       // من غير نت: آخر أصناف وعملاء اتحفظوا - offline: the last saved items and customers
       try {
         const saved = window.localStorage.getItem(OPTIONS_KEY);
-        if (saved) setOptions((cur) => cur ?? (JSON.parse(saved) as RepOptions));
+        const old = saved ? (JSON.parse(saved) as RepOptions) : null;
+        // نسخة قديمة من قبل طرق الدفع متتستخدمش - a copy saved before payment methods existed is ignored
+        if (old?.payTargets) setOptions((cur) => cur ?? old);
       } catch {}
       setOptionsError(e instanceof Error ? e.message : "حصلت مشكلة");
     }
@@ -245,6 +247,9 @@ export default function RepApp() {
       customer: draft.customer.id,
       items: t.lines.map((l) => ({ code: l.code, qty: l.qty })),
       paid: t.paid,
+      payMethod: t.method ?? undefined,
+      payTarget: t.method && t.method !== "cash" ? draft.target : null,
+      payRef: t.method && t.method !== "cash" ? draft.payRef.trim() || null : null,
       discount: t.discount,
       confirmDuplicate,
       createdAt: new Date().toISOString(),
@@ -278,6 +283,7 @@ export default function RepApp() {
           total: t.total,
           paid: t.paid,
           remaining: t.remaining,
+          paymentMethod: methodText(options, t.method, draft.target, draft.payRef),
           previousBalance: typeof balance === "number" ? balance : null,
           newBalance: typeof balance === "number" ? Math.round((balance + t.remaining) * 100) / 100 : null,
           companyName: options.companyName,

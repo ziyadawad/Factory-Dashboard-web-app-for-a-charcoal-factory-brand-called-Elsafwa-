@@ -8,7 +8,9 @@ import { dashboardConfig } from "@/config/dashboard.config";
 import { ErpError, ErpUnavailableError, erpPost, erpPostAs, erpToday, salesErpAuth } from "./erp";
 import { redis, redisSettings } from "./redis";
 import { RepConfig } from "./rep-auth";
-import { RepCustomer, RepInvoiceRequest, RepOptions, RepProduct, RepProductGroup, RepReceipt, RepToday } from "./rep-types";
+import {
+  RepCustomer, RepInvoiceRequest, RepOptions, RepPayMethod, RepPayTarget, RepPayTargets, RepProduct, RepProductGroup, RepReceipt, RepToday,
+} from "./rep-types";
 
 const sales = dashboardConfig.sales;
 const app = sales.repApp;
@@ -59,8 +61,10 @@ export function catalog(): CatalogItem[] {
   const images = new Map(dashboardConfig.data.stock.packaged.map((p) => [p.name, p.image ?? null]));
   const out: CatalogItem[] = [];
   const seen = new Set<string>();
+  // المجموعات المستبعدة (sales.repApp.excludeGroups، زي الشكاير) - excluded groups (e.g. sacks)
+  const excluded = new Set<RepProductGroup>(app.excludeGroups);
   const add = (code: string, name: string, group: RepProductGroup, image: string | null) => {
-    if (!code || seen.has(code)) return;
+    if (!code || seen.has(code) || excluded.has(group)) return;
     seen.add(code);
     out.push({ code, name, group, image });
   };
@@ -148,9 +152,12 @@ async function recentCustomers(rep: RepConfig): Promise<string[]> {
 export async function repOptions(rep: RepConfig): Promise<RepOptions> {
   const items = catalog();
   const codes = items.map((i) => i.code);
-  const [priceMap, stock, all, recent] = await Promise.all([prices(codes), vanStock(rep.warehouse, codes), customers(), recentCustomers(rep).catch(() => [])]);
+  const [priceMap, stock, all, recent, pay] = await Promise.all([
+    prices(codes), vanStock(rep.warehouse, codes), customers(), recentCustomers(rep).catch(() => []), payTargets(rep),
+  ]);
   return {
     rep: { id: rep.id, name: rep.name, van: rep.van, allowDiscount: !!rep.allowDiscount },
+    payTargets: pay,
     today: erpToday(),
     products: items.map((i) => ({ ...i, rate: priceMap.get(i.code)?.rate ?? null, uom: priceMap.get(i.code)?.uom ?? "", stock: Math.max(0, stock.get(i.code) ?? 0) })),
     customers: all,
@@ -190,15 +197,80 @@ export async function createCustomer(nameRaw: unknown, phoneRaw: unknown): Promi
   return created;
 }
 
-// حساب طريقة الدفع في الشركة (Mode of Payment Account) - the Mode of Payment's account in the company
-const modeAccountCache = cached<string | null>(60 * 60_000);
-async function modeAccount(mode: string): Promise<string | null> {
-  return modeAccountCache(mode, async () => {
-    const { message } = await erpPostAs<{ message: { accounts?: { company: string; default_account: string | null }[] } }>(
-      salesErpAuth(), "/api/method/frappe.client.get", { doctype: "Mode of Payment", name: mode }, true
-    );
-    return message.accounts?.find((a) => a.company === app.company)?.default_account ?? null;
+// ===== طرق الدفع - payment methods =====
+// كل Mode of Payment شغال وحسابه الافتراضي في الشركة (كاش 10 دقايق) - every enabled Mode of Payment and its company
+// default account (10 min cache)
+type ModeRow = { name: string; default_account: string | null; company: string | null };
+const modesCache = cached<{ modes: ModeRow[]; accounts: Map<string, string> }>(10 * 60_000);
+async function paymentSetup() {
+  return modesCache("all", async () => {
+    const numbers = dashboardConfig.wallets.accounts.map((a) => a.accountNumber);
+    const [modes, accounts] = await Promise.all([
+      list<ModeRow>({
+        doctype: "Mode of Payment",
+        fields: ["name", "`tabMode of Payment Account`.default_account as default_account", "`tabMode of Payment Account`.company as company"],
+        filters: [["enabled", "=", 1]],
+      }),
+      list<{ name: string; account_number: string }>({
+        doctype: "Account",
+        fields: ["name", "account_number"],
+        filters: [["company", "=", app.company], ["account_number", "in", numbers]],
+      }),
+    ]);
+    return { modes, accounts: new Map(accounts.map((a) => [String(a.account_number), a.name])) };
   });
+}
+
+// المحافظ والحسابات اللي المندوب يقدر يستلم عليها، وكل واحدة ليه لأ لو فيها مشكلة
+// The wallets / accounts a rep can be paid into, each with why not when something is missing
+export async function payTargets(rep: RepConfig): Promise<RepPayTargets> {
+  const { modes, accounts } = await paymentSetup();
+  const enabled = new Set(modes.map((m) => m.name));
+  const accountOf = (mode: string) => modes.find((m) => m.name === mode && m.company === app.company)?.default_account ?? null;
+  const modeFor = (account: string) => modes.find((m) => m.company === app.company && m.default_account === account)?.name ?? null;
+
+  const cashMode = rep.modeOfPayment || app.modeOfPayment;
+  const cashAccount = rep.cashAccount || accountOf(cashMode);
+  const cash: RepPayTarget = {
+    id: "rep",
+    label: cashMode,
+    mode: enabled.has(cashMode) ? cashMode : null,
+    account: cashAccount,
+    problem: !enabled.has(cashMode)
+      ? `طريقة الدفع "${cashMode}" مش موجودة أو متقفلة في ERPNext`
+      : !cashAccount
+        ? `طريقة الدفع "${cashMode}" ملهاش Default Account لشركة ${app.company}`
+        : null,
+  };
+  const wallet = (a: (typeof dashboardConfig.wallets.accounts)[number]): RepPayTarget => {
+    const account = accounts.get(a.accountNumber) ?? null;
+    const mode = account ? modeFor(account) : null;
+    return {
+      id: a.accountNumber,
+      label: a.label,
+      mode,
+      account,
+      problem: !account
+        ? `الحساب ${a.accountNumber} (${a.label}) مش موجود في ERPNext`
+        : !mode
+          ? `مفيش Mode of Payment حسابه الافتراضي "${account}" لشركة ${app.company}`
+          : null,
+    };
+  };
+  const all = dashboardConfig.wallets.accounts;
+  return { cash, vodafone: all.filter((a) => a.kind === "cash").map(wallet), instapay: all.filter((a) => a.kind === "bank").map(wallet) };
+}
+
+const METHOD_LABEL: Record<RepPayMethod, string> = { cash: "كاش", vodafone: "فودافون كاش", instapay: "انستاباي" };
+
+// المحفظة / الحساب اللي اتختار، ولو فيه مشكلة رسالة واضحة باسمه - the chosen target, or a clear error naming it
+async function chosenTarget(rep: RepConfig, methodRaw: unknown, targetRaw: unknown): Promise<{ method: RepPayMethod; target: RepPayTarget }> {
+  const method: RepPayMethod = methodRaw === "vodafone" || methodRaw === "instapay" ? methodRaw : "cash";
+  const targets = await payTargets(rep);
+  const target = method === "cash" ? targets.cash : targets[method].find((t) => t.id === targetRaw);
+  if (!target) throw new RepError(method === "vodafone" ? "اختار محفظة فودافون كاش" : "اختار حساب انستاباي");
+  if (target.problem) throw new RepError(`مينفعش تستلم على "${target.label}": ${target.problem}`, 400, { payProblem: target.problem });
+  return { method, target };
 }
 
 // ===== الفاتورة - the invoice =====
@@ -285,6 +357,11 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
   if (discount >= subtotal) throw new RepError("الخصم أكبر من الفاتورة");
   const total = money(subtotal - discount);
   if (paidWanted > total) throw new RepError("المدفوع أكبر من الإجمالي");
+  // طريقة الدفع قبل الفاتورة: لو المحفظة ملهاش Mode of Payment / حساب، الفاتورة متتعملش خالص (مش تفشل الدفعة بسكات)
+  // The payment target before the invoice: a wallet with no Mode of Payment / account stops the invoice (no silent failure)
+  const pay = paidWanted > 0 ? await chosenTarget(rep, body.payMethod, body.payTarget) : null;
+  const payRef = typeof body.payRef === "string" ? body.payRef.replace(new RegExp("[^\\p{L}\\p{N}\\-/ ]", "gu"), "").trim().slice(0, 40) : "";
+  const methodText = pay ? [pay.method === "cash" ? METHOD_LABEL.cash : `${METHOD_LABEL[pay.method]} — ${pay.target.label}`, payRef && `رقم ${payRef}`].filter(Boolean).join(" · ") : null;
 
   const key = dupKey(rep, customer, items, total);
   if (!body.confirmDuplicate) {
@@ -328,16 +405,15 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
         "/api/method/erpnext.accounts.doctype.payment_entry.payment_entry.get_payment_entry",
         { dt: "Sales Invoice", dn: name, party_amount: paid }
       );
-      // خزنة المندوب (Mode of Payment) وحسابها - the rep's cash box (Mode of Payment) and its account
-      const mode = rep.modeOfPayment || app.modeOfPayment;
-      const account = rep.cashAccount || (await modeAccount(mode).catch(() => null));
-      pe.mode_of_payment = mode;
-      if (account) pe.paid_to = account;
+      // الـ Mode of Payment والحساب اللي اتختاروا: رصيد المحفظة في الداشبورد بيتحرك على طول (GL)
+      // The chosen Mode of Payment and account: the wallet balance on the dashboard moves right away (GL)
+      pe.mode_of_payment = pay!.target.mode;
+      pe.paid_to = pay!.target.account;
       pe.paid_amount = paid;
       pe.received_amount = paid;
-      pe.reference_no = name;
+      pe.reference_no = payRef || name;
       pe.reference_date = erpToday();
-      pe.remarks = `دفعة من تطبيق المناديب — ${rep.name} — ${name}`;
+      pe.remarks = `دفعة من تطبيق المناديب — ${rep.name} — ${name} — ${methodText}`;
       pe.references = ((pe.references as Record<string, unknown>[]) ?? []).map((r) => ({ ...r, allocated_amount: paid }));
       pe.docstatus = 1;
       await erpPostAs(auth, `/api/resource/${encodeURIComponent("Payment Entry")}`, pe);
@@ -365,6 +441,7 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
       total: grand,
       paid: paidDone,
       remaining: money(grand - paidDone),
+      paymentMethod: paidDone > 0 ? methodText : null,
       previousBalance,
       newBalance: money(previousBalance + grand - paidDone),
       companyName: app.companyName,
@@ -381,7 +458,26 @@ export async function invoiceReceipt(rep: RepConfig, name: string): Promise<RepR
   if (!lines.some((l) => l.warehouse === rep.warehouse)) throw new RepError("الفاتورة دي مش من عربيتك", 403);
   const grand = money(num(inv.rounded_total) || num(inv.grand_total));
   const outstanding = money(num(inv.outstanding_amount));
-  const balance = await customerBalance(String(inv.customer)).catch(() => null);
+  const [balance, payments] = await Promise.all([
+    customerBalance(String(inv.customer)).catch(() => null),
+    listAs<{ name: string; mode_of_payment: string | null; paid_to: string | null; reference_no: string | null }>({
+      doctype: "Payment Entry",
+      filters: [["docstatus", "=", 1], ["Payment Entry Reference", "reference_name", "=", name]],
+      fields: ["name", "mode_of_payment", "paid_to", "reference_no"],
+      group_by: "name",
+    }).catch(() => []),
+  ]);
+  // اسم المحفظة زي صفحة المحافظ لو الحساب واحد منها - the wallet label (as on the wallets page) when the account is one
+  const setup = payments.length ? await paymentSetup().catch(() => null) : null;
+  const labelOf = (account: string | null) => {
+    const number = setup && account ? Array.from(setup.accounts).find(([, n]) => n === account)?.[0] : undefined;
+    const w = number ? dashboardConfig.wallets.accounts.find((a) => a.accountNumber === number) : undefined;
+    return w ? `${w.kind === "bank" ? METHOD_LABEL.instapay : METHOD_LABEL.vodafone} — ${w.label}` : null;
+  };
+  const paymentMethod = payments
+    .map((p) => [labelOf(p.paid_to) ?? p.mode_of_payment ?? "", p.reference_no && p.reference_no !== name ? `رقم ${p.reference_no}` : ""].filter(Boolean).join(" · "))
+    .filter(Boolean)
+    .join(" + ");
   return {
     name: String(inv.name),
     temporary: false,
@@ -396,6 +492,7 @@ export async function invoiceReceipt(rep: RepConfig, name: string): Promise<RepR
     total: grand,
     paid: money(grand - outstanding),
     remaining: outstanding,
+    paymentMethod: paymentMethod || null,
     previousBalance: null,
     newBalance: balance,
     balanceNote: "رصيد العميل الحالي",

@@ -340,6 +340,18 @@ export async function renderReceipt(r: RepReceipt, paper: PaperWidth): Promise<H
   }
   row("الإجمالي", `${nf(r.total)} ج.م`, 24, 800);
   row("المدفوع", nf(r.paid), 20);
+  // طريقة الدفع (+ المحفظة / الحساب ورقم العملية) - the payment method (+ wallet / account and the transaction number)
+  if (r.paymentMethod) {
+    font(17);
+    c.textAlign = "right";
+    c.fillText(r.paymentMethod, W - M, y, W - 2 * M);
+    y += Math.round(17 * s * 1.5);
+  } else if (r.paid <= 0) {
+    font(17);
+    c.textAlign = "right";
+    c.fillText("آجل", W - M, y);
+    y += Math.round(17 * s * 1.5);
+  }
   row("الباقي", nf(r.remaining), 20, 800);
   if (r.previousBalance !== null || r.newBalance !== null) {
     line(1);
@@ -487,9 +499,10 @@ export function testReceipt(repName: string, van: string, companyName: string, t
     name: "TEST-0001", temporary: false, date, time, repName, van, customerName: "طباعة تجربة",
     items: [
       { name: "ربع كيلو", qty: 10, rate: 25, amount: 250 },
-      { name: "شكاير برتقال ناعم", qty: 2, rate: 310.5, amount: 621 },
+      { name: "كرتونة 2 كيلو", qty: 2, rate: 310.5, amount: 621 },
     ],
-    subtotal: 871, discount: 0, total: 871, paid: 500, remaining: 371, previousBalance: 1000, newBalance: 1371,
+    subtotal: 871, discount: 0, total: 871, paid: 500, remaining: 371, paymentMethod: "فودافون كاش — كاش كريم عوض · رقم 123456",
+    previousBalance: 1000, newBalance: 1371,
     companyName, thanks,
   };
 }

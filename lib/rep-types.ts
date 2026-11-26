@@ -25,8 +25,28 @@ export interface RepInfo {
   allowDiscount: boolean;
 }
 
+// طريقة دفع: كاش (خزنة المندوب) / فودافون كاش (محفظة) / انستاباي (حساب) - a payment method
+export type RepPayMethod = "cash" | "vodafone" | "instapay";
+
+// محفظة أو حساب ممكن الفلوس تدخله. problem = ليه مينفعش (مفيش Mode of Payment أو حساب افتراضي)
+// A wallet / account the money can go to. problem = why it can't be used (no Mode of Payment or default account)
+export interface RepPayTarget {
+  id: string; // رقم الحساب (أو "rep" لخزنة المندوب) - the account number (or "rep" for the rep's cash box)
+  label: string; // "كاش كريم عوض" / "انستاباي الحاج أشرف — الأساسية"
+  mode: string | null; // Mode of Payment
+  account: string | null; // الحساب الافتراضي للشركة - the company default account
+  problem: string | null;
+}
+
+export interface RepPayTargets {
+  cash: RepPayTarget;
+  vodafone: RepPayTarget[];
+  instapay: RepPayTarget[];
+}
+
 export interface RepOptions {
   rep: RepInfo;
+  payTargets: RepPayTargets;
   today: string;
   products: RepProduct[];
   customers: RepCustomer[];
@@ -42,6 +62,9 @@ export interface RepInvoiceRequest {
   customer: string;
   items: { code: string; qty: number }[];
   paid: number;
+  payMethod?: RepPayMethod; // لو paid > 0 - when paid > 0
+  payTarget?: string | null; // id المحفظة / الحساب (فودافون كاش / انستاباي) - the wallet / account id
+  payRef?: string | null; // رقم العملية (اختياري) - the transaction number (optional)
   discount: number;
   confirmDuplicate?: boolean;
   createdAt: string; // ISO، وقت ما اتعملت على الموبايل - when it was made on the phone
@@ -69,6 +92,7 @@ export interface RepReceipt {
   total: number;
   paid: number;
   remaining: number;
+  paymentMethod?: string | null; // "فودافون كاش — كاش كريم عوض · رقم 123" على الفاتورة - printed on the receipt
   previousBalance: number | null; // رصيد العميل قبل الفاتورة - before this invoice
   newBalance: number | null; // بعدها - after it
   balanceNote?: string; // "رصيد العميل الحالي" وقت إعادة الطباعة - on a reprint

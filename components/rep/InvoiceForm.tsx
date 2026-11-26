@@ -8,13 +8,36 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import Keypad from "../operator/Keypad";
-import { RepCustomer, RepOptions, RepProduct, RepProductGroup } from "@/lib/rep-types";
+import { RepCustomer, RepOptions, RepPayMethod, RepPayTarget, RepProduct, RepProductGroup } from "@/lib/rep-types";
 import { money, repFetch, RepFetchError } from "./api";
 
 export type Cart = Record<string, number>; // item code → qty
-export type PayMode = "cash" | "credit" | "part";
-export type Draft = { customer: RepCustomer | null; cart: Cart; pay: PayMode; partPaid: string; discount: string };
-export const emptyDraft = (): Draft => ({ customer: null, cart: {}, pay: "cash", partPaid: "", discount: "" });
+// الدفع: كاش / فودافون كاش / انستاباي (كله) / آجل / جزء (مبلغ + طريقة، والباقي آجل)
+// Payment: cash / Vodafone Cash / InstaPay (all of it) / credit / part (an amount + a method; the rest is credit)
+export type PayMode = RepPayMethod | "credit" | "part";
+export type Draft = {
+  customer: RepCustomer | null;
+  cart: Cart;
+  pay: PayMode;
+  partMethod: RepPayMethod; // طريقة الجزء المدفوع - how the part is paid
+  target: string | null; // المحفظة / الحساب (فودافون كاش / انستاباي) - the wallet / account
+  payRef: string; // رقم العملية (اختياري) - the transaction number (optional)
+  partPaid: string;
+  discount: string;
+};
+export const emptyDraft = (): Draft => ({ customer: null, cart: {}, pay: "cash", partMethod: "cash", target: null, payRef: "", partPaid: "", discount: "" });
+
+export const METHOD_LABEL: Record<RepPayMethod, string> = { cash: "كاش", vodafone: "فودافون كاش", instapay: "انستاباي" };
+// المحافظ / الحسابات بتاعة الطريقة دي - the wallets / accounts for a method
+export const targetsFor = (options: RepOptions, method: RepPayMethod): RepPayTarget[] =>
+  method === "cash" ? [options.payTargets.cash] : options.payTargets[method];
+
+// "فودافون كاش — كاش كريم عوض · رقم 123" للفاتورة - for the receipt
+export function methodText(options: RepOptions, method: RepPayMethod | null, target: string | null, ref: string): string | null {
+  if (!method) return null;
+  const t = method === "cash" ? null : targetsFor(options, method).find((x) => x.id === target);
+  return [method === "cash" ? METHOD_LABEL.cash : `${METHOD_LABEL[method]}${t ? ` — ${t.label}` : ""}`, ref.trim() && `رقم ${ref.trim()}`].filter(Boolean).join(" · ");
+}
 
 const GROUPS: { id: RepProductGroup; label: string }[] = [
   { id: "packets", label: "باكتات عادي" },
@@ -35,8 +58,10 @@ export function totalsOf(draft: Draft, products: RepProduct[]) {
   const subtotal = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
   const discount = Math.min(subtotal, Math.max(0, Number(draft.discount) || 0));
   const total = Math.round((subtotal - discount) * 100) / 100;
-  const paid = draft.pay === "cash" ? total : draft.pay === "credit" ? 0 : Math.min(total, Math.max(0, Number(draft.partPaid) || 0));
-  return { lines, subtotal, discount, total, paid, remaining: Math.round((total - paid) * 100) / 100 };
+  const paid = draft.pay === "credit" ? 0 : draft.pay === "part" ? Math.min(total, Math.max(0, Number(draft.partPaid) || 0)) : total;
+  // الطريقة اللي الفلوس دخلت بيها (null = آجل كله) - how the money came in (null = all on credit)
+  const method: RepPayMethod | null = paid <= 0 ? null : draft.pay === "part" ? draft.partMethod : (draft.pay as RepPayMethod);
+  return { lines, subtotal, discount, total, paid, method, remaining: Math.round((total - paid) * 100) / 100 };
 }
 
 function CustomerPicker({ options, onPick, onClose }: { options: RepOptions; onPick: (c: RepCustomer) => void; onClose: () => void }) {
@@ -192,6 +217,8 @@ export default function InvoiceForm({
   const [pad, setPad] = useState<"part" | "discount" | null>(null);
   const t = totalsOf(draft, options.products);
   const shown = options.products.filter((p) => p.group === group);
+  // المجموعات اللي فيها أصناف بس (الشكاير مستبعدة من الكونفج) - only groups that have items (sacks are excluded in config)
+  const groups = GROUPS.filter((g) => options.products.some((p) => p.group === g.id));
   const counts = (g: RepProductGroup) => options.products.filter((p) => p.group === g && (draft.cart[p.code] ?? 0) > 0).length;
   useEffect(() => {
     // مجموعة فاضية: روح لأول واحدة فيها أصناف - an empty group: jump to the first one with items
@@ -199,7 +226,11 @@ export default function InvoiceForm({
   }, [options.products, group]);
 
   const card = "rounded-2xl border border-cardBorder bg-card/80 p-4";
-  const canSave = !!draft.customer && t.lines.length > 0 && !saving && (draft.pay !== "part" || t.paid > 0);
+  // الطريقة لازم تبقى جاهزة: كاش = خزنة المندوب سليمة، غير كده محفظة / حساب متختار ومن غير مشكلة
+  // The method must be ready: cash = the rep's cash box is fine; otherwise a chosen wallet / account with no problem
+  const target = t.method && t.method !== "cash" ? targetsFor(options, t.method).find((w) => w.id === draft.target) : null;
+  const payReady = !t.method || (t.method === "cash" ? !options.payTargets.cash.problem : !!target && !target.problem);
+  const canSave = !!draft.customer && t.lines.length > 0 && !saving && (draft.pay !== "part" || t.paid > 0) && payReady;
 
   return (
     <div className="flex flex-col gap-4 pb-28">
@@ -219,8 +250,8 @@ export default function InvoiceForm({
       </button>
 
       {/* الأصناف - the items */}
-      <div className="grid grid-cols-3 gap-2">
-        {GROUPS.map((g) => (
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, groups.length)}, minmax(0, 1fr))` }}>
+        {groups.map((g) => (
           <button
             key={g.id}
             type="button"
@@ -242,34 +273,84 @@ export default function InvoiceForm({
       {/* الدفع - payment */}
       <div className={`${card} flex flex-col gap-3`}>
         <p className="text-[17px] font-extrabold text-white">الدفع</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-6 gap-2">
           {(
             [
-              ["cash", "💵 كاش"],
-              ["credit", "📒 آجل"],
-              ["part", "✂️ جزء"],
-            ] as [PayMode, string][]
-          ).map(([id, label]) => (
+              ["cash", "💵 كاش", "col-span-2"],
+              ["vodafone", "📱 فودافون كاش", "col-span-2"],
+              ["instapay", "🏦 انستاباي", "col-span-2"],
+              ["credit", "📒 آجل", "col-span-3"],
+              ["part", "✂️ جزء", "col-span-3"],
+            ] as [PayMode, string, string][]
+          ).map(([id, label, span]) => (
             <button
               key={id}
               type="button"
               onClick={() => {
-                setDraft({ ...draft, pay: id });
+                // المحفظة بتتصفر لما الطريقة تتغير - the wallet resets when the method changes
+                const method = id === "part" ? draft.partMethod : id;
+                const keep = method !== "credit" && draft.pay !== "credit" && (draft.pay === "part" ? draft.partMethod : draft.pay) === method;
+                setDraft({ ...draft, pay: id, target: keep ? draft.target : null, payRef: keep ? draft.payRef : "" });
                 setPad(id === "part" ? "part" : null);
               }}
-              className={`h-14 rounded-xl border text-[18px] font-extrabold ${draft.pay === id ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-200"}`}
+              className={`${span} h-14 rounded-xl border text-[16px] font-extrabold ${draft.pay === id ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-200"}`}
             >
               {label}
             </button>
           ))}
         </div>
         {draft.pay === "part" && (
-          <button type="button" onClick={() => setPad(pad === "part" ? null : "part")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
-            <span className="text-[16px] text-gray-300">المدفوع</span>
-            <span className="font-numbers text-[24px] font-extrabold text-white">{draft.partPaid || "0"}</span>
-          </button>
+          <>
+            <button type="button" onClick={() => setPad(pad === "part" ? null : "part")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
+              <span className="text-[16px] text-gray-300">المدفوع (والباقي آجل)</span>
+              <span className="font-numbers text-[24px] font-extrabold text-white">{draft.partPaid || "0"}</span>
+            </button>
+            {pad === "part" && <Keypad compact value={draft.partPaid} maxLength={7} onChange={(v) => setDraft({ ...draft, partPaid: v })} />}
+            {/* الجزء اتدفع إزاي - how the part was paid */}
+            <div className="grid grid-cols-3 gap-2">
+              {(["cash", "vodafone", "instapay"] as RepPayMethod[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, partMethod: m, target: m === draft.partMethod ? draft.target : null, payRef: m === draft.partMethod ? draft.payRef : "" })}
+                  className={`h-12 rounded-xl border text-[15px] font-bold ${draft.partMethod === m ? "border-brandOrange bg-brandOrange/15 text-brandOrange" : "border-cardBorder bg-background/60 text-gray-300"}`}
+                >
+                  {METHOD_LABEL[m]}
+                </button>
+              ))}
+            </div>
+          </>
         )}
-        {pad === "part" && draft.pay === "part" && <Keypad compact value={draft.partPaid} maxLength={7} onChange={(v) => setDraft({ ...draft, partPaid: v })} />}
+        {/* فودافون كاش / انستاباي: أنهي محفظة أو حساب + رقم العملية - which wallet / account + the transaction number */}
+        {t.method && t.method !== "cash" && (
+          <>
+            <p className="text-[15px] font-bold text-gray-300">{t.method === "vodafone" ? "أنهي محفظة؟" : "أنهي حساب؟"}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {targetsFor(options, t.method).map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  disabled={!!w.problem}
+                  onClick={() => setDraft({ ...draft, target: w.id })}
+                  title={w.problem ?? w.mode ?? ""}
+                  className={`min-h-12 rounded-xl border px-2 py-2 text-[15px] font-bold leading-tight disabled:opacity-40 ${draft.target === w.id ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-200"}`}
+                >
+                  {w.label}
+                  {w.problem && <span className="block text-[11px] font-normal text-statusRed">{w.problem}</span>}
+                </button>
+              ))}
+            </div>
+            <input
+              value={draft.payRef}
+              onChange={(e) => setDraft({ ...draft, payRef: e.target.value.slice(0, 40) })}
+              placeholder="رقم العملية (اختياري)"
+              inputMode="numeric"
+              dir="ltr"
+              className="h-12 rounded-xl border border-cardBorder bg-background/60 px-4 text-[17px] font-numbers text-white outline-none focus:border-brandOrange"
+            />
+          </>
+        )}
+        {t.method === "cash" && options.payTargets.cash.problem && <p className="text-[14px] font-bold text-statusRed">⚠ {options.payTargets.cash.problem}</p>}
         {options.rep.allowDiscount && (
           <>
             <button type="button" onClick={() => setPad(pad === "discount" ? null : "discount")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
@@ -305,7 +386,7 @@ export default function InvoiceForm({
           <span className="font-numbers">{money(t.total)}</span>
         </p>
         <p className="flex justify-between text-statusGreen">
-          <span>المدفوع</span>
+          <span>المدفوع{t.method && <span className="text-[14px] text-gray-400"> · {methodText(options, t.method, draft.target, "")}</span>}</span>
           <span className="font-numbers">{money(t.paid)}</span>
         </p>
         <p className="flex justify-between text-statusAmber font-bold">
