@@ -306,6 +306,8 @@ export interface CharityDetailOp {
   source: CharitySource | null; // "🔗 من الخزنة" - recorded automatically from this treasury voucher
   // "⚠ متسجلة مرتين": العملية التانية، وuncounted = اليدوية اللي مش محسوبة - the other copy; uncounted = the manual one
   duplicate: { id: string; url: string; uncounted: boolean } | null;
+  // "🔗 مربوطة بمصروف HR-EXP-…": سطر مصروف موظف لنفس العملية (مش غلط، بيتحسب مرة واحدة) - the matching Expense Claim (normal flow)
+  linkedClaim: { name: string; url: string } | null;
 }
 
 // تفاصيل صندوق صدقات (أو كل الصناديق لو fund = null) لشهر - one fund's (or all funds') details for a month
@@ -412,16 +414,17 @@ export interface CharitySource {
   label?: string; // "مصروف موظف HR-EXP-… · اسم الموظف" لسطر صدقات في Expense Claim - for an Expense Claim row
 }
 
-// عملية صدقات متسجلة مرتين: يدوي + تلقائي (بيتحسبوا مرة واحدة: التلقائي) - recorded twice (counted once: the automatic)
+// عملية صدقات متسجلة مرتين (نفس المصدر): auto = اللي بتتحسب، manual = النسخة الزيادة
+// Recorded twice (the same source): auto = the copy that counts, manual = the extra copy
 export interface CharityDuplicatePair {
   fund: string;
   type: "out" | "in";
   amount: number;
   manual: { id: string; date: string; url: string };
-  auto: { id: string; date: string; url: string; source: CharitySource };
-  // claim = سطر مصروف موظف (auto) + سجل صدقات (manual، يدوي أو تلقائي): اللي بيتحسب سجل الصدقات
-  // claim = an Expense Claim row (auto) + a Charity Transaction (manual: hand-made or automatic); the record counts
-  kind?: "claim";
+  auto: { id: string; date: string; url: string; source: CharitySource | null };
+  // undefined = يدوي + تلقائي، records = سجلين بنفس المستند (أو الاتنين يدوي)، claims = سطرين مصروف موظف
+  // undefined = a manual + an automatic record, records = two records (same voucher / both manual), claims = two claim rows
+  kind?: "records" | "claims";
 }
 
 // صدقة على الخزنة من غير صندوق (أو أكتر من صندوق): مش بتتسجل لوحدها - treasury charity without a (single) fund

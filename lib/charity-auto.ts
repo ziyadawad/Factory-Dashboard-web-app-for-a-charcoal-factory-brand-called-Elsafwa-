@@ -279,37 +279,55 @@ function guessDoctype(name: string) {
   return name.startsWith("ACC-PAY") ? "Payment Entry" : name.startsWith("HR-EXP") ? "Expense Claim" : "Journal Entry";
 }
 
-// ===== متسجلة مرتين: يدوي (من غير مستند) = تلقائي في الصندوق والنوع والمبلغ والتاريخ ±1 يوم =====
-// Recorded twice: a manual row matching an automatic one (fund, type, amount, date ±1 day). Counted once (the automatic)
+// ===== متسجلة مرتين = نفس المصدر اتسجل مرتين (الصندوق والنوع والمبلغ والتاريخ ±1 يوم) =====
+// Recorded twice = the SAME source entered twice (fund, type, amount, date ±1 day), counted once:
+//  - يدوي + تلقائي (سجلين Charity Transaction): بتتحسب التلقائية - a manual + an automatic record: the automatic counts
+//  - سجلين Charity Transaction بنفس المستند أو الاتنين يدوي: بيتحسب الأقدم - two records with the same voucher (or both manual)
+//  - سطرين مصروف موظف: بيتحسب الأول - two Expense Claim rows: the first counts
+// سطر مصروف موظف = سجل صدقات (أي نوع) مش غلط: ده المسار العادي (الفلوس طلعت من الخزنة كمصروف واتسجلت في الصندوق)،
+// بيتحسب السجل بس والسطر بيستخبى، والسجل عليه "🔗 مربوطة بمصروف ..."
+// An Expense Claim row matching a Charity Transaction is NOT an error — it's the normal flow (the money left the treasury
+// as an Expense Claim and was also recorded in the fund): the record counts, the claim row is hidden, the record gets a link
 
 const TYPE_OF: Record<string, "out" | "in"> = { صرف: "out", إيداع: "in" };
 const dayNum = (date: string) => Math.round(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 86_400_000);
 
-// + سطر مصروف موظف = أي سجل صدقات لسه بيتحسب (يدوي أو تلقائي) بنفس الصندوق والمبلغ والتاريخ ±1 يوم: بيتحسب السجل
-// + An Expense Claim row matching any still-counted Charity Transaction (fund, amount, date ±1 day): the record counts
-
 export type CharityPartner = { id: string; url: string };
+export type CharityClaimLink = { name: string; url: string };
 
-export function charityDuplicates(rows: CharityRaw[]): { pairs: CharityDuplicatePair[]; skip: Set<string>; partner: Map<string, CharityPartner> } {
+export function charityDuplicates(rows: CharityRaw[]): {
+  pairs: CharityDuplicatePair[];
+  skip: Set<string>; // مش بتتحسب (المكررة + سطور المصروفات المربوطة) - not counted (the extra copy + linked claim rows)
+  hidden: Set<string>; // سطور مصروفات مربوطة بسجل: مش بتظهر - claim rows linked to a record: not listed
+  partner: Map<string, CharityPartner>;
+  linked: Map<string, CharityClaimLink>; // سجل الصدقات ← المصروف المربوط بيه - record id → its linked Expense Claim
+} {
   const typeOf = (r: CharityRaw) => TYPE_OF[(r.txn_type ?? "").trim()];
   const fundOf = (r: CharityRaw) => (r.fund ?? "").trim();
-  const byDate = (a: CharityRaw, b: CharityRaw) => String(a.txn_date).localeCompare(String(b.txn_date));
-  const records = rows.filter((r) => !r.claim && typeOf(r));
-  const autos = records.filter((r) => sourceOf(r)).sort(byDate);
+  const idOf = (r: CharityRaw) => String(r.name);
+  const byDate = (a: CharityRaw, b: CharityRaw) =>
+    String(a.txn_date).localeCompare(String(b.txn_date)) || String(a.creation).localeCompare(String(b.creation));
+  const records = rows.filter((r) => !r.claim && typeOf(r)).sort(byDate);
+  const autos = records.filter((r) => sourceOf(r));
   const manuals = records.filter((r) => !sourceOf(r));
   const claims = rows.filter((r) => r.claim && typeOf(r)).sort(byDate);
   const used = new Set<string>();
   const skip = new Set<string>();
+  const hidden = new Set<string>();
   const pairs: CharityDuplicatePair[] = [];
-  const info = (r: CharityRaw) => ({ id: String(r.name), date: String(r.txn_date).slice(0, 10), url: charityRowUrl(r) });
+  const linked = new Map<string, CharityClaimLink>();
+  const info = (r: CharityRaw) => ({ id: idOf(r), date: String(r.txn_date).slice(0, 10), url: charityRowUrl(r) });
+  const same = (a: CharityRaw, b: CharityRaw) =>
+    fundOf(a) === fundOf(b) && typeOf(a) === typeOf(b) && cents(a.amount) === cents(b.amount);
+  const gapOf = (a: CharityRaw, b: CharityRaw) => Math.abs(dayNum(String(a.txn_date)) - dayNum(String(b.txn_date)));
 
-  // أقرب واحد مش مستخدم (±1 يوم) بنفس الصندوق والنوع والمبلغ - the nearest unused match within ±1 day
-  const nearest = (target: CharityRaw, pool: CharityRaw[]) => {
+  // أقرب واحد (±1 يوم) بنفس الصندوق والنوع والمبلغ ومش مستخدم - the nearest free match within ±1 day
+  const nearest = (target: CharityRaw, pool: CharityRaw[], free: (m: CharityRaw) => boolean) => {
     let best: CharityRaw | null = null;
     let bestGap = 2;
     for (const m of pool) {
-      if (used.has(String(m.name)) || fundOf(m) !== fundOf(target) || typeOf(m) !== typeOf(target) || cents(m.amount) !== cents(target.amount)) continue;
-      const gap = Math.abs(dayNum(String(m.txn_date)) - dayNum(String(target.txn_date)));
+      if (m === target || !free(m) || !same(m, target)) continue;
+      const gap = gapOf(m, target);
       if (gap <= 1 && gap < bestGap) {
         best = m;
         bestGap = gap;
@@ -317,32 +335,51 @@ export function charityDuplicates(rows: CharityRaw[]): { pairs: CharityDuplicate
     }
     return best;
   };
-
-  for (const auto of autos) {
-    const best = nearest(auto, manuals);
-    if (!best) continue;
-    used.add(String(best.name));
-    skip.add(String(best.name));
-    pairs.push({ fund: fundOf(auto), type: typeOf(auto), amount: cents(auto.amount) / 100, manual: info(best), auto: { ...info(auto), source: sourceOf(auto)! } });
-  }
-  // سطور المصروفات قصاد السجلات اللي لسه بتتحسب - claim rows against the records still counted
-  const counted = records.filter((r) => !skip.has(String(r.name)));
-  for (const claim of claims) {
-    const best = nearest(claim, counted);
-    if (!best) continue;
-    used.add(String(best.name));
-    skip.add(String(claim.name));
+  const unused = (m: CharityRaw) => !used.has(idOf(m));
+  const pair = (kept: CharityRaw, extra: CharityRaw, kind?: CharityDuplicatePair["kind"]) => {
+    used.add(idOf(kept));
+    used.add(idOf(extra));
+    skip.add(idOf(extra));
     pairs.push({
-      fund: fundOf(claim), type: typeOf(claim), amount: cents(claim.amount) / 100, kind: "claim",
-      manual: info(best), auto: { ...info(claim), source: sourceOf(claim)! },
+      fund: fundOf(kept), type: typeOf(kept), amount: cents(kept.amount) / 100, kind,
+      manual: info(extra), auto: { ...info(kept), source: sourceOf(kept) },
     });
+  };
+
+  // 1) يدوي + تلقائي - a manual + an automatic record
+  for (const auto of autos) {
+    const best = nearest(auto, manuals, unused);
+    if (best) pair(auto, best);
+  }
+  // 2) سجلين بنفس المستند، أو الاتنين يدوي: الأقدم بيتحسب - two records with the same voucher (or both manual): the older counts
+  const voucher = (r: CharityRaw) => sourceOf(r)?.name ?? "";
+  records.forEach((r, i) => {
+    if (used.has(idOf(r))) return;
+    const best = nearest(r, records.slice(0, i), (m) => unused(m) && voucher(m) === voucher(r));
+    if (best) pair(best, r, "records");
+  });
+  // 3) سطرين مصروف موظف: الأول بيتحسب - two Expense Claim rows: the first counts
+  claims.forEach((c, i) => {
+    if (used.has(idOf(c))) return;
+    const best = nearest(c, claims.slice(0, i), unused);
+    if (best) pair(best, c, "claims");
+  });
+  // 4) سطر مصروف موظف + سجل صدقات = نفس العملية (مش غلط): السجل بيتحسب، والسطر بيستخبى
+  // An Expense Claim row + a record = one operation (not an error): the record counts, the row is hidden
+  for (const c of claims) {
+    if (skip.has(idOf(c))) continue;
+    const best = nearest(c, records, (r) => !skip.has(idOf(r)) && !linked.has(idOf(r)));
+    if (!best || !c.claim) continue;
+    skip.add(idOf(c));
+    hidden.add(idOf(c));
+    linked.set(idOf(best), { name: c.claim.claim, url: erpDocUrl("Expense Claim", c.claim.claim) });
   }
   const partner = new Map<string, CharityPartner>();
   for (const p of pairs) {
     partner.set(p.manual.id, { id: p.auto.id, url: p.auto.url });
     partner.set(p.auto.id, { id: p.manual.id, url: p.manual.url });
   }
-  return { pairs, skip, partner };
+  return { pairs, skip, hidden, partner, linked };
 }
 
 // ===== صدقات الخزنة من المستندات (نفس شغل السكربتات) - treasury charity from the vouchers (same as the scripts) =====

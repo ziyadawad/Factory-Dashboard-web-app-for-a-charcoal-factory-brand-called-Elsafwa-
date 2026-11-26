@@ -118,6 +118,19 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
                 🔗 {op.source.label ? "مصروف موظف" : "من الخزنة"} <span dir="ltr" className="font-numbers">{op.source.name}</span>
               </span>
             )}
+            {/* مربوطة بمصروف موظف (المسار العادي، مش غلط) - linked to an Expense Claim (the normal flow, not an error) */}
+            {op.linkedClaim && (
+              <a
+                href={op.linkedClaim.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 rounded-full bg-white/10 text-gray-300 font-semibold px-2 text-[0.85em] leading-[1.8] hover:bg-white/15 hover:text-white"
+                title="نفس العملية متسجلة كمصروف موظف، ومحسوبة مرة واحدة"
+              >
+                🔗 مربوطة بمصروف <span dir="ltr" className="font-numbers">{op.linkedClaim.name}</span>
+              </a>
+            )}
             <span className={`min-w-0 truncate ${op.duplicate?.uncounted ? "line-through decoration-statusRed/70" : ""}`} title={toEnglishDigits(text)}>
               {text ? toEnglishDigits(text) : <span className="text-gray-600">—</span>}
             </span>
@@ -158,6 +171,15 @@ function OpRow({ op, open, onToggle, showFund, columns }: { op: CharityDetailOp;
                       <span dir="ltr" className="font-numbers">{op.source.name}</span>
                     </a>{" "}
                     <span className="text-gray-500">({op.source.label ? op.source.label.replace(`مصروف موظف ${op.source.name} · `, "") : op.source.type})</span>
+                  </p>
+                )}
+                {op.linkedClaim && (
+                  <p className="text-gray-300">
+                    🔗 مربوطة بمصروف موظف{" "}
+                    <a href={op.linkedClaim.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold underline underline-offset-2">
+                      <span dir="ltr" className="font-numbers">{op.linkedClaim.name}</span>
+                    </a>
+                    <span className="text-gray-500"> — نفس العملية (طلعت من الخزنة كمصروف)، ومحسوبة مرة واحدة</span>
                   </p>
                 )}
                 {op.duplicate && (
@@ -225,17 +247,21 @@ function IssuesBox({ duplicates, unfunded, startOpen }: { duplicates: CharityDup
               <span className={p.type === "in" ? "text-statusGreen" : "text-statusRed"}>
                 {p.type === "in" ? "إيداع" : "صرف"} {n(p.amount)} ج.م
               </span>
-              {p.kind === "claim" ? (
+              {p.kind ? (
                 <>
-                  {/* سطر مصروف موظف + سجل صدقات: اللي بيتحسب السجل - an Expense Claim row + a record: the record counts */}
-                  <span className="text-gray-400">اتحسبت مرة واحدة (سجل الصدقات)</span>
-                  <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
-                    <ExternalLink size={14} /> سجل الصدقات <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)}
-                  </a>
+                  {/* نفس المصدر مرتين: الأولى بتتحسب، التانية زيادة - the same source twice: the first counts, the second is extra */}
+                  <span className="text-gray-400">اتحسبت مرة واحدة (الأولى)</span>
                   <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
-                    <ExternalLink size={14} /> مصروف موظف <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
+                    <ExternalLink size={14} /> {p.kind === "claims" ? "مصروف موظف" : "سجل الصدقات"} <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
                   </a>
-                  {p.auto.source.label && <span className="text-sky-300">{p.auto.source.label.replace(`مصروف موظف ${p.auto.source.name} · `, "")}</span>}
+                  <a href={p.manual.url} target="_blank" rel="noopener noreferrer" className={link}>
+                    <ExternalLink size={14} /> التانية <span dir="ltr" className="font-numbers">{p.manual.id}</span> {shortDate(p.manual.date)} (ألغيها)
+                  </a>
+                  {p.auto.source && p.kind === "records" && (
+                    <a href={p.auto.source.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+                      🔗 <span dir="ltr" className="font-numbers">{p.auto.source.name}</span>
+                    </a>
+                  )}
                 </>
               ) : (
                 <>
@@ -246,8 +272,8 @@ function IssuesBox({ duplicates, unfunded, startOpen }: { duplicates: CharityDup
                   <a href={p.auto.url} target="_blank" rel="noopener noreferrer" className={link}>
                     <ExternalLink size={14} /> التلقائية <span dir="ltr" className="font-numbers">{p.auto.id}</span> {shortDate(p.auto.date)}
                   </a>
-                  <a href={p.auto.source.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
-                    🔗 <span dir="ltr" className="font-numbers">{p.auto.source.name}</span>
+                  <a href={p.auto.source?.url} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+                    🔗 <span dir="ltr" className="font-numbers">{p.auto.source?.name}</span>
                   </a>
                 </>
               )}

@@ -54,8 +54,10 @@ async function loadAll(): Promise<Loaded> {
       const type = TYPES[(r.txn_type ?? "").trim()];
       // نفس الكارت: صندوق أو نوع مش معروف بيتساب - same as the cards: unknown fund / type is skipped
       if (!known.has(fund) || !type) continue;
-      const amount = Number(r.amount) || 0;
       const id = String(r.name);
+      // سطر مصروف مربوط بسجل صدقات: السجل بيظهر بس - a claim row linked to a record: only the record is listed
+      if (dups.hidden.has(id)) continue;
+      const amount = Number(r.amount) || 0;
       const uncounted = dups.skip.has(id);
       const delta = uncounted ? 0 : type === "out" ? -amount : amount;
       balances.set(fund, (balances.get(fund) ?? 0) + delta);
@@ -72,6 +74,7 @@ async function loadAll(): Promise<Loaded> {
         url: charityRowUrl(r),
         source: sourceOf(r),
         duplicate: other ? { id: other.id, url: other.url, uncounted } : null,
+        linkedClaim: dups.linked.get(id) ?? null,
       });
     }
     const value = { ops, pairs: dups.pairs };
