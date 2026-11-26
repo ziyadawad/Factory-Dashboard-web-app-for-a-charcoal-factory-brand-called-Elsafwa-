@@ -190,7 +190,7 @@ export default function RepApp() {
         const saved = window.localStorage.getItem(OPTIONS_KEY);
         const old = saved ? (JSON.parse(saved) as RepOptions) : null;
         // نسخة قديمة من قبل طرق الدفع متتستخدمش - a copy saved before payment methods existed is ignored
-        if (old?.payTargets) setOptions((cur) => cur ?? old);
+        if (old?.payTargets && old.areas && old.customerTypes) setOptions((cur) => cur ?? old);
       } catch {}
       setOptionsError(e instanceof Error ? e.message : "حصلت مشكلة");
     }
@@ -277,6 +277,7 @@ export default function RepApp() {
           repName: options.rep.name,
           van: options.rep.van,
           customerName: draft.customer.name,
+          customerAddress: draft.customer.address ?? draft.customer.area ?? null,
           items: t.lines.map((l) => ({ name: l.name, qty: l.qty, rate: l.rate, amount: l.amount })),
           subtotal: t.subtotal,
           discount: t.discount,

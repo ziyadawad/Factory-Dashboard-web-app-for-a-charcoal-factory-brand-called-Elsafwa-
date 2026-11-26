@@ -283,6 +283,25 @@ export async function renderReceipt(r: RepReceipt, paper: PaperWidth): Promise<H
   c.fillText("العميل:", W - M, y);
   y += Math.round(19 * s * 1.4);
   center(r.customerName, 22, 800);
+  // العنوان تحت الاسم (بيكمل في سطور) - the address under the name (wraps)
+  if (r.customerAddress) {
+    font(17);
+    c.textAlign = "center";
+    let cur = "";
+    for (const w of r.customerAddress.split(" ")) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (c.measureText(next).width > W - 2 * M && cur) {
+        c.fillText(cur, W / 2, y);
+        y += Math.round(17 * s * 1.45);
+        cur = w;
+      } else cur = next;
+    }
+    if (cur) {
+      c.fillText(cur, W / 2, y);
+      y += Math.round(17 * s * 1.45);
+    }
+    y += Math.round(4 * s);
+  }
   line();
 
   // جدول الأصناف - the items table
@@ -519,7 +538,7 @@ export function testReceipt(repName: string, van: string, companyName: string, t
   const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(now);
   return {
-    name: "TEST-0001", temporary: false, date, time, repName, van, customerName: "طباعة تجربة",
+    name: "TEST-0001", temporary: false, date, time, repName, van, customerName: "طباعة تجربة", customerAddress: "شارع الجمهورية — بنها",
     items: [
       { name: "ربع كيلو", qty: 10, rate: 25, amount: 250 },
       { name: "كرتونة 2 كيلو", qty: 2, rate: 310.5, amount: 621 },

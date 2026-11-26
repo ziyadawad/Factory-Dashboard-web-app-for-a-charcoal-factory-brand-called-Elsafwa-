@@ -16,6 +16,18 @@ export interface RepCustomer {
   id: string; // name في ERPNext
   name: string; // customer_name
   phone: string | null;
+  area?: string | null; // المنطقة (Territory أو مدينة العنوان) - the area (territory or address city)
+  address?: string | null; // العنوان مكتوب سطر واحد - the address on one line
+}
+
+// عميل جديد من التطبيق - a new customer from the app
+export interface RepNewCustomer {
+  name: string;
+  phone: string; // فاضي = من غير - empty = none
+  area: string; // المنطقة / المدينة
+  address: string; // العنوان بالتفصيل
+  type: string; // من sales.repApp.customerTypes
+  gps: { lat: number; lng: number; accuracy: number | null } | null;
 }
 
 export interface RepInfo {
@@ -52,6 +64,8 @@ export interface RepOptions {
   products: RepProduct[];
   customers: RepCustomer[];
   recent: string[]; // عملاء المندوب الأخيرين (ids، الأحدث الأول) - the rep's recent customers (newest first)
+  areas: string[]; // مناطق عملاء المندوب (الأكتر الأول) للأزرار السريعة - his customers' areas (most first), quick chips
+  customerTypes: string[]; // محل / سوبر ماركت / موزع / أخرى
   quickQty: number[];
   companyName: string;
   thanks: string;
@@ -87,6 +101,7 @@ export interface RepReceipt {
   repName: string;
   van: string;
   customerName: string;
+  customerAddress?: string | null; // العنوان على الفاتورة - the address on the receipt
   items: RepReceiptItem[];
   subtotal: number;
   discount: number;

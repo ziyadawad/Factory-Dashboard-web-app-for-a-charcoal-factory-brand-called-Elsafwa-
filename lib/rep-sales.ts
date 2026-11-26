@@ -9,7 +9,7 @@ import { ErpError, ErpUnavailableError, erpPost, erpPostAs, erpToday, salesErpAu
 import { redis, redisSettings } from "./redis";
 import { RepConfig } from "./rep-auth";
 import {
-  RepCustomer, RepInvoiceRequest, RepOptions, RepPayMethod, RepPayTarget, RepPayTargets, RepProduct, RepProductGroup, RepReceipt, RepToday,
+  RepCustomer, RepInvoiceRequest, RepNewCustomer, RepOptions, RepPayMethod, RepPayTarget, RepPayTargets, RepProduct, RepProductGroup, RepReceipt, RepToday,
 } from "./rep-types";
 
 const sales = dashboardConfig.sales;
@@ -115,22 +115,41 @@ async function vanStock(warehouse: string, codes: string[]): Promise<Map<string,
 }
 
 const customersCache = cached<RepCustomer[]>(CACHE_MS);
+const GENERIC_TERRITORY = new Set(["All Territories", "Egypt", "Rest Of The World", "مصر"]);
 let extraCustomers: RepCustomer[] = []; // اللي اتعملوا من التطبيق قبل ما الكاش يتجدد - created from the app since the last load
 async function customers(): Promise<RepCustomer[]> {
   const base = await customersCache("all", async () => {
     extraCustomers = [];
-    const rows = await list<{ name: string; customer_name: string | null; mobile_no: string | null }>({
-      doctype: "Customer",
-      filters: [["disabled", "=", 0]],
-      fields: ["name", "customer_name", "mobile_no"],
-      order_by: "customer_name asc",
+    const [rows, addresses] = await Promise.all([
+      list<{ name: string; customer_name: string | null; mobile_no: string | null; territory: string | null; customer_primary_address: string | null }>({
+        doctype: "Customer",
+        filters: [["disabled", "=", 0]],
+        fields: ["name", "customer_name", "mobile_no", "territory", "customer_primary_address"],
+        order_by: "customer_name asc",
+      }),
+      // عناوين العملاء (الأساسي الأول) - the customers' addresses (primary first)
+      list<{ name: string; address_line1: string | null; city: string | null; customer: string; is_primary_address: number }>({
+        doctype: "Address",
+        fields: ["name", "address_line1", "city", "is_primary_address", "`tabDynamic Link`.link_name as customer"],
+        filters: [["Dynamic Link", "link_doctype", "=", "Customer"], ["disabled", "=", 0]],
+        order_by: "`tabAddress`.is_primary_address desc, `tabAddress`.modified desc",
+      }).catch(() => []),
+    ]);
+    const byName = new Map(addresses.map((a) => [a.name, a]));
+    const byCustomer = new Map<string, (typeof addresses)[number]>();
+    for (const a of addresses) if (!byCustomer.has(a.customer)) byCustomer.set(a.customer, a);
+    return rows.map((r) => {
+      const a = (r.customer_primary_address && byName.get(r.customer_primary_address)) || byCustomer.get(r.name);
+      const territory = r.territory && !GENERIC_TERRITORY.has(r.territory) ? r.territory : null;
+      const line = a ? [a.address_line1, a.city].map((x) => (x ?? "").trim()).filter(Boolean).join(" — ") : "";
+      return { id: r.name, name: (r.customer_name || r.name).trim(), phone: r.mobile_no || null, area: territory ?? (a?.city?.trim() || null), address: line || null };
     });
-    return rows.map((r) => ({ id: r.name, name: (r.customer_name || r.name).trim(), phone: r.mobile_no || null }));
   });
   const known = new Set(base.map((c) => c.id));
   return [...extraCustomers.filter((c) => !known.has(c.id)), ...base];
 }
 
+// عملاء المندوب (آخر 90 يوم، الأحدث الأول) - the rep's customers (last 90 days, newest first)
 const recentCache = cached<string[]>(CACHE_MS);
 async function recentCustomers(rep: RepConfig): Promise<string[]> {
   return recentCache(rep.warehouse, async () => {
@@ -145,8 +164,32 @@ async function recentCustomers(rep: RepConfig): Promise<string[]> {
     });
     const out: string[] = [];
     for (const r of rows) if (!out.includes(r.customer)) out.push(r.customer);
-    return out.slice(0, app.recentCustomers);
+    return out;
   });
+}
+
+// مناطق عملاء المندوب (الأكتر الأول)، ولو مفيش: المناطق الأكتر عند كل العملاء - his customers' areas, else the most common overall
+function areasOf(ids: string[], all: RepCustomer[]): string[] {
+  const byId = new Map(all.map((c) => [c.id, c]));
+  // الكتابات المختلفة لنفس المنطقة (القاهرة / القاهره) بتتجمع، والأكتر كتابة هي اللي بتظهر
+  // Different spellings of one area (القاهرة / القاهره) are merged; the most used spelling is shown
+  const count = (list: (RepCustomer | undefined)[]) => {
+    const m = new Map<string, { n: number; spell: Map<string, number> }>();
+    for (const c of list) {
+      const a = c?.area?.replace(/\s+/g, " ").trim();
+      if (!a || a.length > 24) continue;
+      const key = normName(a).replace(/ه$/, "ة");
+      const hit = m.get(key) ?? { n: 0, spell: new Map<string, number>() };
+      hit.n += 1;
+      hit.spell.set(a, (hit.spell.get(a) ?? 0) + 1);
+      m.set(key, hit);
+    }
+    return Array.from(m.values())
+      .sort((x, y) => y.n - x.n)
+      .map((v) => Array.from(v.spell).sort((x, y) => y[1] - x[1])[0][0]);
+  };
+  const mine = count(ids.map((id) => byId.get(id)));
+  return (mine.length >= 3 ? mine : [...mine, ...count(all).filter((a) => !mine.includes(a))]).slice(0, 12);
 }
 
 export async function repOptions(rep: RepConfig): Promise<RepOptions> {
@@ -161,7 +204,9 @@ export async function repOptions(rep: RepConfig): Promise<RepOptions> {
     today: erpToday(),
     products: items.map((i) => ({ ...i, rate: priceMap.get(i.code)?.rate ?? null, uom: priceMap.get(i.code)?.uom ?? "", stock: Math.max(0, stock.get(i.code) ?? 0) })),
     customers: all,
-    recent,
+    recent: recent.slice(0, app.recentCustomers),
+    areas: areasOf(recent, all),
+    customerTypes: app.customerTypes.map((t) => t.label),
     quickQty: app.quickQty,
     companyName: app.companyName,
     thanks: app.thanks,
@@ -179,22 +224,90 @@ export async function customerBalance(customer: string): Promise<number> {
   return money(num(rows[0]?.debit) - num(rows[0]?.credit));
 }
 
-// عميل جديد (اسم + موبايل بس) - a new customer (name + phone only)
-export async function createCustomer(nameRaw: unknown, phoneRaw: unknown): Promise<RepCustomer> {
-  const name = typeof nameRaw === "string" ? nameRaw.replace(/\s+/g, " ").trim().slice(0, 120) : "";
-  const phone = typeof phoneRaw === "string" ? phoneRaw.replace(/[^\d+]/g, "").slice(0, 20) : "";
-  if (name.length < 2) throw new RepError("اكتب اسم العميل");
-  if (phone && !/^\+?\d{8,15}$/.test(phone)) throw new RepError("رقم الموبايل مش مظبوط");
-  const existing = (await customers()).find((c) => c.name === name);
-  if (existing) throw new RepError(`فيه عميل بنفس الاسم: ${existing.name}`, 409, { customer: existing });
-  const doc: Record<string, unknown> = { customer_name: name, customer_type: "Individual" };
+// ===== عميل جديد - a new customer =====
+const AR_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+const latinDigits = (t: string) => t.replace(/[٠-٩]/g, (d) => String(AR_DIGITS.indexOf(d)));
+const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+const normName = (t: string) => t.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, "").toLowerCase();
+// موبايل مصري: 01 + (0 / 1 / 2 / 5) + 8 أرقام - an Egyptian mobile: 01 + (0/1/2/5) + 8 digits
+export const EG_MOBILE = /^01[0125]\d{8}$/;
+const normPhone = (t: string | null | undefined) => {
+  const d = latinDigits(t ?? "").replace(/\D/g, "");
+  return d.startsWith("20") && d.length === 12 ? `0${d.slice(2)}` : d;
+};
+
+const groupsCache = cached<{ groups: Set<string>; territories: { name: string; key: string }[] }>(60 * 60_000);
+async function masters() {
+  return groupsCache("all", async () => {
+    const [groups, territories] = await Promise.all([
+      list<{ name: string }>({ doctype: "Customer Group", fields: ["name"], filters: [["is_group", "=", 0]] }),
+      list<{ name: string }>({ doctype: "Territory", fields: ["name"], filters: [["is_group", "=", 0]] }),
+    ]);
+    return { groups: new Set(groups.map((g) => g.name)), territories: territories.map((t) => ({ name: t.name, key: normName(t.name) })) };
+  });
+}
+
+// عميل جديد: Customer + Address مربوط بيه (المنطقة، التفاصيل، الموبايل، ولينك GPS). نفس الاسم أو نفس الموبايل = موجود
+// A new customer: Customer + a linked Address (area, details, phone, a GPS link). Same name or same mobile = exists
+export async function createCustomer(raw: Partial<RepNewCustomer>, rep: RepConfig): Promise<{ customer: RepCustomer; warning: string | null }> {
+  const name = clean(raw.name, 120);
+  const phone = normPhone(clean(raw.phone, 20));
+  const area = clean(raw.area, 60);
+  const detail = clean(raw.address, 140);
+  const type = app.customerTypes.find((t) => t.label === raw.type) ?? null;
+  const gps = raw.gps && Number.isFinite(raw.gps.lat) && Number.isFinite(raw.gps.lng) && Math.abs(raw.gps.lat) <= 90 && Math.abs(raw.gps.lng) <= 180 ? raw.gps : null;
+  if (name.length < 2) throw new RepError("اكتب اسم العميل / المحل");
+  if (phone && !EG_MOBILE.test(phone)) throw new RepError("رقم الموبايل لازم يبقى 11 رقم ويبدأ بـ 010 / 011 / 012 / 015");
+  if (!area) throw new RepError("اكتب المنطقة / المدينة");
+  if (!detail) throw new RepError("اكتب العنوان بالتفصيل (الشارع / علامة مميزة)");
+
+  // موجود؟ نفس الاسم أو نفس الموبايل - exists? same name or same mobile
+  const all = await customers();
+  const existing = all.find((c) => normName(c.name) === normName(name)) ?? (phone ? all.find((c) => normPhone(c.phone) === phone) : undefined);
+  if (existing) throw new RepError(`العميل ده موجود: ${existing.name}${existing.phone ? ` (${existing.phone})` : ""}`, 409, { customer: existing });
+
+  const { groups, territories } = await masters().catch(() => ({ groups: new Set<string>(), territories: [] as { name: string; key: string }[] }));
+  const territory = territories.find((t) => t.key === normName(area))?.name ?? (app.territory || null);
+  const group = type?.group && groups.has(type.group) ? type.group : app.customerGroup && groups.has(app.customerGroup) ? app.customerGroup : null;
+  const doc: Record<string, unknown> = {
+    customer_name: name,
+    customer_type: "Individual",
+    customer_details: [type && `نوع العميل: ${type.label}`, `من تطبيق المناديب — ${rep.name} (${rep.van})`].filter(Boolean).join("\n"),
+  };
   if (phone) doc.mobile_no = phone;
-  if (app.customerGroup) doc.customer_group = app.customerGroup;
-  if (app.territory) doc.territory = app.territory;
-  const { data } = await erpPostAs<{ data: { name: string; customer_name: string } }>(salesErpAuth(), "/api/resource/Customer", doc);
-  const created = { id: data.name, name: data.customer_name || name, phone: phone || null };
+  if (group) doc.customer_group = group;
+  if (territory) doc.territory = territory;
+  const auth = salesErpAuth();
+  const { data } = await erpPostAs<{ data: { name: string; customer_name: string } }>(auth, "/api/resource/Customer", doc);
+
+  // العنوان (لو فشل العميل بيفضل، والمندوب بيعرف) - the address (if it fails the customer stays and the rep is told)
+  let warning: string | null = null;
+  try {
+    await erpPostAs(auth, "/api/resource/Address", {
+      address_title: name,
+      address_type: "Billing",
+      address_line1: detail,
+      address_line2: gps ? `GPS: https://maps.google.com/?q=${gps.lat.toFixed(6)},${gps.lng.toFixed(6)}` : undefined,
+      city: area,
+      country: app.country,
+      phone: phone || undefined,
+      is_primary_address: 1,
+      is_shipping_address: 1,
+      links: [{ link_doctype: "Customer", link_name: data.name }],
+    });
+  } catch (error) {
+    warning = `العميل اتسجل بس العنوان ما اتسجلش: ${error instanceof Error ? error.message.replace(/^ERPNext [^:]+: /, "") : error}`;
+    console.error("[rep] address failed:", warning);
+  }
+  const created: RepCustomer = { id: data.name, name: data.customer_name || name, phone: phone || null, area: territory ?? area, address: `${detail} — ${area}` };
   extraCustomers = [created, ...extraCustomers];
-  return created;
+  return { customer: created, warning };
+}
+
+// عنوان العميل للفاتورة - the customer's address for the receipt
+async function addressOf(customer: string): Promise<string | null> {
+  const c = (await customers().catch(() => [] as RepCustomer[])).find((x) => x.id === customer);
+  return c?.address ?? c?.area ?? null;
 }
 
 // ===== طرق الدفع - payment methods =====
@@ -344,7 +457,9 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
   const known = new Map(catalog().map((c) => [c.code, c]));
   for (const it of items) if (!known.has(it.code)) throw new RepError(`صنف مش في القايمة: ${it.code}`);
   const codes = items.map((i) => i.code);
-  const [priceMap, stock, previousBalance] = await Promise.all([prices(codes, true), vanStock(rep.warehouse, codes), customerBalance(customer)]);
+  const [priceMap, stock, previousBalance, customerAddress] = await Promise.all([
+    prices(codes, true), vanStock(rep.warehouse, codes), customerBalance(customer), addressOf(customer),
+  ]);
   let subtotal = 0;
   for (const it of items) {
     const name = known.get(it.code)!.name;
@@ -436,6 +551,7 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
       repName: rep.name,
       van: rep.van,
       customerName: String(inv.customer_name ?? customer),
+      customerAddress,
       items: lines.map((l) => ({ name: String(l.item_name ?? l.item_code), qty: num(l.qty), rate: num(l.rate), amount: num(l.amount) })),
       subtotal: money(num(inv.total)),
       discount: money(num(inv.discount_amount)),
@@ -488,6 +604,10 @@ export async function invoiceReceipt(rep: RepConfig, name: string): Promise<RepR
     repName: rep.name,
     van: rep.van,
     customerName: String(inv.customer_name ?? inv.customer),
+    // عنوان الفاتورة نفسها (address_display)، وإلا عنوان العميل - the invoice's own address, else the customer's
+    customerAddress:
+      String(inv.address_display ?? "").replace(/<br\s*\/?>/gi, " — ").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").replace(/(\s—\s*)+$/, "").trim() ||
+      (await addressOf(String(inv.customer))),
     items: lines.map((l) => ({ name: String(l.item_name ?? l.item_code), qty: num(l.qty), rate: num(l.rate), amount: num(l.amount) })),
     subtotal: money(num(inv.total)),
     discount: money(num(inv.discount_amount)),

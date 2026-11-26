@@ -968,8 +968,21 @@ export const dashboardConfig = {
       // البنك (kind "bank"). كل محفظة / حساب بيتربط بالـ Mode of Payment اللي حسابه الافتراضي في الشركة هو نفس الحساب
       // Payment methods: cash = the rep's cash box, Vodafone Cash = the cash wallets (wallets.accounts kind "cash"),
       // InstaPay = the bank accounts (kind "bank"); each is linked to the Mode of Payment whose company default account is it
-      customerGroup: "", // مجموعة العميل الجديد (فاضي = الافتراضي في Selling Settings) - new customer group (empty = default)
-      territory: "", // منطقة العميل الجديد (فاضي = الافتراضي) - new customer territory (empty = default)
+      customerGroup: "", // مجموعة العميل الجديد لو نوعه ملوش مجموعة تحت (فاضي = الافتراضي) - fallback group (empty = default)
+      territory: "", // المنطقة لو المكتوبة مش Territory في ERPNext (فاضي = من غير) - fallback territory (empty = none)
+      // نوع العميل الجديد (أزرار): label = اللي بيظهر، group = Customer Group في ERPNext (لازم تكون موجودة ومش group)
+      // النوع نفسه بيتكتب كمان في "Customer Details". المنطقة المكتوبة = Territory لو فيه واحدة بنفس الاسم، وإلا بتتكتب في
+      // مدينة العنوان بس. العنوان = Address مربوط بالعميل (address_line1 = التفاصيل، city = المنطقة، address_line2 = لينك GPS)
+      // New customer type chips: label shown, group = the ERPNext Customer Group (must exist, not a group node). The type is
+      // also written to "Customer Details". The typed area = the Territory when one has that name, else only the address
+      // city. The address = an Address linked to the customer (line1 = details, city = area, line2 = a GPS link)
+      customerTypes: [
+        { label: "محل", group: "تجزئة" },
+        { label: "سوبر ماركت", group: "تجزئة" },
+        { label: "موزع", group: "كبار العملاء" },
+        { label: "أخرى", group: "" },
+      ] as { label: string; group: string }[],
+      country: "Egypt", // الدولة في العنوان (لازم في ERPNext) - the address country (required by ERPNext)
       sessionDays: 30, // الدخول بيفضل 30 يوم - the login lasts 30 days
       pinMaxTries: 5, // رقم غلط 5 مرات = قفل - 5 wrong PINs = locked
       pinLockMinutes: 15,

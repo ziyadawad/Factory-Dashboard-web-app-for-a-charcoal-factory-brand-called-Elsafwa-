@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import Keypad from "../operator/Keypad";
 import { RepCustomer, RepOptions, RepPayMethod, RepPayTarget, RepProduct, RepProductGroup } from "@/lib/rep-types";
-import { money, repFetch, RepFetchError } from "./api";
+import { money } from "./api";
+import NewCustomer from "./NewCustomer";
 
 export type Cart = Record<string, number>; // item code → qty
 // الدفع: كاش / فودافون كاش / انستاباي (كله) / آجل / جزء (مبلغ + طريقة، والباقي آجل)
@@ -64,43 +65,40 @@ export function totalsOf(draft: Draft, products: RepProduct[]) {
   return { lines, subtotal, discount, total, paid, method, remaining: Math.round((total - paid) * 100) / 100 };
 }
 
-function CustomerPicker({ options, onPick, onClose }: { options: RepOptions; onPick: (c: RepCustomer) => void; onClose: () => void }) {
+function CustomerPicker({
+  options,
+  onPick,
+  onClose,
+}: {
+  options: RepOptions;
+  onPick: (c: RepCustomer, warning?: string | null) => void;
+  onClose: () => void;
+}) {
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const norm = (t: string) => t.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, "").toLowerCase();
   const byId = useMemo(() => new Map(options.customers.map((c) => [c.id, c])), [options.customers]);
   const recent = options.recent.map((id) => byId.get(id)).filter(Boolean) as RepCustomer[];
+  // البحث بالاسم أو الموبايل أو المنطقة / العنوان - search by name, mobile or area / address
   const found = useMemo(() => {
     const key = norm(q);
     if (!key) return [];
-    return options.customers.filter((c) => norm(c.name).includes(key) || norm(c.id).includes(key) || (c.phone ?? "").includes(q.trim())).slice(0, 60);
+    return options.customers
+      .filter((c) => norm(c.name).includes(key) || norm(c.id).includes(key) || (c.phone ?? "").includes(q.trim()) || norm(c.address ?? c.area ?? "").includes(key))
+      .slice(0, 60);
   }, [q, options.customers]);
 
-  const create = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await repFetch<{ customer: RepCustomer }>("/api/rep/customer", { json: { name, phone } });
-      options.customers.unshift(r.customer);
-      onPick(r.customer);
-    } catch (e) {
-      const existing = e instanceof RepFetchError ? (e.body.customer as RepCustomer | undefined) : undefined;
-      setError(e instanceof Error ? e.message : "حصلت مشكلة");
-      if (existing) setTimeout(() => onPick(existing), 1200);
-    } finally {
-      setBusy(false);
-    }
-  };
+  if (creating) {
+    return <NewCustomer options={options} initialName={q.trim()} onCreated={(c, warning) => onPick(c, warning)} onBack={() => setCreating(false)} onClose={onClose} />;
+  }
 
   const Row = ({ c }: { c: RepCustomer }) => (
     <button type="button" onClick={() => onPick(c)} className="flex w-full items-center gap-3 rounded-xl border border-cardBorder bg-card/80 px-4 py-3 text-start active:bg-white/10">
       <span className="flex-1 min-w-0">
         <span className="block truncate text-[18px] font-bold text-white">{c.name}</span>
-        {c.phone && <span dir="ltr" className="block text-[14px] font-numbers text-gray-400 text-end">{c.phone}</span>}
+        {/* المنطقة / العنوان تحت الاسم - the area / address under the name */}
+        {(c.address || c.area) && <span className="block truncate text-[14px] text-gray-400">📍 {c.address ?? c.area}</span>}
+        {c.phone && <span dir="ltr" className="block text-[14px] font-numbers text-gray-500 text-end">{c.phone}</span>}
       </span>
     </button>
   );
@@ -109,47 +107,31 @@ function CustomerPicker({ options, onPick, onClose }: { options: RepOptions; onP
     <div className="fixed inset-0 z-50 flex flex-col bg-background" role="dialog" aria-modal="true">
       <div className="mx-auto flex w-full max-w-[560px] flex-1 min-h-0 flex-col gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
         <div className="flex items-center gap-2">
-          <h2 className="flex-1 text-[22px] font-extrabold text-white">{creating ? "عميل جديد" : "اختار العميل"}</h2>
+          <h2 className="flex-1 text-[22px] font-extrabold text-white">اختار العميل</h2>
           <button type="button" onClick={onClose} className="rounded-xl border border-cardBorder p-2 text-gray-300" aria-label="إغلاق">
             <X size={24} />
           </button>
         </div>
-        {creating ? (
-          <div className="flex flex-col gap-3">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم العميل" className="h-14 rounded-2xl border border-cardBorder bg-card px-4 text-[18px] text-white outline-none focus:border-brandOrange" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="الموبايل (اختياري)" inputMode="tel" dir="ltr" className="h-14 rounded-2xl border border-cardBorder bg-card px-4 text-[18px] text-white font-numbers outline-none focus:border-brandOrange" />
-            {error && <p className="text-[16px] font-bold text-statusRed">{error}</p>}
-            <button type="button" disabled={busy || name.trim().length < 2} onClick={create} className="h-14 rounded-2xl bg-statusGreen text-black text-[18px] font-extrabold disabled:opacity-50">
-              {busy ? "بيسجل…" : "سجّل العميل"}
-            </button>
-            <button type="button" onClick={() => setCreating(false)} className="text-[16px] font-bold text-gray-400 underline underline-offset-4">
-              رجوع للقايمة
-            </button>
-          </div>
-        ) : (
-          <>
-            <label className="flex h-14 items-center gap-2 rounded-2xl border border-cardBorder bg-card px-4 focus-within:border-brandOrange">
-              <Search size={20} className="text-gray-400" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الموبايل" className="flex-1 bg-transparent text-[18px] text-white outline-none" autoFocus />
-            </label>
-            <button type="button" onClick={() => (setCreating(true), setName(q))} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-statusGreen/60 text-[17px] font-bold text-statusGreen">
-              <UserPlus size={20} /> عميل جديد
-            </button>
-            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pb-4">
-              {q.trim() ? (
-                found.length ? found.map((c) => <Row key={c.id} c={c} />) : <p className="py-6 text-center text-gray-500">مفيش عميل بالاسم ده</p>
-              ) : (
-                <>
-                  {recent.length > 0 && <p className="text-[14px] font-bold text-gray-400">عملائك الأخيرين</p>}
-                  {recent.map((c) => (
-                    <Row key={c.id} c={c} />
-                  ))}
-                  <p className="pt-2 text-[14px] text-gray-500">اكتب في البحث عشان تلاقي باقي العملاء ({options.customers.length})</p>
-                </>
-              )}
-            </div>
-          </>
-        )}
+        <label className="flex h-14 items-center gap-2 rounded-2xl border border-cardBorder bg-card px-4 focus-within:border-brandOrange">
+          <Search size={20} className="text-gray-400" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الموبايل أو المنطقة" className="flex-1 bg-transparent text-[18px] text-white outline-none" autoFocus />
+        </label>
+        <button type="button" onClick={() => setCreating(true)} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-statusGreen/60 text-[17px] font-bold text-statusGreen">
+          <UserPlus size={20} /> عميل جديد
+        </button>
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pb-4">
+          {q.trim() ? (
+            found.length ? found.map((c) => <Row key={c.id} c={c} />) : <p className="py-6 text-center text-gray-500">مفيش عميل بالاسم ده</p>
+          ) : (
+            <>
+              {recent.length > 0 && <p className="text-[14px] font-bold text-gray-400">عملائك الأخيرين</p>}
+              {recent.map((c) => (
+                <Row key={c.id} c={c} />
+              ))}
+              <p className="pt-2 text-[14px] text-gray-500">اكتب في البحث عشان تلاقي باقي العملاء ({options.customers.length})</p>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -214,6 +196,8 @@ export default function InvoiceForm({
 }) {
   const [group, setGroup] = useState<RepProductGroup>("packets");
   const [picking, setPicking] = useState(false);
+  // تحذير بعد عميل جديد (زي "العنوان ما اتسجلش") - a warning after a new customer (e.g. the address didn't save)
+  const [notice, setNotice] = useState<string | null>(null);
   const [pad, setPad] = useState<"part" | "discount" | null>(null);
   // آخر رقم اتنسخ (علامة ✓ لثانيتين) - the last copied number (a ✓ for 2 seconds)
   const [copied, setCopied] = useState<string | null>(null);
@@ -247,6 +231,7 @@ export default function InvoiceForm({
         <span className="flex-1 min-w-0">
           <span className="block text-[14px] text-gray-400">العميل</span>
           <span className={`block truncate text-[20px] font-extrabold ${draft.customer ? "text-white" : "text-brandOrange"}`}>{draft.customer?.name ?? "اضغط واختار العميل"}</span>
+          {(draft.customer?.address || draft.customer?.area) && <span className="block truncate text-[14px] text-gray-400">📍 {draft.customer.address ?? draft.customer.area}</span>}
           {draft.customer && (
             <span className="block text-[14px] text-gray-400">
               رصيده:{" "}
@@ -256,6 +241,7 @@ export default function InvoiceForm({
         </span>
       </button>
 
+      {notice && <p className="rounded-2xl border border-statusAmber/50 bg-statusAmber/10 px-4 py-2 text-[14px] font-bold text-statusAmber">⚠ {notice}</p>}
       {/* الأصناف - the items */}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, groups.length)}, minmax(0, 1fr))` }}>
         {groups.map((g) => (
@@ -444,8 +430,9 @@ export default function InvoiceForm({
         <CustomerPicker
           options={options}
           onClose={() => setPicking(false)}
-          onPick={(c) => {
+          onPick={(c, warning) => {
             setDraft({ ...draft, customer: c });
+            setNotice(warning ?? null);
             setPicking(false);
           }}
         />
