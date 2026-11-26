@@ -234,46 +234,46 @@ export default function Dashboard() {
     window.history.replaceState(null, "", url);
   }, []);
 
-  // التنبيه: يروح لصفحة الإنتاج (حتى لو صفحة تانية متثبتة)، ولما يخلص يرجع للمتثبتة - the alert jumps to production
-  // (even over a pinned page) and returns to the pinned page afterwards
+  // التنبيه: لو الصفحة مش متثبتة يروح لصفحة الإنتاج (والتقليب بيكمل بعده). لو متثبتة (📌) بيفضل مكانه:
+  // الصوت بيشتغل وتوست صغير في الركن، والضغط عليه بيروح لصفحة الإنتاج
+  // The alert: unpinned = jump to the production page (rotation resumes after). Pinned (📌) = stay put: the chime
+  // still plays and a small corner toast shows; clicking it goes to production
   const productionIndex = PAGES.findIndex((p) => p.id === "production");
-  const returnPageRef = useRef<number | null>(null);
-  const wasAlertOn = useRef(false);
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const pageIndexRef = useRef(pageIndex);
+  pageIndexRef.current = pageIndex;
+  const toastedKiln = useRef<string | null>(null);
   useEffect(() => {
     if (productionIndex < 0) return;
-    if (alertOn) {
-      if (!wasAlertOn.current) {
-        // لو الصفحة متثبتة: عرض توست بدل من التنقل - if pinned: show toast instead of navigating
-        if (pinned && alert.current) {
-          addToast({
-            icon: "🔥",
-            title: `طرحة دخلت ${alert.current.kiln}`,
-            sub: alert.current.type,
-            color: "#ff6c00",
-            onGo: () => changePage(productionIndex, 1),
-          });
-        }
-        returnPageRef.current = pinned && pageIndex !== productionIndex ? pageIndex : null;
-      }
-      wasAlertOn.current = true;
-      if (!pinned && pageIndex !== productionIndex) changePage(productionIndex, 1);
-    } else if (wasAlertOn.current) {
-      wasAlertOn.current = false;
-      const back = returnPageRef.current;
-      returnPageRef.current = null;
-      if (back !== null && pinned) changePage(back, -1);
+    const cur = alert.current;
+    if (!cur) return;
+    if (!pinnedRef.current) {
+      if (pageIndexRef.current !== productionIndex) changePage(productionIndex, 1);
+      return;
     }
+    // توست واحد لكل طرحة، ومش لو احنا أصلا على صفحة الإنتاج - one toast per exit, none when already on production
+    if (pageIndexRef.current === productionIndex || toastedKiln.current === cur.id) return;
+    toastedKiln.current = cur.id;
+    addToast({
+      icon: "🔥",
+      title: `طرحة دخلت ${cur.kiln}`,
+      sub: cur.type,
+      color: "#ff6c00",
+      onGo: () => changePage(productionIndex, 1),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertOn, alert.current, pinned, addToast, changePage, productionIndex, pageIndex]);
+  }, [alert.current]);
 
-  // تنبيه الواتساب (spotlight): يروح لصفحة الواتساب طول ما الكروت شغالة واللمعة، وبعدين يرجع للصفحة اللي كان عليها
-  // (والمتثبتة بتفضل متثبتة). لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده
-  // The WhatsApp spotlight: on the WhatsApp page while cards play and the flash runs, then back to the previous page
-  // (a pinned page stays pinned). A kiln alert in between wins; WhatsApp resumes after it
+  // تنبيه الواتساب (spotlight): لو مش متثبتة يروح لصفحة الواتساب طول ما الكروت شغالة واللمعة، وبعدين يرجع للصفحة
+  // اللي كان عليها. لو تنبيه طرحة جه في النص هو اللي بيكسب، والواتساب بيرجع بعده. لو متثبتة (📌): مفيش تنقل ولا كارت
+  // كبير، توست صغير لكل كارت بس (والصوت زي ما هو، وساعات الهدوء جوه useWhatsAppAlerts)
+  // The WhatsApp spotlight: unpinned = on the WhatsApp page while cards play and the flash runs, then back to the
+  // previous page; a kiln alert in between wins and WhatsApp resumes after it. Pinned (📌) = no jump and no big card,
+  // a small toast per card only (chime unchanged; quiet hours are handled inside useWhatsAppAlerts)
   const whatsappIndex = PAGES.findIndex((p) => p.id === "whatsapp");
   const waReturnRef = useRef<number | null>(null);
   const wasWaOn = useRef(false);
-  const shownWaToasts = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (whatsappIndex < 0) return;
     if (alertOn) {
@@ -281,36 +281,36 @@ export default function Dashboard() {
       waReturnRef.current = null;
       return;
     }
-    if (waOn) {
-      if (!wasWaOn.current) {
-        // لو الصفحة متثبتة: عرض توست لكل كارت - if pinned: show toast for each card
-        if (pinned && waAlert.current) {
-          const card = waAlert.current.card;
-          const key = card.group.id;
-          if (!shownWaToasts.current.has(key)) {
-            shownWaToasts.current.add(key);
-            addToast({
-              icon: "💬",
-              title: `رسالة جديدة في ${card.group.name}`,
-              sub: card.sender,
-              color: "#25D366",
-              onGo: () => changePage(whatsappIndex, 1),
-            });
-          }
-        }
-        waReturnRef.current = pageIndex !== whatsappIndex ? pageIndex : null;
-      }
+    if (waOn && !pinned) {
+      if (!wasWaOn.current) waReturnRef.current = pageIndexRef.current !== whatsappIndex ? pageIndexRef.current : null;
       wasWaOn.current = true;
-      if (!pinned && pageIndex !== whatsappIndex) changePage(whatsappIndex, 1);
+      if (pageIndexRef.current !== whatsappIndex) changePage(whatsappIndex, 1);
     } else if (wasWaOn.current) {
       wasWaOn.current = false;
-      shownWaToasts.current.clear();
       const back = waReturnRef.current;
       waReturnRef.current = null;
-      if (back !== null) changePage(back, -1);
+      if (back !== null && !pinned) changePage(back, -1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waOn, alertOn, pinned, addToast, changePage, whatsappIndex, pageIndex, waAlert.current]);
+  }, [waOn, alertOn, pinned]);
+  // متثبتة على صفحة تانية غير الواتساب: الكارت الكبير مستخبي - pinned on another page: the big card stays hidden
+  const waSpotHidden = pinned && pageIndex !== whatsappIndex;
+  const toastedWa = useRef<string | null>(null);
+  const waKey = waAlert.current?.card.key ?? null;
+  useEffect(() => {
+    const spot = waAlert.current;
+    if (!spot || whatsappIndex < 0 || !pinnedRef.current || pageIndexRef.current === whatsappIndex) return;
+    if (toastedWa.current === spot.card.key) return;
+    toastedWa.current = spot.card.key;
+    addToast({
+      icon: "💬",
+      title: `رسالة جديدة في ${spot.card.group.name}`,
+      sub: spot.card.sender,
+      color: "#25D366",
+      onGo: () => changePage(whatsappIndex, 1),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waKey]);
   const openFromSpotlight = useCallback(
     (group: WaSpotGroup) => {
       // نفضل على صفحة الواتساب والشات مفتوح - stay on the WhatsApp page with the chat open
@@ -642,7 +642,7 @@ export default function Dashboard() {
 
       {/* رسالة واتساب جديدة: الكارت الكبير - a new WhatsApp message: the big card */}
       <WaSpotlight
-        spot={waAlert.current}
+        spot={waSpotHidden ? null : waAlert.current}
         pending={waAlert.pending}
         onDismiss={waAlert.dismiss}
         onOpen={openFromSpotlight}
