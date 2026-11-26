@@ -6,7 +6,7 @@
 // never above the van stock), payment (cash / credit / part), a discount when allowed, and the summary. All taps; typing
 // only in the search
 import { useEffect, useMemo, useState } from "react";
-import { Check, Minus, Plus, Search, UserPlus, X } from "lucide-react";
+import { Check, ChevronDown, Minus, Plus, Search, UserPlus, X } from "lucide-react";
 import Keypad from "../operator/Keypad";
 import { RepCustomer, RepOptions, RepPayMethod, RepPayTarget, RepProduct, RepProductGroup } from "@/lib/rep-types";
 import { money } from "./api";
@@ -24,9 +24,21 @@ export type Draft = {
   target: string | null; // المحفظة / الحساب (فودافون كاش / انستاباي) - the wallet / account
   payRef: string; // رقم العملية (اختياري) - the transaction number (optional)
   partPaid: string;
+  // الخصم: مبلغ ج.م أو نسبة %، والسبب (زرار + كلام)، ورقم المدير لو أكبر من المسموح
+  // The discount: an EGP amount or a %, the reason (chip + text), and the manager PIN when above the limit
+  discountMode: "amount" | "percent";
   discount: string;
+  discountReason: string;
+  discountNote: string;
+  managerPin: string;
 };
-export const emptyDraft = (): Draft => ({ customer: null, cart: {}, pay: "cash", partMethod: "cash", target: null, payRef: "", partPaid: "", discount: "" });
+export const emptyDraft = (): Draft => ({
+  customer: null, cart: {}, pay: "cash", partMethod: "cash", target: null, payRef: "", partPaid: "",
+  discountMode: "amount", discount: "", discountReason: "", discountNote: "", managerPin: "",
+});
+
+// سبب الخصم مكتوب سطر واحد - the discount reason on one line
+export const reasonOf = (d: Draft) => [d.discountReason, d.discountNote.trim()].filter(Boolean).join(" — ").slice(0, 120);
 
 export const METHOD_LABEL: Record<RepPayMethod, string> = { cash: "كاش", vodafone: "فودافون كاش", instapay: "انستاباي" };
 // المحافظ / الحسابات بتاعة الطريقة دي - the wallets / accounts for a method
@@ -57,12 +69,15 @@ export function totalsOf(draft: Draft, products: RepProduct[]) {
       return { code, name: p?.name ?? code, qty, rate, amount: Math.round(qty * rate * 100) / 100 };
     });
   const subtotal = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
-  const discount = Math.min(subtotal, Math.max(0, Number(draft.discount) || 0));
+  // النسبة بتتحسب من الإجمالي قبل الخصم - a percent is taken from the total before the discount
+  const value = Math.max(0, Number(draft.discount) || 0);
+  const discount = Math.min(subtotal, Math.round((draft.discountMode === "percent" ? (subtotal * value) / 100 : value) * 100) / 100);
   const total = Math.round((subtotal - discount) * 100) / 100;
   const paid = draft.pay === "credit" ? 0 : draft.pay === "part" ? Math.min(total, Math.max(0, Number(draft.partPaid) || 0)) : total;
   // الطريقة اللي الفلوس دخلت بيها (null = آجل كله) - how the money came in (null = all on credit)
   const method: RepPayMethod | null = paid <= 0 ? null : draft.pay === "part" ? draft.partMethod : (draft.pay as RepPayMethod);
-  return { lines, subtotal, discount, total, paid, method, remaining: Math.round((total - paid) * 100) / 100 };
+  const percent = subtotal > 0 ? (discount / subtotal) * 100 : 0;
+  return { lines, subtotal, discount, discountValue: value, percent, total, paid, method, remaining: Math.round((total - paid) * 100) / 100 };
 }
 
 function CustomerPicker({
@@ -198,7 +213,8 @@ export default function InvoiceForm({
   const [picking, setPicking] = useState(false);
   // تحذير بعد عميل جديد (زي "العنوان ما اتسجلش") - a warning after a new customer (e.g. the address didn't save)
   const [notice, setNotice] = useState<string | null>(null);
-  const [pad, setPad] = useState<"part" | "discount" | null>(null);
+  const [pad, setPad] = useState<"part" | null>(null);
+  const [discountOpen, setDiscountOpen] = useState(false);
   // آخر رقم اتنسخ (علامة ✓ لثانيتين) - the last copied number (a ✓ for 2 seconds)
   const [copied, setCopied] = useState<string | null>(null);
   const copyNumber = (n: string) => {
@@ -221,7 +237,11 @@ export default function InvoiceForm({
   // The method must be ready: cash = the rep's cash box is fine; otherwise a chosen wallet / account with no problem
   const target = t.method && t.method !== "cash" ? targetsFor(options, t.method).find((w) => w.id === draft.target) : null;
   const payReady = !t.method || (t.method === "cash" ? !options.payTargets.cash.problem : !!target && !target.problem);
-  const canSave = !!draft.customer && t.lines.length > 0 && !saving && (draft.pay !== "part" || t.paid > 0) && payReady;
+  // حدود الخصم: أكبر من المسموح = لازم رقم المدير (والسيرفر بيتأكد منه) - discount limits: above = the manager PIN needed
+  const rules = options.rep.discount;
+  const overLimit = t.discount > 0 && (t.discount > rules.maxAmount + 0.001 || t.percent > rules.maxPercent + 0.001);
+  const discountReady = !overLimit || (rules.managerApproval && draft.managerPin.length >= 4);
+  const canSave = !!draft.customer && t.lines.length > 0 && !saving && (draft.pay !== "part" || t.paid > 0) && payReady && discountReady;
 
   return (
     <div className="flex flex-col gap-4 pb-28">
@@ -355,16 +375,118 @@ export default function InvoiceForm({
           </>
         )}
         {t.method === "cash" && options.payTargets.cash.problem && <p className="text-[14px] font-bold text-statusRed">⚠ {options.payTargets.cash.problem}</p>}
-        {options.rep.allowDiscount && (
-          <>
-            <button type="button" onClick={() => setPad(pad === "discount" ? null : "discount")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
-              <span className="text-[16px] text-gray-300">خصم</span>
-              <span className="font-numbers text-[22px] font-extrabold text-white">{draft.discount || "0"}</span>
-            </button>
-            {pad === "discount" && <Keypad compact value={draft.discount} maxLength={6} onChange={(v) => setDraft({ ...draft, discount: v })} />}
-          </>
-        )}
       </div>
+
+      {/* 🏷️ خصم (مقفول لحد ما يتضغط) - the discount card (collapsed until tapped) */}
+      {rules.enabled && (
+        <div className={`${card} flex flex-col gap-3 ${overLimit ? "border-statusRed/60" : t.discount > 0 ? "border-brandOrange/60" : ""}`}>
+          <button type="button" onClick={() => setDiscountOpen(!discountOpen)} className="flex items-center gap-2 text-start">
+            <span className="flex-1 text-[17px] font-extrabold text-white">🏷️ خصم</span>
+            {t.discount > 0 && (
+              <span className="font-numbers text-[18px] font-extrabold text-brandOrange">
+                − {money(t.discount)}
+                {draft.discountMode === "percent" && <span className="text-[14px] text-gray-400"> ({t.discountValue}%)</span>}
+              </span>
+            )}
+            <ChevronDown size={20} className={`text-gray-400 transition-transform ${discountOpen ? "rotate-180" : ""}`} />
+          </button>
+          {discountOpen && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ["amount", "مبلغ ج.م"],
+                    ["percent", "نسبة %"],
+                  ] as ["amount" | "percent", string][]
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, discountMode: m, discount: "" })}
+                    className={`h-12 rounded-xl border text-[16px] font-extrabold ${draft.discountMode === m ? "border-brandOrange bg-brandOrange/15 text-brandOrange" : "border-cardBorder bg-background/60 text-gray-300"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex h-14 items-center gap-2 rounded-2xl border border-cardBorder bg-background/70 px-4 focus-within:border-brandOrange">
+                <input
+                  value={draft.discount}
+                  onChange={(e) => setDraft({ ...draft, discount: e.target.value.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[^\d.]/g, "").slice(0, 7) })}
+                  inputMode="decimal"
+                  placeholder="0"
+                  dir="ltr"
+                  className="flex-1 bg-transparent font-numbers text-[24px] font-extrabold text-white outline-none"
+                />
+                <span className="text-[18px] font-bold text-gray-400">{draft.discountMode === "percent" ? "%" : "ج.م"}</span>
+              </label>
+              {/* أزرار سريعة - quick buttons */}
+              <div className="grid grid-cols-4 gap-2">
+                {(
+                  [
+                    ["percent", 5, "5%"],
+                    ["percent", 10, "10%"],
+                    ["amount", 50, "50 ج.م"],
+                    ["amount", 100, "100 ج.م"],
+                  ] as ["amount" | "percent", number, string][]
+                ).map(([m, v, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, discountMode: m, discount: String(v) })}
+                    className={`h-11 rounded-xl border font-numbers text-[15px] font-bold ${draft.discountMode === m && Number(draft.discount) === v ? "border-brandOrange bg-brandOrange/15 text-brandOrange" : "border-cardBorder bg-background/60 text-gray-200"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* سبب الخصم (اختياري) - the reason (optional) */}
+              <p className="text-[14px] font-bold text-gray-400">سبب الخصم (اختياري)</p>
+              <div className="flex flex-wrap gap-2">
+                {rules.reasons.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, discountReason: draft.discountReason === r ? "" : r })}
+                    className={`h-10 rounded-full border px-4 text-[14px] font-bold ${draft.discountReason === r ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-300"}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={draft.discountNote}
+                onChange={(e) => setDraft({ ...draft, discountNote: e.target.value.slice(0, 80) })}
+                placeholder="تفاصيل السبب (اختياري)"
+                className="h-12 rounded-xl border border-cardBorder bg-background/60 px-4 text-[16px] text-white outline-none focus:border-brandOrange"
+              />
+              <p className="text-[13px] text-gray-500">
+                المسموح: لحد <span className="font-numbers">{rules.maxPercent}%</span> ولحد <span className="font-numbers">{money(rules.maxAmount)}</span> ج.م
+              </p>
+              {/* أكبر من المسموح: الحفظ واقف إلا برقم المدير - above the limit: saving stops unless the manager PIN */}
+              {overLimit && (
+                <div className="flex flex-col gap-2 rounded-xl border border-statusRed/60 bg-statusRed/10 p-3">
+                  <p className="text-[16px] font-extrabold text-statusRed">⚠ الخصم أكبر من المسموح</p>
+                  {rules.managerApproval ? (
+                    <input
+                      value={draft.managerPin}
+                      onChange={(e) => setDraft({ ...draft, managerPin: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="رقم المدير السري للموافقة"
+                      dir="ltr"
+                      className="h-12 rounded-xl border border-cardBorder bg-background/80 px-4 font-numbers text-[18px] text-white outline-none focus:border-statusRed"
+                    />
+                  ) : (
+                    <p className="text-[14px] text-gray-300">قلل الخصم عشان تقدر تحفظ</p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* الملخص - summary */}
       <div className={`${card} flex flex-col gap-1.5 text-[17px]`}>
@@ -380,13 +502,22 @@ export default function InvoiceForm({
         {t.lines.length === 0 && <p className="text-gray-500">لسه مفيش أصناف</p>}
         <hr className="my-1 border-cardBorder" />
         {t.discount > 0 && (
-          <p className="flex justify-between text-gray-300">
-            <span>الخصم</span>
-            <span className="font-numbers">− {money(t.discount)}</span>
-          </p>
+          <>
+            <p className="flex justify-between text-gray-300">
+              <span>الإجمالي قبل الخصم</span>
+              <span className="font-numbers">{money(t.subtotal)}</span>
+            </p>
+            <p className="flex justify-between font-bold text-brandOrange">
+              <span>
+                الخصم{draft.discountMode === "percent" && <span className="font-numbers"> ({t.discountValue}%)</span>}
+                {reasonOf(draft) && <span className="text-[14px] font-normal text-gray-400"> · {reasonOf(draft)}</span>}
+              </span>
+              <span className="font-numbers">− {money(t.discount)}</span>
+            </p>
+          </>
         )}
         <p className="flex justify-between text-[22px] font-extrabold text-white">
-          <span>الإجمالي</span>
+          <span>{t.discount > 0 ? "الإجمالي بعد الخصم" : "الإجمالي"}</span>
           <span className="font-numbers">{money(t.total)}</span>
         </p>
         <p className="flex justify-between text-statusGreen">
@@ -415,6 +546,7 @@ export default function InvoiceForm({
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-cardBorder bg-background/95 backdrop-blur px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-[560px] flex flex-col gap-2">
           {error && <p className="text-center text-[15px] font-bold text-statusRed">{error}</p>}
+          {!error && overLimit && !discountReady && <p className="text-center text-[15px] font-bold text-statusRed">الخصم أكبر من المسموح</p>}
           <button
             type="button"
             disabled={!canSave}

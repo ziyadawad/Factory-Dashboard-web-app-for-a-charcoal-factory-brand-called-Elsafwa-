@@ -19,13 +19,19 @@ const fetcher = async (url: string) => {
 };
 
 // خانة رقم: الصفر "—" باهت، والسالب (مرتجع) أحمر - a number cell: zero is a dimmed "—", negative (returns) in red
-function Cell({ value, strong = false, money = false }: { value: number; strong?: boolean; money?: boolean }) {
+// discount = الخصم تحت المبلغ بخط صغير (لو فيه) - the discount under an amount in small type (when any)
+function Cell({ value, strong = false, money = false, discount = 0 }: { value: number; strong?: boolean; money?: boolean; discount?: number }) {
   if (!value) return <td className="px-2 text-center text-gray-600">—</td>;
   return (
     <td className={`px-2 text-center ${value < 0 ? "text-statusRed" : strong ? "text-brandYellow font-bold" : "text-gray-100"}`}>
       <span dir="ltr" className="font-numbers tabular-nums whitespace-nowrap">
         {money ? formatNumber(Math.round(value)) : formatNumber(value)}
       </span>
+      {discount > 0 && (
+        <span className="block text-[12px] leading-[1.3] text-sky-300 whitespace-nowrap" title="خصم على الفاتورة">
+          🏷️ خصم <span dir="ltr" className="font-numbers">{formatNumber(Math.round(discount))}</span>
+        </span>
+      )}
     </td>
   );
 }
@@ -698,7 +704,7 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
                           <Cell key={i} value={value} />
                         ))}
                         <Cell value={day.packets} strong />
-                        <Cell value={day.amount} money />
+                        <Cell value={day.amount} money discount={day.discount} />
                         <Cell value={day.customers} />
                         <td colSpan={2} className="px-2 border-b border-cardBorder/60 text-[13px] leading-[1.5] text-gray-400 max-w-0">
                           <DayEntered invoices={day.invoices} date={day.date} />
@@ -723,6 +729,11 @@ export default function RepDetailsPanel({ rep, onClose }: { rep: RepSales; onClo
                   </td>
                   <td className="px-2 text-center border-t-2 border-brandOrange/50">
                     <Num value={Math.round(data.total.amount)} className="text-white" />
+                    {(data.total.discount ?? 0) > 0 && (
+                      <span className="block text-[12px] leading-[1.3] text-sky-300 whitespace-nowrap">
+                        🏷️ خصومات <Num value={Math.round(data.total.discount ?? 0)} />
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 text-center border-t-2 border-brandOrange/50">
                     <Num value={data.total.customers} className="text-gray-300" />
@@ -919,7 +930,7 @@ function DayCustomers({ invoices, onOpenInvoice }: { invoices: RepInvoice[]; onO
                 <Cell key={i} value={value} />
               ))}
               <Cell value={inv.packets} strong />
-              <Cell value={inv.amount} money />
+              <Cell value={inv.amount} money discount={inv.discount} />
               <td className="px-2 text-center text-statusRed text-sm">{inv.isReturn ? "مرتجع" : ""}</td>
               <EnteredCell invoice={inv} />
               <OwnerCell names={[inv.owner]} />
@@ -938,7 +949,7 @@ function DayCustomers({ invoices, onOpenInvoice }: { invoices: RepInvoice[]; onO
                 <Cell key={i} value={Math.round(sum((inv) => inv.columns[i]) * 100) / 100} />
               ))}
               <Cell value={Math.round(sum((inv) => inv.packets) * 100) / 100} strong />
-              <Cell value={sum((inv) => inv.amount)} money />
+              <Cell value={sum((inv) => inv.amount)} money discount={sum((inv) => inv.discount ?? 0)} />
               <td className="px-2" />
               <td className="px-2" />
               <OwnerCell names={distinct(list.map((i) => i.owner))} />
@@ -1128,7 +1139,7 @@ function CustomerSales({
                         <Cell key={i} value={v} />
                       ))}
                       <Cell value={day.packets} strong />
-                      <Cell value={day.amount} money />
+                      <Cell value={day.amount} money discount={day.discount} />
                       <Cell value={day.customers} />
                       <td colSpan={2} className="px-2 border-b border-cardBorder/60 text-[13px] leading-[1.5] text-gray-400 max-w-0">
                         <DayEntered invoices={day.invoices} date={day.date} />
@@ -1144,7 +1155,7 @@ function CustomerSales({
                           <Cell key={i} value={v} />
                         ))}
                         <Cell value={inv.packets} strong />
-                        <Cell value={inv.amount} money />
+                        <Cell value={inv.amount} money discount={inv.discount} />
                         <td className="px-2 text-center text-statusRed text-sm">{inv.isReturn ? "مرتجع" : ""}</td>
                         <EnteredCell invoice={inv} />
                         <OwnerCell names={[inv.owner]} />

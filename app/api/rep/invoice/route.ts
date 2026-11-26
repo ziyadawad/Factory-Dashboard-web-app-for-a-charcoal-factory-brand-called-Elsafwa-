@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { repAuth } from "@/lib/rep-auth";
+import { clientIp, repAuth } from "@/lib/rep-auth";
 import { repErrorResponse, repJson } from "@/lib/rep-http";
 import { createInvoice, invoiceReceipt } from "@/lib/rep-sales";
 import { RepInvoiceRequest } from "@/lib/rep-types";
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   if (!rep) return error;
   try {
     const body = (await request.json()) as RepInvoiceRequest;
-    return repJson(await createInvoice(rep, body));
+    return repJson(await createInvoice(rep, body, clientIp(request)));
   } catch (e) {
     return repErrorResponse(e, "invoice");
   }

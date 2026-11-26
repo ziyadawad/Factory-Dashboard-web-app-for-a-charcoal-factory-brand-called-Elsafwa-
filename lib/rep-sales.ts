@@ -7,7 +7,7 @@
 import { dashboardConfig } from "@/config/dashboard.config";
 import { ErpError, ErpUnavailableError, erpPost, erpPostAs, erpToday, salesErpAuth } from "./erp";
 import { redis, redisSettings } from "./redis";
-import { RepConfig } from "./rep-auth";
+import { managerPinOk, managerPinSet, RepConfig } from "./rep-auth";
 import {
   RepCustomer, RepInvoiceRequest, RepNewCustomer, RepOptions, RepPayMethod, RepPayTarget, RepPayTargets, RepProduct, RepProductGroup, RepReceipt, RepToday,
 } from "./rep-types";
@@ -199,7 +199,7 @@ export async function repOptions(rep: RepConfig): Promise<RepOptions> {
     prices(codes), vanStock(rep.warehouse, codes), customers(), recentCustomers(rep).catch(() => []), payTargets(rep),
   ]);
   return {
-    rep: { id: rep.id, name: rep.name, van: rep.van, allowDiscount: !!rep.allowDiscount },
+    rep: { id: rep.id, name: rep.name, van: rep.van, discount: discountRules(rep) },
     payTargets: pay,
     today: erpToday(),
     products: items.map((i) => ({ ...i, rate: priceMap.get(i.code)?.rate ?? null, uom: priceMap.get(i.code)?.uom ?? "", stock: Math.max(0, stock.get(i.code) ?? 0) })),
@@ -440,15 +440,33 @@ function cleanItems(raw: unknown): { code: string; qty: number }[] {
   return Array.from(merged, ([code, qty]) => ({ code, qty }));
 }
 
-export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Promise<{ receipt: RepReceipt; existing: boolean }> {
+// حدود الخصم للمندوب (sales.repApp.discount، والمندوب ممكن يكون ليه حدود لوحده) - the rep's discount limits
+export function discountRules(rep: RepConfig) {
+  const base = app.discount;
+  const own = rep.discount ?? {};
+  return {
+    enabled: own.enabled ?? base.enabled,
+    maxPercent: own.maxPercent ?? base.maxPercent,
+    maxAmount: own.maxAmount ?? base.maxAmount,
+    reasons: base.reasons,
+    managerApproval: managerPinSet(),
+  };
+}
+
+export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest, ip = "unknown"): Promise<{ receipt: RepReceipt; existing: boolean }> {
   const uuid = typeof body.uuid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(body.uuid) ? body.uuid : "";
   if (!uuid) throw new RepError("uuid is required");
   const customer = typeof body.customer === "string" ? body.customer.trim() : "";
   if (!customer) throw new RepError("اختار العميل");
   const items = cleanItems(body.items);
-  const discount = money(Math.max(0, num(body.discount)));
+  const discountMode = body.discountMode === "percent" ? "percent" : "amount";
+  // الرقم اللي اتكتب (جنيه أو %)؛ طلبات قديمة بتبعت discount بس - the typed value; older requests only send discount
+  const discountValue = Math.max(0, num(body.discountValue ?? body.discount));
+  const discountReason = typeof body.discountReason === "string" ? body.discountReason.replace(/\s+/g, " ").trim().slice(0, 120) : "";
   const paidWanted = money(Math.max(0, num(body.paid)));
-  if (discount > 0 && !rep.allowDiscount) throw new RepError("الخصم مش مسموح ليك");
+  const rules = discountRules(rep);
+  if (discountValue > 0 && !rules.enabled) throw new RepError("الخصم مش مسموح ليك");
+  if (discountMode === "percent" && discountValue >= 100) throw new RepError("نسبة الخصم لازم تبقى أقل من 100%");
 
   // اتعملت قبل كده؟ نرجعها زي ما هي - already made? return it as is
   const done = await invoiceByUuid(uuid);
@@ -470,8 +488,24 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
     subtotal += it.qty * price.rate;
   }
   subtotal = money(subtotal);
+  // الخصم بالجنيه والنسبة (السيرفر بيحسبهم من الأسعار، مش من الموبايل) - the discount in EGP and % (from server prices)
+  const discount = money(discountMode === "percent" ? (subtotal * discountValue) / 100 : discountValue);
+  const percent = subtotal > 0 ? (discount / subtotal) * 100 : 0;
   if (discount >= subtotal) throw new RepError("الخصم أكبر من الفاتورة");
+  let approved = false;
+  if (discount > 0 && (discount > rules.maxAmount + 0.001 || percent > rules.maxPercent + 0.001)) {
+    // أكبر من المسموح: لازم رقم المدير - above the limit: the manager PIN is required
+    const pin = typeof body.managerPin === "string" ? body.managerPin : "";
+    if (!pin) throw new RepError(`الخصم أكبر من المسموح (الحد ${rules.maxPercent}% أو ${rules.maxAmount} ج.م)`, 403, { overLimit: true });
+    const check = await managerPinOk(ip, rep.id, pin);
+    if (!check.ok) throw new RepError(check.message ?? "رقم المدير غلط", 403, { overLimit: true, managerPin: false });
+    approved = true;
+  }
   const total = money(subtotal - discount);
+  const discountNote =
+    discount > 0
+      ? ` — خصم ${discountMode === "percent" ? `${discountValue}%` : ""} ${discount} ج.م${discountReason ? ` — سبب الخصم: ${discountReason}` : ""}${approved ? " — بموافقة المدير" : ""}`.replace(/\s+/g, " ")
+      : "";
   if (paidWanted > total) throw new RepError("المدفوع أكبر من الإجمالي");
   // طريقة الدفع قبل الفاتورة: لو المحفظة ملهاش Mode of Payment / حساب، الفاتورة متتعملش خالص (مش تفشل الدفعة بسكات)
   // The payment target before the invoice: a wallet with no Mode of Payment / account stops the invoice (no silent failure)
@@ -496,12 +530,15 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
     update_stock: 1,
     set_warehouse: rep.warehouse,
     items: items.map((it) => ({ item_code: it.code, qty: it.qty, rate: priceMap.get(it.code)!.rate, price_list_rate: priceMap.get(it.code)!.rate, warehouse: rep.warehouse })),
-    remarks: `فاتورة من تطبيق المناديب — ${rep.name} (${rep.van}) ${REF(uuid)}`,
+    remarks: `فاتورة من تطبيق المناديب — ${rep.name} (${rep.van})${discountNote} ${REF(uuid)}`,
     docstatus: 1,
   };
+  // خصم إضافي على Grand Total: نسبة = additional_discount_percentage، مبلغ = discount_amount
+  // An additional discount on the Grand Total: percent = additional_discount_percentage, amount = discount_amount
   if (discount > 0) {
     doc.apply_discount_on = "Grand Total";
-    doc.discount_amount = discount;
+    if (discountMode === "percent") doc.additional_discount_percentage = discountValue;
+    else doc.discount_amount = discount;
   }
   if (rep.salesPerson) doc.sales_team = [{ sales_person: rep.salesPerson, allocated_percentage: 100 }];
 
@@ -555,6 +592,7 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
       items: lines.map((l) => ({ name: String(l.item_name ?? l.item_code), qty: num(l.qty), rate: num(l.rate), amount: num(l.amount) })),
       subtotal: money(num(inv.total)),
       discount: money(num(inv.discount_amount)),
+      discountReason: discountReason || null,
       total: grand,
       paid: paidDone,
       remaining: money(grand - paidDone),
@@ -611,6 +649,8 @@ export async function invoiceReceipt(rep: RepConfig, name: string): Promise<RepR
     items: lines.map((l) => ({ name: String(l.item_name ?? l.item_code), qty: num(l.qty), rate: num(l.rate), amount: num(l.amount) })),
     subtotal: money(num(inv.total)),
     discount: money(num(inv.discount_amount)),
+    // السبب من remarks (اتكتب وقت الحفظ) - the reason from remarks (written when saved)
+    discountReason: /سبب الخصم: ([^—\[\n]+)/.exec(String(inv.remarks ?? ""))?.[1]?.trim() || null,
     total: grand,
     paid: money(grand - outstanding),
     remaining: outstanding,

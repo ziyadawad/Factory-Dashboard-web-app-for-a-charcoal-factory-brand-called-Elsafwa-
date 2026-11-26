@@ -120,6 +120,16 @@ function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: bool
           <Truck size={sizes.vanFontSize + 2} />
           {toEnglishDigits(rep.van)}
         </span>
+        {/* خصومات الشهر على فواتيره (لو فيه) - this month's discounts on his invoices (when any) */}
+        {(rep.monthDiscount ?? 0) > 0 && (
+          <span
+            className={`${pill} border-sky-400/40 bg-sky-400/10 text-sky-300 whitespace-nowrap`}
+            style={{ fontSize: sizes.vanFontSize }}
+            title="خصومات الشهر على فواتير المندوب"
+          >
+            🏷️ خصومات <Num value={Math.round(rep.monthDiscount ?? 0)} className="font-bold" /> ج.م
+          </span>
+        )}
         {rep.isTop && (
           <span className={`${pill} font-bold border-brandYellow/60 bg-brandYellow/15 text-brandYellow`} style={{ fontSize: sizes.vanFontSize }}>
             <Crown size={sizes.vanFontSize + 2} />

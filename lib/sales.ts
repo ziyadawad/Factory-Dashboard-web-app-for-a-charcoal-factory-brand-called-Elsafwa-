@@ -529,9 +529,37 @@ function cachedSection<T extends { month: string }>(key: string, load: (today: s
   };
 }
 
+// خصومات الشهر لكل عربية (الخصم الإضافي على الفواتير المعتمدة) - this month's discounts per van (additional discount)
+async function loadRepDiscounts(today: string): Promise<Map<string, number>> {
+  const child = "`tabSales Invoice Item`";
+  const rows = await getList<{ name: string; warehouse: string; discount_amount: number }>({
+    filters: [
+      ["docstatus", "=", 1],
+      ["posting_date", ">=", `${today.slice(0, 7)}-01`],
+      ["posting_date", "<=", today],
+      ["discount_amount", "!=", 0],
+      ["Sales Invoice Item", "warehouse", "in", sales.reps.map((r) => r.warehouse)],
+    ],
+    fields: ["name", "discount_amount", `${child}.warehouse as warehouse`],
+    group_by: `name, ${child}.warehouse`,
+  });
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.warehouse, (out.get(r.warehouse) ?? 0) + (Number(r.discount_amount) || 0));
+  return out;
+}
+
 export const salesRepsSection = cachedSection("sales reps", async (today) => {
-  const [rows, debts] = await Promise.all([loadRepRows(today), repDebtsOrNull(today)]);
-  return repsFrom(rows, today, debts);
+  const [rows, debts, discounts] = await Promise.all([
+    loadRepRows(today),
+    repDebtsOrNull(today),
+    loadRepDiscounts(today).catch((error) => {
+      console.error("[erp] rep discounts failed:", error instanceof Error ? error.message : error);
+      return null;
+    }),
+  ]);
+  const result = repsFrom(rows, today, debts);
+  result.reps.forEach((r, i) => (r.monthDiscount = discounts ? money(discounts.get(sales.reps[i].warehouse) ?? 0) : null));
+  return result;
 });
 export const distributorsSection = cachedSection("distributors", async (today) =>
   distributorsFrom(await loadDistributorRows(today), today)
@@ -546,6 +574,7 @@ type DetailRow = {
   posting_date: string;
   is_return: number;
   grand_total: number;
+  discount_amount: number | null;
   item_code: string | null;
   stock_qty: number | null;
   owner: string | null;
@@ -569,6 +598,7 @@ async function loadDetailRows(warehouse: string, from: string, to: string): Prom
       "posting_date",
       "is_return",
       "grand_total",
+      "discount_amount",
       "owner",
       "creation",
       `${child}.item_code as item_code`,
@@ -618,6 +648,7 @@ function detailsFrom(
         columns: blank(),
         packets: 0,
         amount: money(row.grand_total ?? 0),
+        discount: money(row.discount_amount ?? 0),
         ...entered(row, date),
         date,
         touches: false,
@@ -640,7 +671,7 @@ function detailsFrom(
     if (!invoice.touches || !invoice.date.startsWith(month)) continue;
     let day = days.get(invoice.date);
     if (!day) {
-      day = { date: invoice.date, columns: blank(), packets: 0, amount: 0, customers: 0, invoices: [] };
+      day = { date: invoice.date, columns: blank(), packets: 0, amount: 0, discount: 0, customers: 0, invoices: [] };
       days.set(invoice.date, day);
     }
     day.invoices.push({
@@ -650,6 +681,7 @@ function detailsFrom(
       columns: invoice.columns,
       packets: invoice.packets,
       amount: invoice.amount,
+      discount: invoice.discount,
       creation: invoice.creation,
       owner: invoice.owner,
       lateDays: invoice.lateDays,
@@ -657,6 +689,7 @@ function detailsFrom(
     invoice.columns.forEach((value, i) => (day!.columns[i] += value));
     day.packets += invoice.packets;
     day.amount += invoice.amount;
+    day.discount = (day.discount ?? 0) + (invoice.discount ?? 0);
   }
 
   const list = Array.from(days.values())
@@ -665,6 +698,7 @@ function detailsFrom(
       columns: day.columns.map(round),
       packets: round(day.packets),
       amount: money(day.amount),
+      discount: money(day.discount ?? 0),
       // العملاء = عدد العملاء المختلفين في فواتير البيع (من غير المرتجعات) - distinct customers on sale invoices
       customers: new Set(day.invoices.filter((inv) => !inv.isReturn).map((inv) => inv.customer)).size,
       invoices: day.invoices.map((inv) => ({ ...inv, columns: inv.columns.map(round), packets: round(inv.packets) })),
@@ -688,6 +722,7 @@ function detailsFrom(
       packets: list.reduce((sum, d) => sum + d.packets, 0),
       amount: money(list.reduce((sum, d) => sum + d.amount, 0)),
       customers: list.reduce((sum, d) => sum + d.customers, 0),
+      discount: money(list.reduce((sum, d) => sum + (d.discount ?? 0), 0)),
     },
     debt,
   };

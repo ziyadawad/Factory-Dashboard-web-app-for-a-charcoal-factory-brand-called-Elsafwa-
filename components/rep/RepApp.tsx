@@ -9,7 +9,7 @@ import { LogOut, RefreshCw } from "lucide-react";
 import OperatorShell from "../operator/OperatorShell";
 import { RepOptions, RepReceipt, RepToday } from "@/lib/rep-types";
 import { dropQueued, flushQueue, newUuid, putQueued, QueuedInvoice, queued } from "@/lib/rep-queue";
-import InvoiceForm, { Draft, emptyDraft, methodText, totalsOf } from "./InvoiceForm";
+import InvoiceForm, { Draft, emptyDraft, methodText, reasonOf, totalsOf } from "./InvoiceForm";
 import { PrinterSettings, ReceiptSheet } from "./Printing";
 import { money, repFetch, RepFetchError } from "./api";
 
@@ -190,7 +190,7 @@ export default function RepApp() {
         const saved = window.localStorage.getItem(OPTIONS_KEY);
         const old = saved ? (JSON.parse(saved) as RepOptions) : null;
         // نسخة قديمة من قبل طرق الدفع متتستخدمش - a copy saved before payment methods existed is ignored
-        if (old?.payTargets && old.areas && old.customerTypes) setOptions((cur) => cur ?? old);
+        if (old?.payTargets && old.areas && old.customerTypes && old.rep?.discount) setOptions((cur) => cur ?? old);
       } catch {}
       setOptionsError(e instanceof Error ? e.message : "حصلت مشكلة");
     }
@@ -251,6 +251,10 @@ export default function RepApp() {
       payTarget: t.method && t.method !== "cash" ? draft.target : null,
       payRef: t.method && t.method !== "cash" ? draft.payRef.trim() || null : null,
       discount: t.discount,
+      discountMode: draft.discountMode,
+      discountValue: t.discountValue,
+      discountReason: t.discount > 0 ? reasonOf(draft) || null : null,
+      managerPin: draft.managerPin || null,
       confirmDuplicate,
       createdAt: new Date().toISOString(),
     };
@@ -266,6 +270,9 @@ export default function RepApp() {
     } catch (e) {
       if (e instanceof RepFetchError && e.status === 409 && typeof e.body.duplicate === "string") {
         setDuplicate({ message: e.message, uuid: request.uuid });
+      } else if (e instanceof RepFetchError && e.queueable && request.managerPin) {
+        // موافقة المدير لازم تتشيك على السيرفر دلوقتي (رقمه مش بيتحفظ على الموبايل) - the manager PIN is never queued
+        setSaveError("موافقة المدير على الخصم محتاجة نت — جرب تاني لما النت يرجع");
       } else if (e instanceof RepFetchError && e.queueable) {
         // ERPNext مش بيرد: نحفظها على الموبايل ونطبع مؤقتة - ERPNext down: keep it on the phone and print a temporary one
         const { date, time } = nowCairo();
@@ -281,6 +288,7 @@ export default function RepApp() {
           items: t.lines.map((l) => ({ name: l.name, qty: l.qty, rate: l.rate, amount: l.amount })),
           subtotal: t.subtotal,
           discount: t.discount,
+          discountReason: t.discount > 0 ? reasonOf(draft) || null : null,
           total: t.total,
           paid: t.paid,
           remaining: t.remaining,

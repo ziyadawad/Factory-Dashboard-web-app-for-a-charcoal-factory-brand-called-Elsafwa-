@@ -924,14 +924,16 @@ export const dashboardConfig = {
     // cashAccount = حساب بعينه بدل حساب طريقة الدفع (فاضي = الحساب الافتراضي لطريقة الدفع في الشركة)
     // The "فواتير المناديب" app (/rep) also uses: id = the rep's key in REP_PINS (Vercel), salesPerson = the ERPNext
     // Sales Person (empty = no Sales Team; the invoice still counts for him by the van warehouse, like the dashboard),
-    // allowDiscount = may give a discount, modeOfPayment = the rep's cash box Mode of Payment for the paid part (empty =
+    // discount = حدود خصم للمندوب ده بس (اختياري، بيغطي على sales.repApp.discount) مثلا discount: { maxPercent: 15 }
+    // discount = this rep's own discount limits (optional, overrides sales.repApp.discount), e.g. { maxPercent: 15 }
+    // modeOfPayment = the rep's cash box Mode of Payment for the paid part (empty =
     // repApp.modeOfPayment), cashAccount = a specific account instead (empty = the Mode of Payment's company account)
     reps: [
-      { id: "ibrahim", name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC", salesPerson: "إبراهيم وصفى", modeOfPayment: "خزنة ابراهيم وصفى", allowDiscount: false, cashAccount: "" },
-      { id: "karim", name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC", salesPerson: "", modeOfPayment: "خزنة كريم عوض", allowDiscount: false, cashAccount: "" },
+      { id: "ibrahim", name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC", salesPerson: "إبراهيم وصفى", modeOfPayment: "خزنة ابراهيم وصفى", cashAccount: "" },
+      { id: "karim", name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC", salesPerson: "", modeOfPayment: "خزنة كريم عوض", cashAccount: "" },
       // مفيش "خزنة اسلام عوض" في ERPNext لسه: المدفوع بيروح لـ repApp.modeOfPayment - no cash box yet: uses repApp.modeOfPayment
-      { id: "islam", name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC", salesPerson: "", modeOfPayment: "", allowDiscount: false, cashAccount: "" },
-      { id: "mostafa", name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC", salesPerson: "", modeOfPayment: "خزنة مصطفي اليمني", allowDiscount: false, cashAccount: "" },
+      { id: "islam", name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC", salesPerson: "", modeOfPayment: "", cashAccount: "" },
+      { id: "mostafa", name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC", salesPerson: "", modeOfPayment: "خزنة مصطفي اليمني", cashAccount: "" },
       // تارجت شهر معين لمندوب: monthTargets: { "2026-10": 1200 } - a month-specific target for a rep
     ] as {
       id: string;
@@ -942,7 +944,7 @@ export const dashboardConfig = {
       monthTargets?: Record<string, number>;
       salesPerson?: string;
       modeOfPayment?: string;
-      allowDiscount?: boolean;
+      discount?: { enabled?: boolean; maxPercent?: number; maxAmount?: number };
       cashAccount?: string;
     }[],
 
@@ -991,6 +993,20 @@ export const dashboardConfig = {
       recentCustomers: 15, // عملاء المندوب الأخيرين فوق القايمة - the rep's recent customers on top
       cacheMinutes: 5, // العملاء والأسعار بيتجابوا مرة كل 5 دقايق بالكتير - customers and prices at most every 5 min
       thanks: "شكراً لتعاملكم",
+      // ===== الخصم في تطبيق المناديب =====
+      // enabled = المندوب يقدر يعمل خصم، maxPercent = أكبر نسبة من الفاتورة، maxAmount = أكبر مبلغ بالجنيه (الاتنين لازم
+      // يتحققوا). أكبر من الحد = "الخصم أكبر من المسموح" والحفظ بيقف، إلا لو المدير كتب رقمه السري (MANAGER_PIN في
+      // Vercel). الخصم بيتسجل على الفاتورة في ERPNext كخصم إضافي على Grand Total، والسبب في remarks.
+      // لمندوب لوحده: discount جوه sales.reps (مثلا { maxPercent: 15 })
+      // Rep app discount: enabled, maxPercent of the invoice, maxAmount in EGP (both must hold). Above the limit =
+      // "الخصم أكبر من المسموح" and saving stops, unless the manager enters MANAGER_PIN (Vercel). Recorded in ERPNext as
+      // an additional discount on the Grand Total, the reason in remarks. Per rep: `discount` inside sales.reps
+      discount: {
+        enabled: true,
+        maxPercent: 10,
+        maxAmount: 500,
+        reasons: ["عميل جديد", "كمية كبيرة", "عرض", "أخرى"], // أزرار سبب الخصم - the reason chips
+      },
     },
 
     // الموزعين: سحب كل موزع = فواتير البيع بتاعته (Customer). customer = الـ ID بتاع العميل في ERPNext بالظبط

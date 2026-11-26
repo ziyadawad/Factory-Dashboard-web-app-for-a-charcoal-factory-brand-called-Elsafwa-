@@ -34,7 +34,9 @@ export interface RepInfo {
   id: string;
   name: string;
   van: string;
-  allowDiscount: boolean;
+  // حدود الخصم للمندوب ده، وmanagerApproval = فيه MANAGER_PIN (المدير يوافق على أكبر من الحد)
+  // This rep's discount limits; managerApproval = MANAGER_PIN is set (the manager may approve above the limit)
+  discount: { enabled: boolean; maxPercent: number; maxAmount: number; reasons: string[]; managerApproval: boolean };
 }
 
 // طريقة دفع: كاش (خزنة المندوب) / فودافون كاش (محفظة) / انستاباي (حساب) - a payment method
@@ -80,7 +82,11 @@ export interface RepInvoiceRequest {
   payMethod?: RepPayMethod; // لو paid > 0 - when paid > 0
   payTarget?: string | null; // id المحفظة / الحساب (فودافون كاش / انستاباي) - the wallet / account id
   payRef?: string | null; // رقم العملية (اختياري) - the transaction number (optional)
-  discount: number;
+  discount: number; // الخصم بالجنيه (للمراجعة، السيرفر بيحسبه تاني) - the discount in EGP (the server recomputes it)
+  discountMode?: "amount" | "percent";
+  discountValue?: number; // الرقم اللي اتكتب (جنيه أو %) - the typed value (EGP or %)
+  discountReason?: string | null;
+  managerPin?: string | null; // موافقة المدير على خصم أكبر من الحد - the manager's approval above the limit
   confirmDuplicate?: boolean;
   createdAt: string; // ISO، وقت ما اتعملت على الموبايل - when it was made on the phone
 }
@@ -105,6 +111,7 @@ export interface RepReceipt {
   items: RepReceiptItem[];
   subtotal: number;
   discount: number;
+  discountReason?: string | null;
   total: number;
   paid: number;
   remaining: number;

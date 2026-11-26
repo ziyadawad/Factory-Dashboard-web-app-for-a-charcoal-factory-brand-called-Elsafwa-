@@ -459,6 +459,7 @@ export interface RepSales {
   lastMonthPackets: number; // الشهر اللي فات - last month
   isTop: boolean; // الأول في المبيعات - most packets this month
   debt: RepDebtSummary | null; // المديونية برّه (كل الفواتير المفتوحة، أي تاريخ) - outstanding debt (all open invoices, any date)
+  monthDiscount?: number | null; // خصومات الشهر على فواتيره ج.م (null = الطلب فشل) - this month's discounts (null = failed)
 }
 
 // مديونية المندوب على الكارت - a rep's outstanding debt on the card
@@ -536,6 +537,7 @@ export interface RepInvoice {
   columns: number[];
   packets: number;
   amount: number;
+  discount?: number; // الخصم الإضافي على الفاتورة ج.م - the invoice's additional discount (EGP)
   creation: string; // وقت التسجيل "2026-11-15 09:42" - when it was entered
   owner: string; // سجّلها (الاسم الكامل) - entered by (full name)
   lateDays: number; // اتسجلت بعد تاريخها بكام يوم - days between posting_date and creation
@@ -546,6 +548,7 @@ export interface RepDay {
   columns: number[];
   packets: number;
   amount: number;
+  discount?: number; // خصومات اليوم - the day's discounts
   customers: number;
   invoices: RepInvoice[];
 }
@@ -559,7 +562,7 @@ export interface RepDetails {
   target: number;
   columns: string[];
   days: RepDay[]; // الأحدث فوق - newest first
-  total: { columns: number[]; packets: number; amount: number; customers: number };
+  total: { columns: number[]; packets: number; amount: number; customers: number; discount?: number };
   debt: RepDebt | null; // null = طلب المديونية فشل - the debt request failed
 }
 

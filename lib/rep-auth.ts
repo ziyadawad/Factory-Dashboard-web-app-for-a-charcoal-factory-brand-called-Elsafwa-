@@ -108,6 +108,19 @@ export async function pinLocked(ip: string, id: string): Promise<boolean> {
   return mine >= app.pinMaxTries || all >= GLOBAL_MAX_FAILS;
 }
 
+// ===== رقم المدير (موافقة على خصم أكبر من الحد): MANAGER_PIN في Vercel، بنفس حد الغلطات =====
+// The manager PIN (approves a discount above the limit): MANAGER_PIN in Vercel, with the same wrong-try limit
+export const managerPinSet = () => /^\d{4,8}$/.test((process.env.MANAGER_PIN ?? "").trim());
+export async function managerPinOk(ip: string, repId: string, given: string): Promise<{ ok: boolean; message: string | null }> {
+  const pin = (process.env.MANAGER_PIN ?? "").trim();
+  if (!managerPinSet()) return { ok: false, message: "رقم المدير (MANAGER_PIN) مش متظبط على السيرفر" };
+  const key = `elsafwa:rep:mgrfail:${ip}:${repId}`;
+  if ((await count(key, false)) >= app.pinMaxTries) return { ok: false, message: `رقم المدير غلط كتير — استنى ${app.pinLockMinutes} دقيقة` };
+  if (same(given.trim(), pin)) return { ok: true, message: null };
+  const left = Math.max(0, app.pinMaxTries - (await count(key, true)));
+  return { ok: false, message: left > 0 ? `رقم المدير غلط — فاضل ${left} محاولات` : `رقم المدير غلط كتير — استنى ${app.pinLockMinutes} دقيقة` };
+}
+
 export async function pinFailed(ip: string, id: string): Promise<number> {
   const [mine] = await Promise.all([count(keyOf(ip, id), true), count(GLOBAL_KEY, true)]);
   return Math.max(0, app.pinMaxTries - mine);

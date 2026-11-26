@@ -354,10 +354,10 @@ export async function renderReceipt(r: RepReceipt, paper: PaperWidth): Promise<H
   }
   line();
   if (r.discount > 0) {
-    row("قبل الخصم", nf(r.subtotal), 19);
-    row("الخصم", nf(r.discount), 19);
+    row("الإجمالي قبل الخصم", nf(r.subtotal), 19);
+    row(r.discountReason ? `الخصم (${r.discountReason})` : "الخصم", `− ${nf(r.discount)}`, 19, 700);
   }
-  row("الإجمالي", `${nf(r.total)} ج.م`, 24, 800);
+  row(r.discount > 0 ? "الإجمالي بعد الخصم" : "الإجمالي", `${nf(r.total)} ج.م`, 24, 800);
   row("المدفوع", nf(r.paid), 20);
   // طريقة الدفع (+ المحفظة / الحساب ورقم العملية) - the payment method (+ wallet / account and the transaction number)
   if (r.paymentMethod) {
