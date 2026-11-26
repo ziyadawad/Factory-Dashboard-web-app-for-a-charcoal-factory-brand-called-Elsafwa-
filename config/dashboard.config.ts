@@ -913,13 +913,58 @@ export const dashboardConfig = {
     // (warehouse في سطور الفاتورة)، لأن Sales Person في الفواتير مش متسجل بانتظام
     // name = اسمه على الشاشة، van = اسم العربية، warehouse = اسم المخزن بالظبط زي ERPNext، target = تارجت مختلف (اختياري)
     // Reps: an invoice counts for the rep whose van warehouse it was sold from (Sales Person is not filled reliably)
+    // تطبيق "فواتير المناديب" (/rep) كمان بيستخدم: id = مفتاح المندوب في REP_PINS (Vercel)، salesPerson = اسم Sales Person
+    // في ERPNext (فاضي = من غير Sales Team، الفاتورة بتتحسب له بمخزن العربية زي الداشبورد)، allowDiscount = يقدر يعمل خصم،
+    // modeOfPayment = خزنة المندوب في ERPNext (Mode of Payment) اللي المدفوع بيدخلها (فاضي = repApp.modeOfPayment)،
+    // cashAccount = حساب بعينه بدل حساب طريقة الدفع (فاضي = الحساب الافتراضي لطريقة الدفع في الشركة)
+    // The "فواتير المناديب" app (/rep) also uses: id = the rep's key in REP_PINS (Vercel), salesPerson = the ERPNext
+    // Sales Person (empty = no Sales Team; the invoice still counts for him by the van warehouse, like the dashboard),
+    // allowDiscount = may give a discount, modeOfPayment = the rep's cash box Mode of Payment for the paid part (empty =
+    // repApp.modeOfPayment), cashAccount = a specific account instead (empty = the Mode of Payment's company account)
     reps: [
-      { name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC" },
-      { name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC" },
-      { name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC" },
-      { name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC" },
+      { id: "ibrahim", name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC", salesPerson: "إبراهيم وصفى", modeOfPayment: "خزنة ابراهيم وصفى", allowDiscount: false, cashAccount: "" },
+      { id: "karim", name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC", salesPerson: "", modeOfPayment: "خزنة كريم عوض", allowDiscount: false, cashAccount: "" },
+      // مفيش "خزنة اسلام عوض" في ERPNext لسه: المدفوع بيروح لـ repApp.modeOfPayment - no cash box yet: uses repApp.modeOfPayment
+      { id: "islam", name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC", salesPerson: "", modeOfPayment: "", allowDiscount: false, cashAccount: "" },
+      { id: "mostafa", name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC", salesPerson: "", modeOfPayment: "خزنة مصطفي اليمني", allowDiscount: false, cashAccount: "" },
       // تارجت شهر معين لمندوب: monthTargets: { "2026-10": 1200 } - a month-specific target for a rep
-    ] as { name: string; van: string; warehouse: string; target?: number; monthTargets?: Record<string, number> }[],
+    ] as {
+      id: string;
+      name: string;
+      van: string;
+      warehouse: string;
+      target?: number;
+      monthTargets?: Record<string, number>;
+      salesPerson?: string;
+      modeOfPayment?: string;
+      allowDiscount?: boolean;
+      cashAccount?: string;
+    }[],
+
+    // ===== تطبيق "📱 فواتير المناديب" (/rep): المندوب بيعمل فاتورة بيع من الموبايل ويطبعها على طابعة حرارية =====
+    // الدخول: المندوب + رقم سري 4 أرقام من REP_PINS (JSON في Vercel: {"karim":"1234",...})، والكتابة في ERPNext بيوزر
+    // لوحده SALES_API_KEY / SALES_API_SECRET (Sales User + Accounts User + Stock User). الفاتورة: set_warehouse = عربية
+    // المندوب، update_stock = 1، السعر من priceList (السيرفر بيحسبه، مش الموبايل)، والمدفوع = Payment Entry على الفاتورة
+    // The rep app: login = rep + a 4-digit PIN from REP_PINS (JSON in Vercel); writes use a dedicated ERPNext user
+    // (SALES_API_KEY / SALES_API_SECRET). Invoice: set_warehouse = the rep's van, update_stock = 1, rates from priceList
+    // (computed on the server, never trusted from the phone); the paid part = a Payment Entry against the invoice
+    repAppUrl: "https://elsafwadashboard.vercel.app/rep",
+    priceList: "Standard Selling", // قايمة الأسعار في ERPNext بالظبط - the ERPNext Price List, spelled exactly
+    repApp: {
+      company: "ALSafwa Coal", // الشركة في ERPNext - the ERPNext company
+      companyName: "مصنع الصفوة للفحم", // الاسم على الفاتورة المطبوعة - the name on the printed receipt
+      modeOfPayment: "Cash", // طريقة الدفع للمدفوع لو المندوب ملوش خزنة (Mode of Payment) - the fallback Mode of Payment
+      customerGroup: "", // مجموعة العميل الجديد (فاضي = الافتراضي في Selling Settings) - new customer group (empty = default)
+      territory: "", // منطقة العميل الجديد (فاضي = الافتراضي) - new customer territory (empty = default)
+      sessionDays: 30, // الدخول بيفضل 30 يوم - the login lasts 30 days
+      pinMaxTries: 5, // رقم غلط 5 مرات = قفل - 5 wrong PINs = locked
+      pinLockMinutes: 15,
+      duplicateMinutes: 2, // نفس المندوب + العميل + الأصناف + الإجمالي خلال دقيقتين = "متأكد؟" - same invoice within 2 min = confirm
+      quickQty: [5, 10, 20], // أزرار الكمية السريعة - quick quantity buttons
+      recentCustomers: 15, // عملاء المندوب الأخيرين فوق القايمة - the rep's recent customers on top
+      cacheMinutes: 5, // العملاء والأسعار بيتجابوا مرة كل 5 دقايق بالكتير - customers and prices at most every 5 min
+      thanks: "شكراً لتعاملكم",
+    },
 
     // الموزعين: سحب كل موزع = فواتير البيع بتاعته (Customer). customer = الـ ID بتاع العميل في ERPNext بالظبط
     // الترتيب من اليمين: featured = العمود الأول (الكارت الكبير بطول الصفحة)، fullHeight = عمود لوحده بطول الصفحة،

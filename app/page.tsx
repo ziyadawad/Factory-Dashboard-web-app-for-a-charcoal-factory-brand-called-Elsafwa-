@@ -24,7 +24,7 @@ import WhatsAppPage from "@/components/whatsapp/WhatsAppPage";
 import WaSpotlight from "@/components/whatsapp/WaSpotlight";
 import SuppliersPage from "@/components/SuppliersPage";
 import SupplierDetailsPanel from "@/components/SupplierDetailsPanel";
-import OperatorQrButton from "@/components/OperatorQrButton";
+import OperatorQrButton, { REP_APP } from "@/components/OperatorQrButton";
 import { useLiveKilnExits, withLiveExits } from "@/lib/kiln-live";
 import { ALERTS_ENABLED, sameExit, useChime, useKilnExitAlerts } from "@/lib/kiln-alert";
 import { useWhatsAppAlerts, WaSpotGroup } from "@/lib/wa-alert";
@@ -122,6 +122,8 @@ export default function Dashboard() {
     return withLiveExits(base, liveExits.exits);
   }, [productionRaw, productionError, liveExits.exits]);
   const [operatorQrOpen, setOperatorQrOpen] = useState(false);
+  // QR تطبيق فواتير المناديب (صفحة مبيعات المناديب) - the rep invoices app QR (reps sales page)
+  const [repQrOpen, setRepQrOpen] = useState(false);
   // لوحة "📊 ملخص الشهر" (زرار في هيدر صفحة الإنتاج) - the "📊 ملخص الشهر" panel (production page header button)
   const [monthSummaryOpen, setMonthSummaryOpen] = useState(false);
   // صفحة تانية = الـ QR واللوحة يتقفلوا (عشان التقليب ميفضلش واقف) - another page closes them (rotation never stays paused)
@@ -194,7 +196,7 @@ export default function Dashboard() {
     });
   }, []);
   const paused =
-    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || supplierName !== null || operatorQrOpen || monthSummaryOpen;
+    salesDetailsOpen || attendanceSection !== null || treasuryOpen || wallet !== null || stockItem !== null || productionTarget !== null || activityDetailsOpen || charityTarget !== null || waChatOpen || supplierName !== null || operatorQrOpen || repQrOpen || monthSummaryOpen;
 
   // تنبيهات صغيرة في الركن وقت ما الصفحة متثبتة (📌) - corner toasts while page is pinned
   const [toasts, setToasts] = useState<AlertToast[]>([]);
@@ -578,6 +580,7 @@ export default function Dashboard() {
             )}
             {/* صفحة الإنتاج: "📱 شاشة الأوبريتر" وتحته "📊 ملخص الشهر" (فوق بعض، عشان الساعة والتاريخ يفضلوا باينين)
                 The production page: the operator button with the month summary under it (stacked, so the clock stays visible) */}
+            {pageId === "sales" && <OperatorQrButton open={repQrOpen} setOpen={setRepQrOpen} app={REP_APP} />}
             {pageId === "production" && (
               <div className="flex flex-col items-stretch gap-1">
                 <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />

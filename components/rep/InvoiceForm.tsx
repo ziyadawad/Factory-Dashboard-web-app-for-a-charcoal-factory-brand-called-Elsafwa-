@@ -1,0 +1,356 @@
+"use client";
+
+// "فاتورة جديدة": العميل (بحث، عملاء المندوب الأول، عميل جديد)، الأصناف كروت كبيرة (+/− وكميات سريعة، مش أكتر من رصيد
+// العربية)، الدفع (كاش / آجل / جزء)، خصم لو مسموح، والملخص. كله بالضغط، والكتابة في البحث بس
+// "فاتورة جديدة": customer (search, the rep's recent first, new customer), big item cards (+/− and quick quantities,
+// never above the van stock), payment (cash / credit / part), a discount when allowed, and the summary. All taps; typing
+// only in the search
+import { useEffect, useMemo, useState } from "react";
+import { Check, Minus, Plus, Search, UserPlus, X } from "lucide-react";
+import Keypad from "../operator/Keypad";
+import { RepCustomer, RepOptions, RepProduct, RepProductGroup } from "@/lib/rep-types";
+import { money, repFetch, RepFetchError } from "./api";
+
+export type Cart = Record<string, number>; // item code → qty
+export type PayMode = "cash" | "credit" | "part";
+export type Draft = { customer: RepCustomer | null; cart: Cart; pay: PayMode; partPaid: string; discount: string };
+export const emptyDraft = (): Draft => ({ customer: null, cart: {}, pay: "cash", partPaid: "", discount: "" });
+
+const GROUPS: { id: RepProductGroup; label: string }[] = [
+  { id: "packets", label: "باكتات عادي" },
+  { id: "cartons", label: "كامل (كراتين)" },
+  { id: "sacks", label: "شكاير" },
+];
+
+// الإجماليات من الأسعار اللي على الموبايل (السيرفر بيحسبها تاني من قايمة الأسعار) - totals from the phone's prices
+export function totalsOf(draft: Draft, products: RepProduct[]) {
+  const byCode = new Map(products.map((p) => [p.code, p]));
+  const lines = Object.entries(draft.cart)
+    .filter(([, q]) => q > 0)
+    .map(([code, qty]) => {
+      const p = byCode.get(code);
+      const rate = p?.rate ?? 0;
+      return { code, name: p?.name ?? code, qty, rate, amount: Math.round(qty * rate * 100) / 100 };
+    });
+  const subtotal = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+  const discount = Math.min(subtotal, Math.max(0, Number(draft.discount) || 0));
+  const total = Math.round((subtotal - discount) * 100) / 100;
+  const paid = draft.pay === "cash" ? total : draft.pay === "credit" ? 0 : Math.min(total, Math.max(0, Number(draft.partPaid) || 0));
+  return { lines, subtotal, discount, total, paid, remaining: Math.round((total - paid) * 100) / 100 };
+}
+
+function CustomerPicker({ options, onPick, onClose }: { options: RepOptions; onPick: (c: RepCustomer) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const norm = (t: string) => t.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, "").toLowerCase();
+  const byId = useMemo(() => new Map(options.customers.map((c) => [c.id, c])), [options.customers]);
+  const recent = options.recent.map((id) => byId.get(id)).filter(Boolean) as RepCustomer[];
+  const found = useMemo(() => {
+    const key = norm(q);
+    if (!key) return [];
+    return options.customers.filter((c) => norm(c.name).includes(key) || norm(c.id).includes(key) || (c.phone ?? "").includes(q.trim())).slice(0, 60);
+  }, [q, options.customers]);
+
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await repFetch<{ customer: RepCustomer }>("/api/rep/customer", { json: { name, phone } });
+      options.customers.unshift(r.customer);
+      onPick(r.customer);
+    } catch (e) {
+      const existing = e instanceof RepFetchError ? (e.body.customer as RepCustomer | undefined) : undefined;
+      setError(e instanceof Error ? e.message : "حصلت مشكلة");
+      if (existing) setTimeout(() => onPick(existing), 1200);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const Row = ({ c }: { c: RepCustomer }) => (
+    <button type="button" onClick={() => onPick(c)} className="flex w-full items-center gap-3 rounded-xl border border-cardBorder bg-card/80 px-4 py-3 text-start active:bg-white/10">
+      <span className="flex-1 min-w-0">
+        <span className="block truncate text-[18px] font-bold text-white">{c.name}</span>
+        {c.phone && <span dir="ltr" className="block text-[14px] font-numbers text-gray-400 text-end">{c.phone}</span>}
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background" role="dialog" aria-modal="true">
+      <div className="mx-auto flex w-full max-w-[560px] flex-1 min-h-0 flex-col gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
+        <div className="flex items-center gap-2">
+          <h2 className="flex-1 text-[22px] font-extrabold text-white">{creating ? "عميل جديد" : "اختار العميل"}</h2>
+          <button type="button" onClick={onClose} className="rounded-xl border border-cardBorder p-2 text-gray-300" aria-label="إغلاق">
+            <X size={24} />
+          </button>
+        </div>
+        {creating ? (
+          <div className="flex flex-col gap-3">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم العميل" className="h-14 rounded-2xl border border-cardBorder bg-card px-4 text-[18px] text-white outline-none focus:border-brandOrange" />
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="الموبايل (اختياري)" inputMode="tel" dir="ltr" className="h-14 rounded-2xl border border-cardBorder bg-card px-4 text-[18px] text-white font-numbers outline-none focus:border-brandOrange" />
+            {error && <p className="text-[16px] font-bold text-statusRed">{error}</p>}
+            <button type="button" disabled={busy || name.trim().length < 2} onClick={create} className="h-14 rounded-2xl bg-statusGreen text-black text-[18px] font-extrabold disabled:opacity-50">
+              {busy ? "بيسجل…" : "سجّل العميل"}
+            </button>
+            <button type="button" onClick={() => setCreating(false)} className="text-[16px] font-bold text-gray-400 underline underline-offset-4">
+              رجوع للقايمة
+            </button>
+          </div>
+        ) : (
+          <>
+            <label className="flex h-14 items-center gap-2 rounded-2xl border border-cardBorder bg-card px-4 focus-within:border-brandOrange">
+              <Search size={20} className="text-gray-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الموبايل" className="flex-1 bg-transparent text-[18px] text-white outline-none" autoFocus />
+            </label>
+            <button type="button" onClick={() => (setCreating(true), setName(q))} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-statusGreen/60 text-[17px] font-bold text-statusGreen">
+              <UserPlus size={20} /> عميل جديد
+            </button>
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pb-4">
+              {q.trim() ? (
+                found.length ? found.map((c) => <Row key={c.id} c={c} />) : <p className="py-6 text-center text-gray-500">مفيش عميل بالاسم ده</p>
+              ) : (
+                <>
+                  {recent.length > 0 && <p className="text-[14px] font-bold text-gray-400">عملائك الأخيرين</p>}
+                  {recent.map((c) => (
+                    <Row key={c.id} c={c} />
+                  ))}
+                  <p className="pt-2 text-[14px] text-gray-500">اكتب في البحث عشان تلاقي باقي العملاء ({options.customers.length})</p>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProductCard({ p, qty, onQty, quick }: { p: RepProduct; qty: number; onQty: (q: number) => void; quick: number[] }) {
+  const max = Math.floor(p.stock);
+  const disabled = p.rate === null || max <= 0;
+  const set = (q: number) => onQty(Math.max(0, Math.min(max, q)));
+  return (
+    <div className={`rounded-2xl border p-3 flex flex-col gap-2 ${qty > 0 ? "border-brandOrange bg-brandOrange/10" : "border-cardBorder bg-card/80"} ${disabled ? "opacity-45" : ""}`}>
+      <div className="flex items-center gap-3">
+        <div className="h-16 w-16 shrink-0 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {p.image ? <img src={p.image} alt="" className="h-full w-full object-contain" /> : <span className="text-[30px]">{p.group === "sacks" ? "🛍️" : "📦"}</span>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[18px] font-extrabold text-white leading-tight">{p.name}</p>
+          <p className="text-[15px] text-gray-300">
+            {p.rate === null ? <span className="text-statusAmber">مفيش سعر</span> : <><b className="font-numbers text-brandOrange">{money(p.rate)}</b> ج.م</>}
+            <span className="text-gray-500"> · في العربية </span>
+            <b className={`font-numbers ${max > 0 ? "text-gray-100" : "text-statusRed"}`}>{max}</b>
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="button" disabled={disabled || qty <= 0} onClick={() => set(qty - 1)} className="h-12 w-12 rounded-xl border border-cardBorder bg-background/60 flex items-center justify-center text-white disabled:opacity-40" aria-label="ناقص">
+          <Minus size={22} />
+        </button>
+        <span className="min-w-[56px] text-center font-numbers text-[26px] font-extrabold text-white">{qty}</span>
+        <button type="button" disabled={disabled || qty >= max} onClick={() => set(qty + 1)} className="h-12 w-12 rounded-xl bg-brandOrange text-white flex items-center justify-center disabled:opacity-40" aria-label="زيادة">
+          <Plus size={22} />
+        </button>
+        <div className="ms-auto flex gap-1.5">
+          {quick.map((n) => (
+            <button key={n} type="button" disabled={disabled || qty >= max} onClick={() => set(qty + n)} className="h-12 min-w-[46px] rounded-xl border border-cardBorder bg-background/60 px-2 font-numbers text-[16px] font-bold text-gray-100 disabled:opacity-40">
+              +{n}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function InvoiceForm({
+  options,
+  draft,
+  setDraft,
+  balance,
+  onSave,
+  saving,
+  error,
+}: {
+  options: RepOptions;
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  balance: number | null | undefined; // undefined = بيتجاب - loading
+  onSave: () => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const [group, setGroup] = useState<RepProductGroup>("packets");
+  const [picking, setPicking] = useState(false);
+  const [pad, setPad] = useState<"part" | "discount" | null>(null);
+  const t = totalsOf(draft, options.products);
+  const shown = options.products.filter((p) => p.group === group);
+  const counts = (g: RepProductGroup) => options.products.filter((p) => p.group === g && (draft.cart[p.code] ?? 0) > 0).length;
+  useEffect(() => {
+    // مجموعة فاضية: روح لأول واحدة فيها أصناف - an empty group: jump to the first one with items
+    if (!options.products.some((p) => p.group === group)) setGroup(GROUPS.find((g) => options.products.some((p) => p.group === g.id))?.id ?? "packets");
+  }, [options.products, group]);
+
+  const card = "rounded-2xl border border-cardBorder bg-card/80 p-4";
+  const canSave = !!draft.customer && t.lines.length > 0 && !saving && (draft.pay !== "part" || t.paid > 0);
+
+  return (
+    <div className="flex flex-col gap-4 pb-28">
+      {/* العميل - the customer */}
+      <button type="button" onClick={() => setPicking(true)} className={`${card} flex items-center gap-3 text-start active:bg-white/5`}>
+        <span className="text-[28px]">👤</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[14px] text-gray-400">العميل</span>
+          <span className={`block truncate text-[20px] font-extrabold ${draft.customer ? "text-white" : "text-brandOrange"}`}>{draft.customer?.name ?? "اضغط واختار العميل"}</span>
+          {draft.customer && (
+            <span className="block text-[14px] text-gray-400">
+              رصيده:{" "}
+              {balance === undefined ? "…" : balance === null ? "مش معروف" : <b className={`font-numbers ${balance > 0 ? "text-statusRed" : "text-statusGreen"}`}>{money(balance)}</b>}
+            </span>
+          )}
+        </span>
+      </button>
+
+      {/* الأصناف - the items */}
+      <div className="grid grid-cols-3 gap-2">
+        {GROUPS.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => setGroup(g.id)}
+            className={`relative h-12 rounded-xl border text-[15px] font-extrabold ${group === g.id ? "border-brandOrange bg-brandOrange/15 text-brandOrange" : "border-cardBorder bg-card/80 text-gray-300"}`}
+          >
+            {g.label}
+            {counts(g.id) > 0 && <span className="absolute -top-2 -start-2 h-6 min-w-6 rounded-full bg-brandOrange px-1.5 font-numbers text-[13px] leading-6 text-white">{counts(g.id)}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        {shown.length === 0 && <p className="py-6 text-center text-gray-500">مفيش أصناف هنا</p>}
+        {shown.map((p) => (
+          <ProductCard key={p.code} p={p} qty={draft.cart[p.code] ?? 0} quick={options.quickQty} onQty={(q) => setDraft({ ...draft, cart: { ...draft.cart, [p.code]: q } })} />
+        ))}
+      </div>
+
+      {/* الدفع - payment */}
+      <div className={`${card} flex flex-col gap-3`}>
+        <p className="text-[17px] font-extrabold text-white">الدفع</p>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              ["cash", "💵 كاش"],
+              ["credit", "📒 آجل"],
+              ["part", "✂️ جزء"],
+            ] as [PayMode, string][]
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setDraft({ ...draft, pay: id });
+                setPad(id === "part" ? "part" : null);
+              }}
+              className={`h-14 rounded-xl border text-[18px] font-extrabold ${draft.pay === id ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-200"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {draft.pay === "part" && (
+          <button type="button" onClick={() => setPad(pad === "part" ? null : "part")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
+            <span className="text-[16px] text-gray-300">المدفوع</span>
+            <span className="font-numbers text-[24px] font-extrabold text-white">{draft.partPaid || "0"}</span>
+          </button>
+        )}
+        {pad === "part" && draft.pay === "part" && <Keypad compact value={draft.partPaid} maxLength={7} onChange={(v) => setDraft({ ...draft, partPaid: v })} />}
+        {options.rep.allowDiscount && (
+          <>
+            <button type="button" onClick={() => setPad(pad === "discount" ? null : "discount")} className="flex items-center justify-between rounded-xl border border-cardBorder bg-background/60 px-4 py-3">
+              <span className="text-[16px] text-gray-300">خصم</span>
+              <span className="font-numbers text-[22px] font-extrabold text-white">{draft.discount || "0"}</span>
+            </button>
+            {pad === "discount" && <Keypad compact value={draft.discount} maxLength={6} onChange={(v) => setDraft({ ...draft, discount: v })} />}
+          </>
+        )}
+      </div>
+
+      {/* الملخص - summary */}
+      <div className={`${card} flex flex-col gap-1.5 text-[17px]`}>
+        <p className="text-[17px] font-extrabold text-white mb-1">الملخص</p>
+        {t.lines.map((l) => (
+          <p key={l.code} className="flex justify-between gap-2 text-gray-300">
+            <span className="truncate">
+              {l.name} × <span className="font-numbers">{l.qty}</span>
+            </span>
+            <span className="font-numbers">{money(l.amount)}</span>
+          </p>
+        ))}
+        {t.lines.length === 0 && <p className="text-gray-500">لسه مفيش أصناف</p>}
+        <hr className="my-1 border-cardBorder" />
+        {t.discount > 0 && (
+          <p className="flex justify-between text-gray-300">
+            <span>الخصم</span>
+            <span className="font-numbers">− {money(t.discount)}</span>
+          </p>
+        )}
+        <p className="flex justify-between text-[22px] font-extrabold text-white">
+          <span>الإجمالي</span>
+          <span className="font-numbers">{money(t.total)}</span>
+        </p>
+        <p className="flex justify-between text-statusGreen">
+          <span>المدفوع</span>
+          <span className="font-numbers">{money(t.paid)}</span>
+        </p>
+        <p className="flex justify-between text-statusAmber font-bold">
+          <span>الباقي</span>
+          <span className="font-numbers">{money(t.remaining)}</span>
+        </p>
+        {typeof balance === "number" && (
+          <>
+            <p className="flex justify-between text-gray-400">
+              <span>رصيد العميل قبل</span>
+              <span className="font-numbers">{money(balance)}</span>
+            </p>
+            <p className="flex justify-between font-bold text-white">
+              <span>رصيد العميل بعد</span>
+              <span className="font-numbers">{money(Math.round((balance + t.remaining) * 100) / 100)}</span>
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* حفظ وطباعة (ثابت تحت) - save and print (fixed at the bottom) */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-cardBorder bg-background/95 backdrop-blur px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="mx-auto max-w-[560px] flex flex-col gap-2">
+          {error && <p className="text-center text-[15px] font-bold text-statusRed">{error}</p>}
+          <button
+            type="button"
+            disabled={!canSave}
+            onClick={onSave}
+            className="h-16 w-full rounded-2xl bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white text-[21px] font-extrabold flex items-center justify-center gap-2 shadow-[0_8px_30px_rgba(255,122,0,0.35)] disabled:opacity-45"
+          >
+            <Check size={24} /> {saving ? "بيسجل…" : `حفظ وطباعة · ${money(t.total)}`}
+          </button>
+        </div>
+      </div>
+
+      {picking && (
+        <CustomerPicker
+          options={options}
+          onClose={() => setPicking(false)}
+          onPick={(c) => {
+            setDraft({ ...draft, customer: c });
+            setPicking(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}

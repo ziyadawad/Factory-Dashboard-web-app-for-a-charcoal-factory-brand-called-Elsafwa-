@@ -88,8 +88,8 @@ async function erpRequest<T>(path: string, url: URL, init: RequestInit): Promise
   }
 }
 
-async function erpAttempt<T>(path: string, url: URL, init: RequestInit): Promise<T> {
-  const { auth } = erpSettings();
+async function erpAttempt<T>(path: string, url: URL, init: RequestInit, authOverride?: string): Promise<T> {
+  const auth = authOverride ?? erpSettings().auth;
   const started = Date.now();
   let response: Response;
   try {
@@ -121,7 +121,7 @@ async function erpAttempt<T>(path: string, url: URL, init: RequestInit): Promise
   }
 
   if (!response.ok) {
-    const detail = body?.exc_type || body?.exception || response.statusText;
+    const detail = serverMessage(body) || body?.exc_type || body?.exception || response.statusText;
     const hint =
       response.status === 401
         ? " - FACTORY_API_KEY / FACTORY_API_SECRET rejected (keys regenerated or API user disabled?)"
@@ -134,6 +134,52 @@ async function erpAttempt<T>(path: string, url: URL, init: RequestInit): Promise
   console.log(`[erp] ${path} OK in ${Date.now() - started}ms at ${new Date().toISOString()}`);
   return body as T;
 }
+
+// رسالة الخطأ اللي ERPNext كتبها (frappe.throw) - the error text ERPNext wrote (frappe.throw)
+function serverMessage(body: { _server_messages?: unknown; exception?: unknown } | undefined): string {
+  try {
+    const raw = (body as { _server_messages?: string } | undefined)?._server_messages;
+    if (!raw) return "";
+    const list = (JSON.parse(raw) as string[]).map((m) => {
+      try {
+        return String((JSON.parse(m) as { message?: unknown }).message ?? m);
+      } catch {
+        return m;
+      }
+    });
+    return list.join(" · ").replace(/<[^>]+>/g, "").slice(0, 400);
+  } catch {
+    return "";
+  }
+}
+
+// ===== الكتابة بيوزر المبيعات (تطبيق المناديب): SALES_API_KEY / SALES_API_SECRET =====
+// Writing as the sales user (the rep app): SALES_API_KEY / SALES_API_SECRET
+export function salesErpAuth(): string {
+  const key = (process.env.SALES_API_KEY ?? "").trim();
+  const secret = (process.env.SALES_API_SECRET ?? "").trim();
+  if (!key || !secret) throw new ErpError("SALES_API_KEY / SALES_API_SECRET are not set");
+  return `token ${key}:${secret}`;
+}
+
+// POST بيوزر معين. retry = false للكتابة (الإعادة بعد timeout ممكن تعمل نسختين) - POST as a given user; no retry for writes
+export async function erpPostAs<T = unknown>(auth: string, path: string, body: Record<string, unknown>, retry = false): Promise<T> {
+  const { baseUrl } = erpSettings();
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await erpAttempt<T>(path, new URL(baseUrl + path), init, auth);
+    } catch (error) {
+      if (!retry || !(error instanceof RetryableError) || attempt >= RETRY_DELAYS_MS.length) {
+        throw error instanceof RetryableError ? new ErpUnavailableError(error.message) : error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
+// ERPNext مش بيرد (timeout / 5xx / 429): الكتابة ممكن تستنى في الطابور - ERPNext not answering: a write may be queued
+export class ErpUnavailableError extends ErpError {}
 
 // نداء لـ whitelisted method وبيرجع الـ message - call a whitelisted method and return its message
 export async function erpCall<T = unknown>(

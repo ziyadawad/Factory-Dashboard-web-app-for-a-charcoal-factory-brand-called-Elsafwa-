@@ -13,18 +13,29 @@ import { useIdleClose } from "@/lib/useIdleClose";
 
 const OPERATOR_URL = dashboardConfig.it.operatorUrl || "/operator";
 
-function OperatorQrPopup({ onClose }: { onClose: () => void }) {
+// تطبيق على الموبايل (QR + زرار يفتحه): شاشة الأوبريتر وفواتير المناديب - a phone app (QR + open button)
+export type QrApp = { url: string; localPath: string; title: string; subtitle: string; openLabel: string; buttonLabel: string };
+const OPERATOR_APP: QrApp = {
+  url: OPERATOR_URL,
+  localPath: "/operator",
+  title: "📱 شاشة الأوبريتر",
+  subtitle: "امسح الكود بالموبايل — شغالة من أي مكان بالرقم السري",
+  openLabel: "افتح شاشة الأوبريتر",
+  buttonLabel: "📱 شاشة الأوبريتر",
+};
+
+function OperatorQrPopup({ onClose, app }: { onClose: () => void; app: QrApp }) {
   useIdleClose(onClose);
   const [svg, setSvg] = useState("");
   useEffect(() => {
     let stopped = false;
-    QRCode.toString(OPERATOR_URL, { type: "svg", errorCorrectionLevel: "M", margin: 2, color: { dark: "#000000", light: "#FFFFFF" } })
+    QRCode.toString(app.url, { type: "svg", errorCorrectionLevel: "M", margin: 2, color: { dark: "#000000", light: "#FFFFFF" } })
       .then((s) => !stopped && setSvg(s))
       .catch(() => {});
     return () => {
       stopped = true;
     };
-  }, []);
+  }, [app.url]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -32,7 +43,7 @@ function OperatorQrPopup({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-label="شاشة الأوبريتر">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-label={app.title}>
       <div
         className="relative bg-card border border-cardBorder rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-4 max-w-full max-h-full"
         onClick={(e) => e.stopPropagation()}
@@ -45,44 +56,54 @@ function OperatorQrPopup({ onClose }: { onClose: () => void }) {
         >
           <X size={24} />
         </button>
-        <h2 className="text-[26px] font-extrabold text-white">📱 شاشة الأوبريتر</h2>
-        <p className="text-gray-400 text-[16px] -mt-2">امسح الكود بالموبايل — شغالة من أي مكان بالرقم السري</p>
+        <h2 className="text-[26px] font-extrabold text-white">{app.title}</h2>
+        <p className="text-gray-400 text-[16px] -mt-2">{app.subtitle}</p>
         {/* الـ QR على خلفية بيضا عشان يتقري بسهولة - the QR on white so it scans easily */}
         <div
           className="bg-white rounded-xl p-2 [&>svg]:w-full [&>svg]:h-full"
           style={{ width: "min(50vh, 80vw, 460px)", height: "min(50vh, 80vw, 460px)" }}
           dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
         />
-        <a href={OPERATOR_URL} target="_blank" rel="noreferrer" dir="ltr" className="font-numbers text-[22px] font-bold text-brandOrange hover:underline break-all text-center">
-          {OPERATOR_URL}
+        <a href={app.url} target="_blank" rel="noreferrer" dir="ltr" className="font-numbers text-[22px] font-bold text-brandOrange hover:underline break-all text-center">
+          {app.url}
         </a>
         {/* نفس الموقع (التلفزيون أو اللابتوب) في تاب جديد - same site, new tab */}
         <a
-          href="/operator"
+          href={app.localPath}
           target="_blank"
           rel="noopener"
           className="w-full max-w-[460px] h-[64px] flex items-center justify-center rounded-2xl bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white text-[22px] font-extrabold shadow-[0_8px_30px_rgba(255,122,0,0.35)] hover:brightness-110"
         >
-          افتح شاشة الأوبريتر
+          {app.openLabel}
         </a>
       </div>
     </div>
   );
 }
 
+// "🧾 فواتير المناديب" في هيدر صفحة مبيعات المناديب - in the reps sales page header
+export const REP_APP: QrApp = {
+  url: dashboardConfig.sales.repAppUrl || "/rep",
+  localPath: "/rep",
+  title: "🧾 فواتير المناديب",
+  subtitle: "امسح الكود بموبايل المندوب — كل مندوب برقمه السري",
+  openLabel: "افتح التطبيق",
+  buttonLabel: "🧾 فواتير المناديب",
+};
+
 // open بيتمسك في الصفحة عشان التقليب يقف والـ QR مفتوح - open lives in the page so rotation pauses while the QR is shown
-export default function OperatorQrButton({ open, setOpen }: { open: boolean; setOpen: (open: boolean) => void }) {
+export default function OperatorQrButton({ open, setOpen, app = OPERATOR_APP }: { open: boolean; setOpen: (open: boolean) => void; app?: QrApp }) {
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
         className="px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap"
-        title={OPERATOR_URL}
+        title={app.url}
       >
-        📱 شاشة الأوبريتر
+        {app.buttonLabel}
       </button>
-      {open && <OperatorQrPopup onClose={() => setOpen(false)} />}
+      {open && <OperatorQrPopup app={app} onClose={() => setOpen(false)} />}
     </>
   );
 }
