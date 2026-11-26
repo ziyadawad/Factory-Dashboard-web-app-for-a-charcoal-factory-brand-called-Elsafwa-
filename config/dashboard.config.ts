@@ -636,6 +636,25 @@ export const dashboardConfig = {
       treasury: ["بنوك مصنع الصفوة", "مصروفات مصنع الصفوة"],
     } as Record<string, string[]>,
     hidden: [] as string[], // جروبات متتعرضش خالص (id أو الاسم) - groups never shown (id or name)
+    // ===== الإرسال من الشات (نص بس، والرد على رسالة اختياري) =====
+    // الكتابة مقفولة لحد ما حد يكتب الباسورد: بيتفحص على السيرفر قصاد WA_SEND_PASSWORD (في Vercel بس، عمره ما يتكتب هنا)،
+    // ولو صح كوكي httpOnly بيفتح الإرسال unlockMinutes دقيقة. passwordTries غلط = قفل passwordLockMinutes دقيقة.
+    // الرسالة بتتحط في طابور (wa_outbox) وكمبيوتر الـ IT بيسأل GET /api/wa/outbox كل 5 ثواني ويبعتها
+    // (docs/whatsapp-agent.md). رسالة فضلت مستنية أكتر من outboxMaxAgeMinutes بتتلغي (عشان متتبعتش متأخر)
+    // Sending from the chat (text only, optional reply-to). Locked until the password is entered: checked on the server
+    // against WA_SEND_PASSWORD (Vercel only, never written here); on success an httpOnly cookie unlocks sending for
+    // unlockMinutes. passwordTries wrong = locked for passwordLockMinutes. The message goes to an outbox (wa_outbox) that
+    // the IT PC polls every 5 s (docs/whatsapp-agent.md). A message still pending after outboxMaxAgeMinutes is cancelled
+    sendLimits: {
+      minSecondsBetween: 10, // رسالة واحدة كل 10 ثواني بالكتير - at most one message every 10 seconds
+      perHour: 30, // 30 رسالة في الساعة بالكتير - at most 30 per hour
+      maxChars: 4000, // أطول رسالة - the longest message
+    },
+    sendLabel: "لوحة الإدارة", // اسم الراسل في الطابور والسجل - the sender label in the outbox and the log
+    unlockMinutes: 30,
+    passwordTries: 5,
+    passwordLockMinutes: 15,
+    outboxMaxAgeMinutes: 30,
     // لون كل جروب: بالاسم أو الـ id، والباقي بالترتيب من colors - a color per group by name or id; others cycle colors
     groupColors: {} as Record<string, string>,
     colors: ["#22C55E", "#3B82F6", "#F97316", "#A855F7", "#EC4899", "#14B8A6", "#EAB308", "#EF4444", "#06B6D4", "#84CC16"],

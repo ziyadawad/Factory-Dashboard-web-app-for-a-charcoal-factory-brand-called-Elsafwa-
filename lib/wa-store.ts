@@ -50,6 +50,22 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS wa_media (
      id text PRIMARY KEY, pathname text NOT NULL, mime text, file_name text, size int, at timestamptz NOT NULL DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS wa_meta (key text PRIMARY KEY, value text NOT NULL)`,
+  // الإرسال من الداشبورد (lib/wa-send.ts): الطابور اللي الإيجنت بيبعته، سجل كل محاولة، والباسورد الغلط
+  // Sending from the dashboard (lib/wa-send.ts): the outbox the agent sends, a log of every attempt, wrong passwords
+  `CREATE TABLE IF NOT EXISTS wa_outbox (
+     id bigserial PRIMARY KEY, group_id text NOT NULL, group_name text NOT NULL DEFAULT '', body text NOT NULL,
+     reply_id text, reply_sender text, reply_text text, sender_label text NOT NULL DEFAULT '',
+     status text NOT NULL DEFAULT 'pending', error text, wa_message_id text,
+     created_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, done_at timestamptz)`,
+  `CREATE INDEX IF NOT EXISTS wa_outbox_status ON wa_outbox (status, created_at)`,
+  `CREATE INDEX IF NOT EXISTS wa_outbox_group ON wa_outbox (group_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS wa_send_log (
+     id bigserial PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(), group_id text NOT NULL DEFAULT '',
+     group_name text NOT NULL DEFAULT '', body text NOT NULL DEFAULT '', result text NOT NULL, detail text,
+     outbox_id bigint, ip text)`,
+  `CREATE INDEX IF NOT EXISTS wa_send_log_at ON wa_send_log (at DESC)`,
+  `CREATE TABLE IF NOT EXISTS wa_send_auth (ip text PRIMARY KEY, fails int NOT NULL DEFAULT 0,
+     first_at timestamptz NOT NULL DEFAULT now(), locked_until timestamptz)`,
 ];
 
 async function db(): Promise<NeonQueryFunction<false, false>> {
@@ -74,6 +90,8 @@ async function q(text: string, params: unknown[] = []): Promise<Row[]> {
   const sql = await db();
   return (await sql.query(text, params)) as Row[];
 }
+// لـ lib/wa-send.ts (نفس الاتصال والجداول) - for lib/wa-send.ts (same connection and tables)
+export const waQuery = q;
 
 const iso = (v: unknown): string | null => {
   if (v === null || v === undefined || v === "") return null;

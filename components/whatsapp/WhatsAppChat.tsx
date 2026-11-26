@@ -1,28 +1,32 @@
 "use client";
 
-// الشات صفحة كاملة (قراية بس - مفيش خانة كتابة ولا زرار إرسال): فقاعات زي الواتساب باسم الراسل والساعة، الردود متقتبسة،
+// الشات صفحة كاملة (الكتابة تحت مقفولة بباسورد - WaSendBox): فقاعات زي الواتساب باسم الراسل والساعة، الردود متقتبسة،
 // فواصل الأيام، والأقدم بيتحمل وانت طالع لفوق. الصور بتتفتح كبيرة، والـ PDF والملفات بتتفتح أو تتحمل، والفويس بيشتغل.
 // بحث بالكلام / الراسل / اليوم. الجديد بيتسأل عليه كل whatsapp.chatRefreshSeconds والصفحة ظاهرة بس
-// The chat full page (read-only: no input box, no send button): WhatsApp-like bubbles with sender and time, quoted
+// The chat full page (the composer at the bottom is password-locked - WaSendBox): WhatsApp-like bubbles with sender and time, quoted
 // replies, day separators, older messages load while scrolling up. Images open full size, PDFs / files open or
 // download, voice notes play. Search by text / sender / day. New messages are polled every chatRefreshSeconds,
 // only while the page is visible
 
 import WaImage from "./WaImage";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, Download, ExternalLink, FileText, Mic, Search, Users, X } from "lucide-react";
+import { ArrowDown, ArrowRight, Download, ExternalLink, FileText, Mic, Reply, Search, Users, X } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { usePageVisible } from "@/lib/usePolling";
-import { WaGroup, WaMessage, WaMessagesResponse } from "@/lib/types";
+import { WaGroup, WaMessage, WaMessagesResponse, WaOutboxItem } from "@/lib/types";
+import WaSendBox, { OutboxBubble, OutboxStatus, useOutbox, useSendSession } from "./WaSendBox";
 import { GroupAvatar, ReadOnlyBadge, SyncStatus } from "./WhatsAppPage";
 import { cairoDay, cairoTime, dayLabel, fileSize, groupColor, mediaUrl, senderColor, waFetch } from "./wa-common";
 
 const cfg = dashboardConfig.whatsapp;
 const cursorOf = (m: WaMessage) => encodeURIComponent(`${m.at}~${m.id}`);
 
+// سطر في الشات: رسالة من الواتساب أو رسالة من الداشبورد في الطابور - a chat row: a WhatsApp message or a dashboard outbox one
+type Entry = { at: string; m?: WaMessage; out?: WaOutboxItem };
+
 // الرسايل متقسمة بالأيام (بتوقيت القاهرة) - messages split by Cairo day
-function days(list: WaMessage[]): { key: string; list: WaMessage[] }[] {
-  const out: { key: string; list: WaMessage[] }[] = [];
+function days(list: Entry[]): { key: string; list: Entry[] }[] {
+  const out: { key: string; list: Entry[] }[] = [];
   for (const m of list) {
     const key = cairoDay(m.at);
     if (out.length && out[out.length - 1].key === key) out[out.length - 1].list.push(m);
@@ -83,7 +87,21 @@ function MediaView({ m, onImage, onLoaded }: { m: WaMessage; onImage: (src: stri
   );
 }
 
-function Bubble({ m, onImage, onLoaded, showGroup = false }: { m: WaMessage; onImage: (src: string) => void; onLoaded?: () => void; showGroup?: boolean }) {
+function Bubble({
+  m,
+  onImage,
+  onLoaded,
+  showGroup = false,
+  onReply,
+  sent,
+}: {
+  m: WaMessage;
+  onImage: (src: string) => void;
+  onLoaded?: () => void;
+  showGroup?: boolean;
+  onReply?: (m: WaMessage) => void; // الكتابة مفتوحة: زرار "رد" - the composer is unlocked: a reply button
+  sent?: WaOutboxItem; // اتبعتت من الداشبورد - sent from the dashboard
+}) {
   if (m.type === "system") {
     return (
       <div className="flex justify-center py-1">
@@ -95,7 +113,7 @@ function Bubble({ m, onImage, onLoaded, showGroup = false }: { m: WaMessage; onI
   }
   const color = senderColor(m.sender);
   return (
-    <div id={`wa-${m.id}`} className="flex justify-start">
+    <div id={`wa-${m.id}`} className="group/bubble flex justify-start items-center gap-2">
       <div className="max-w-[min(720px,85%)] rounded-2xl rounded-ss-sm bg-[#1F2C34] px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.4)] flex flex-col gap-1.5">
         <p className="text-[14px] font-extrabold" style={{ color }} dir="auto">
           {m.sender || "—"}
@@ -128,11 +146,24 @@ function Bubble({ m, onImage, onLoaded, showGroup = false }: { m: WaMessage; onI
             )}
           </>
         )}
-        <p className="self-end font-numbers text-[12px] text-gray-400">
+        <p className="self-end flex items-center gap-1.5 font-numbers text-[12px] text-gray-400">
+          {sent && <span className="text-emerald-300 font-bold">{sent.senderLabel}</span>}
           {showGroup && <>{dayLabel(m.at)} · </>}
           {cairoTime(m.at)}
+          {sent && <OutboxStatus item={sent} />}
         </p>
       </div>
+      {onReply && !m.deleted && (
+        <button
+          type="button"
+          onClick={() => onReply(m)}
+          className="shrink-0 rounded-full border border-cardBorder bg-card/80 p-1.5 text-gray-400 opacity-40 group-hover/bubble:opacity-100 hover:text-emerald-300"
+          title="رد على الرسالة دي"
+          aria-label="رد"
+        >
+          <Reply size={16} />
+        </button>
+      )}
     </div>
   );
 }
@@ -172,6 +203,11 @@ export default function WhatsAppChat({ group, active, onClose }: { group: WaGrou
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [newBelow, setNewBelow] = useState(0);
   const [image, setImage] = useState<string | null>(null);
+  // الإرسال: الكتابة مفتوحة؟ ورسايل الداشبورد للجروب ده، والرد - sending: unlocked?, the dashboard's messages, the reply
+  const { session, setSession } = useSendSession();
+  const outbox = useOutbox(group.id, active);
+  const [replyTo, setReplyTo] = useState<WaMessage | null>(null);
+  const canReply = session?.unlocked ? setReplyTo : undefined;
   // البحث - search
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -234,7 +270,23 @@ export default function WhatsAppChat({ group, active, onClose }: { group: WaGrou
       el.scrollTop = el.scrollHeight;
       stickBottom.current = false;
     }
-  }, [messages]);
+  }, [messages, outbox.items]);
+
+  // رسايل الداشبورد في مكانها بالوقت: اللي رجعت من الواتساب (نفس الـ id) بتتعرض على الرسالة نفسها بـ ✓
+  // Dashboard messages in time order; one that came back from WhatsApp (same id) shows as ✓ on that message itself
+  const sentById = new Map(outbox.items.filter((o) => o.messageId).map((o) => [o.messageId as string, o]));
+  const loadedIds = new Set(messages.map((m) => m.id));
+  const oldestLoaded = hasMore && messages[0] ? messages[0].at : "";
+  const timeline: Entry[] = [
+    ...messages.map((m) => ({ at: m.at, m })),
+    ...outbox.items
+      .filter((o) => !(o.messageId && loadedIds.has(o.messageId)) && o.createdAt >= oldestLoaded)
+      .map((o) => ({ at: o.createdAt, out: o })),
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  const afterSend = () => {
+    stickBottom.current = true;
+    outbox.refresh();
+  };
 
   // الأقدم وانت طالع لفوق - older messages while scrolling up
   const loadOlder = useCallback(async () => {
@@ -343,7 +395,7 @@ export default function WhatsAppChat({ group, active, onClose }: { group: WaGrou
             </p>
           )}
         </div>
-        <ReadOnlyBadge />
+        {!session?.unlocked && <ReadOnlyBadge />}
         <div className="ms-auto flex items-center gap-3">
           <SyncStatus lastSyncAt={lastSyncAt} />
           <button
@@ -402,14 +454,18 @@ export default function WhatsAppChat({ group, active, onClose }: { group: WaGrou
               {!loading && !error && messages.length === 0 && <p className="py-10 text-center text-[16px] text-gray-500">لسه مفيش رسايل</p>}
               {/* كل يوم في جزء لوحده، فعنوان اليوم بيلزق فوق لحد ما يومه يخلص بس - each day is its own section, so its label
                   sticks only until that day ends */}
-              {days(messages).map((day) => (
+              {days(timeline).map((day) => (
                 <section key={day.key} className="flex flex-col gap-2">
                   <div className="sticky top-0 z-10 flex justify-center py-1">
                     <span className="rounded-full border border-cardBorder bg-card/95 px-3 py-1 text-[13px] font-bold text-gray-300">{dayLabel(day.list[0].at)}</span>
                   </div>
-                  {day.list.map((m) => (
-                    <Bubble key={m.id} m={m} onImage={setImage} onLoaded={onMediaLoaded} />
-                  ))}
+                  {day.list.map((e) =>
+                    e.out ? (
+                      <OutboxBubble key={`out-${e.out.id}`} item={e.out} />
+                    ) : e.m ? (
+                      <Bubble key={e.m.id} m={e.m} onImage={setImage} onLoaded={onMediaLoaded} onReply={canReply} sent={sentById.get(e.m.id)} />
+                    ) : null
+                  )}
                 </section>
               ))}
             </>
@@ -417,11 +473,27 @@ export default function WhatsAppChat({ group, active, onClose }: { group: WaGrou
         </div>
       </div>
 
+      {/* الكتابة (مقفولة بالباسورد) - the composer (password-locked) */}
+      {!results && (
+        <WaSendBox
+          groupId={group.id}
+          groupName={info.name}
+          session={session}
+          onSession={(next) => {
+            setSession(next);
+            if (!next.unlocked) setReplyTo(null);
+          }}
+          reply={replyTo}
+          onClearReply={() => setReplyTo(null)}
+          onSent={afterSend}
+        />
+      )}
+
       {newBelow > 0 && !results && (
         <button
           type="button"
           onClick={() => toBottom(true)}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-[15px] font-extrabold text-black shadow-lg"
+          className="fixed bottom-28 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-[15px] font-extrabold text-black shadow-lg"
         >
           <ArrowDown size={18} /> <span className="font-numbers">{newBelow}</span> رسالة جديدة
         </button>

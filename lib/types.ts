@@ -1303,6 +1303,43 @@ export interface WaMessagesResponse {
   lastSyncAt: string | null;
 }
 
+// ===== الإرسال للواتساب من الداشبورد (lib/wa-send.ts) - sending to WhatsApp from the dashboard =====
+// رسالة في الطابور: ⏳ pending لحد ما كمبيوتر الـ IT يبعتها، وبعدين ✓ sent أو ⚠ failed
+// An outbox message: ⏳ pending until the IT PC sends it, then ✓ sent or ⚠ failed
+export interface WaOutboxItem {
+  id: number;
+  groupId: string;
+  groupName: string;
+  text: string;
+  reply: { id: string; sender: string; text: string } | null;
+  senderLabel: string; // "لوحة الإدارة"
+  status: "pending" | "sent" | "failed";
+  error: string | null;
+  messageId: string | null; // id الرسالة في الواتساب بعد ما اتبعتت (لو الإيجنت قاله) - the WhatsApp message id once sent
+  createdAt: string; // ISO
+  doneAt: string | null;
+}
+
+// حالة الكتابة: configured = WA_SEND_PASSWORD متظبط، unlocked = الكوكي صالح لحد expiresAt
+// The composer state: configured = WA_SEND_PASSWORD is set, unlocked = the cookie is valid until expiresAt
+export interface WaSendSession {
+  configured: boolean;
+  unlocked: boolean;
+  expiresAt: string | null;
+  lockedUntil: string | null; // باسورد غلط كتير: مقفول لحد - too many wrong passwords: locked until
+  triesLeft?: number;
+}
+
+// سطر في "سجل الإرسال" - one "سجل الإرسال" row
+export interface WaSendLogEntry {
+  id: number;
+  at: string;
+  groupName: string;
+  text: string;
+  result: "pending" | "sent" | "failed" | "rejected";
+  detail: string | null;
+}
+
 // ===== الموردين (الصفحة 7) - suppliers (page 7) =====
 export type SupplierCategory = "wood" | "plastic";
 

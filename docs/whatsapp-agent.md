@@ -1,8 +1,10 @@
 # كمبيوتر الـ IT ← الداشبورد: جروبات الواتساب (WhatsApp agent → dashboard)
 
-الصفحة 7 **واتساب** بتعرض جروبات الواتساب **قراية بس** (مفيش أي كتابة أو إرسال من الداشبورد).
+الصفحة 7 **واتساب** بتعرض جروبات الواتساب. الكتابة من الشات **مقفولة بباسورد** (`WA_SEND_PASSWORD`)، والداشبورد
+عمره ما بيكلم الواتساب بنفسه: الرسالة بتتحط في طابور، وكمبيوتر الـ IT هو اللي بيبعتها (القسم 4 تحت).
 البرنامج على كمبيوتر الـ IT (مثلا whatsapp-web.js أو Baileys) بيقرا الجروبات ويبعت الرسايل والملفات للداشبورد.
-Page 7 **واتساب** shows WhatsApp groups **read-only** (the dashboard never types or sends anything). A program on the
+Page 7 **واتساب** shows WhatsApp groups. Typing in a chat is **password-locked** (`WA_SEND_PASSWORD`) and the dashboard
+never talks to WhatsApp itself: a message goes to an outbox and the IT PC sends it (section 4 below). A program on the
 IT PC (e.g. whatsapp-web.js or Baileys) reads the groups and pushes messages and files to the dashboard.
 
 ## التخزين على Vercel (Storage) — مجاني
@@ -102,6 +104,42 @@ The body is the **raw file** (not JSON or multipart), with headers:
   At most **4 MB** per file (Vercel's request limit is 4.5 MB); skip or downscale bigger ones.
 - ممكن الملف يترفع قبل أو بعد الرسالة. لحد ما يترفع الرسالة بتكتب "الملف مش متاح".
   The file may come before or after its message; until then the bubble says the file is unavailable.
+
+## 4) الإرسال من الداشبورد: `GET /api/wa/outbox` و `PATCH /api/wa/outbox` (هيدر `x-it-secret`)
+
+اسأل **كل 5 ثواني** (بس لو الواتساب متوصل). Poll **every 5 seconds** (only while WhatsApp is connected).
+
+```jsonc
+// GET /api/wa/outbox?limit=10  ←  الأقدم الأول - oldest first
+{ "items": [
+  { "id": 42, "groupId": "120363012345678901@g.us", "groupName": "جروب كريم عوض",
+    "text": "الطلبية جاهزة",                       // نص بس - text only
+    "reply": { "id": "3EB0…", "sender": "كريم", "text": "الطلبية امتى؟" },  // أو null: ابعتها رد (quoted) على الرسالة دي
+    "senderLabel": "لوحة الإدارة", "status": "pending", "createdAt": "…" }
+] }
+```
+
+- اللي بيرجع "متاخد" لمدة 60 ثانية: لو ما بعتش الـ PATCH في الوقت ده بيرجع تاني (يعني الإيجنت وقع في النص).
+  **ابعت كل واحدة مرة واحدة بس** واحفظ الـ ids اللي بعتها لحد ما الـ PATCH ينجح.
+  Each returned item is claimed for 60 s; without a PATCH by then it is offered again. **Send each id once** and
+  remember the sent ids until the PATCH succeeds.
+- رسالة فضلت مستنية أكتر من `whatsapp.outboxMaxAgeMinutes` (30 دقيقة) بتتلغي (`failed` / `expired`) ومش بترجع.
+  A message pending longer than `outboxMaxAgeMinutes` (30) is cancelled and never offered.
+
+بعد الإرسال - after sending:
+
+```jsonc
+// PATCH /api/wa/outbox   (واحدة أو list - one item or a list)
+{ "id": 42, "status": "sent", "messageId": "3EB0C767D26A1B2C3D4E" }   // messageId = id الرسالة في الواتساب (مهم)
+{ "id": 43, "status": "failed", "error": "group not found" }
+```
+
+`messageId` لازم يبقى **نفس الـ id** اللي الرسالة هترجع بيه في `/api/wa/ingest`، عشان الشات يعرضها مرة واحدة بعلامة ✓.
+`messageId` must be the **same id** the message comes back with in `/api/wa/ingest`, so the chat shows it once with ✓.
+الرد: `{ "ok": true, "updated": 1 }` (رسالة مش `pending` بتتساب). The reply counts updated items (non-pending are skipped).
+
+الحدود والباسورد على السيرفر (`whatsapp.sendLimits`: رسالة كل 10 ثواني، 30 في الساعة). كل محاولة بتتسجل في "سجل الإرسال".
+Limits and the password are enforced on the server; every attempt is logged in "سجل الإرسال".
 
 ## الردود (Responses)
 

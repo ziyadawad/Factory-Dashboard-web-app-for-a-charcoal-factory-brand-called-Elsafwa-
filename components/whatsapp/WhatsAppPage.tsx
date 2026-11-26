@@ -16,6 +16,7 @@ import { WaGroup, WaGroupsResponse } from "@/lib/types";
 import WhatsAppChat from "./WhatsAppChat";
 import WaImage from "./WaImage";
 import AllMessagesModal from "./AllMessagesModal";
+import { SendLogButton } from "./WaSendBox";
 import { sectionOf } from "@/lib/wa-sections";
 import { WaFlash, WaSpotGroup } from "@/lib/wa-alert";
 import {
@@ -243,8 +244,9 @@ export default function WhatsAppPage({
   const [open, setOpen] = useState<WaGroup | null>(null);
   const [seenState, setSeenState] = useState<{ seen: Record<string, string>; baseline: string } | null>(null);
   const [allMessagesOpen, setAllMessagesOpen] = useState(false);
+  const [sendLogOpen, setSendLogOpen] = useState(false);
   useEffect(() => setSeenState(loadSeen()), []);
-  useEffect(() => onOverlayChange(open !== null || allMessagesOpen), [open, allMessagesOpen, onOverlayChange]);
+  useEffect(() => onOverlayChange(open !== null || allMessagesOpen || sendLogOpen), [open, allMessagesOpen, sendLogOpen, onOverlayChange]);
   // الصفحة اتقفلت (صفحة تانية) = الشات يتقفل - leaving the page closes the chat
   useEffect(() => {
     if (!active) {
@@ -338,6 +340,8 @@ export default function WhatsAppPage({
           <BookOpen size={16} />
           ملخص الصباح
         </button>
+        {/* سجل الإرسال (من الشات) - the send log (from the chat) */}
+        {active && <SendLogButton onOpenChange={setSendLogOpen} />}
         {/* زرار علامة الكل كمقروء - mark all as read button */}
         {data && groups.some((g) => g.unread > 0) && (
           <button
