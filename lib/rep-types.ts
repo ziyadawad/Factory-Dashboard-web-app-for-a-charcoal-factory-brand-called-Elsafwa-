@@ -33,6 +33,7 @@ export type RepPayMethod = "cash" | "vodafone" | "instapay";
 export interface RepPayTarget {
   id: string; // رقم الحساب (أو "rep" لخزنة المندوب) - the account number (or "rep" for the rep's cash box)
   label: string; // "كاش كريم عوض" / "انستاباي الحاج أشرف — الأساسية"
+  numbers?: string[]; // أرقام فودافون كاش (wallets.accounts[].vodafoneNumbers) - the Vodafone Cash numbers
   mode: string | null; // Mode of Payment
   account: string | null; // الحساب الافتراضي للشركة - the company default account
   problem: string | null;
@@ -93,6 +94,7 @@ export interface RepReceipt {
   paid: number;
   remaining: number;
   paymentMethod?: string | null; // "فودافون كاش — كاش كريم عوض · رقم 123" على الفاتورة - printed on the receipt
+  paymentNumbers?: string[]; // أرقام فودافون كاش للمحفظة (سطر لوحده تحت الطريقة) - the wallet's numbers (own line)
   previousBalance: number | null; // رصيد العميل قبل الفاتورة - before this invoice
   newBalance: number | null; // بعدها - after it
   balanceNote?: string; // "رصيد العميل الحالي" وقت إعادة الطباعة - on a reprint

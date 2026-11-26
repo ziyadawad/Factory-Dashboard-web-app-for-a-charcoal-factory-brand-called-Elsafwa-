@@ -248,6 +248,7 @@ export async function payTargets(rep: RepConfig): Promise<RepPayTargets> {
     return {
       id: a.accountNumber,
       label: a.label,
+      numbers: a.vodafoneNumbers ?? [],
       mode,
       account,
       problem: !account
@@ -442,6 +443,7 @@ export async function createInvoice(rep: RepConfig, body: RepInvoiceRequest): Pr
       paid: paidDone,
       remaining: money(grand - paidDone),
       paymentMethod: paidDone > 0 ? methodText : null,
+      paymentNumbers: paidDone > 0 ? (pay?.target.numbers ?? []) : [],
       previousBalance,
       newBalance: money(previousBalance + grand - paidDone),
       companyName: app.companyName,
@@ -493,6 +495,11 @@ export async function invoiceReceipt(rep: RepConfig, name: string): Promise<RepR
     paid: money(grand - outstanding),
     remaining: outstanding,
     paymentMethod: paymentMethod || null,
+    // أرقام فودافون كاش للمحافظ اللي اتدفع عليها - the Vodafone Cash numbers of the wallets paid into
+    paymentNumbers: payments.flatMap((p) => {
+      const number = setup && p.paid_to ? Array.from(setup.accounts).find(([, n]) => n === p.paid_to)?.[0] : undefined;
+      return dashboardConfig.wallets.accounts.find((a) => a.accountNumber === number)?.vodafoneNumbers ?? [];
+    }),
     previousBalance: null,
     newBalance: balance,
     balanceNote: "رصيد العميل الحالي",

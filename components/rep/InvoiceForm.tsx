@@ -215,6 +215,13 @@ export default function InvoiceForm({
   const [group, setGroup] = useState<RepProductGroup>("packets");
   const [picking, setPicking] = useState(false);
   const [pad, setPad] = useState<"part" | "discount" | null>(null);
+  // آخر رقم اتنسخ (علامة ✓ لثانيتين) - the last copied number (a ✓ for 2 seconds)
+  const [copied, setCopied] = useState<string | null>(null);
+  const copyNumber = (n: string) => {
+    navigator.clipboard?.writeText(n).catch(() => {});
+    setCopied(n);
+    setTimeout(() => setCopied((c) => (c === n ? null : c)), 2000);
+  };
   const t = totalsOf(draft, options.products);
   const shown = options.products.filter((p) => p.group === group);
   // المجموعات اللي فيها أصناف بس (الشكاير مستبعدة من الكونفج) - only groups that have items (sacks are excluded in config)
@@ -336,6 +343,17 @@ export default function InvoiceForm({
                   className={`min-h-12 rounded-xl border px-2 py-2 text-[15px] font-bold leading-tight disabled:opacity-40 ${draft.target === w.id ? "border-statusGreen bg-statusGreen/15 text-statusGreen" : "border-cardBorder bg-background/60 text-gray-200"}`}
                 >
                   {w.label}
+                  {/* أرقام فودافون كاش: الضغط بينسخ الرقم (وبيختار المحفظة) - the numbers: a tap copies (and picks the wallet) */}
+                  {w.numbers?.map((n) => (
+                    <span
+                      key={n}
+                      dir="ltr"
+                      onClick={() => copyNumber(n)}
+                      className="mt-1 block font-numbers text-[13px] font-semibold text-gray-400 underline decoration-dotted underline-offset-2"
+                    >
+                      {copied === n ? "✓ اتنسخ" : n}
+                    </span>
+                  ))}
                   {w.problem && <span className="block text-[11px] font-normal text-statusRed">{w.problem}</span>}
                 </button>
               ))}

@@ -342,10 +342,33 @@ export async function renderReceipt(r: RepReceipt, paper: PaperWidth): Promise<H
   row("المدفوع", nf(r.paid), 20);
   // طريقة الدفع (+ المحفظة / الحساب ورقم العملية) - the payment method (+ wallet / account and the transaction number)
   if (r.paymentMethod) {
+    // طويل (المحفظة + الأرقام + رقم العملية): بيكمل في سطور - long (wallet + numbers + reference): wraps over lines
     font(17);
     c.textAlign = "right";
-    c.fillText(r.paymentMethod, W - M, y, W - 2 * M);
-    y += Math.round(17 * s * 1.5);
+    const words = r.paymentMethod.split(" ");
+    let cur = "";
+    const lines: string[] = [];
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (c.measureText(next).width > W - 2 * M && cur) {
+        lines.push(cur);
+        cur = w;
+      } else cur = next;
+    }
+    if (cur) lines.push(cur);
+    for (const l of lines) {
+      c.fillText(l, W - M, y);
+      y += Math.round(17 * s * 1.5);
+    }
+    // أرقام فودافون كاش في سطر لوحده (من الشمال لليمين) - the Vodafone Cash numbers on their own line (LTR)
+    if (r.paymentNumbers?.length) {
+      font(18, 700);
+      c.direction = "ltr";
+      c.textAlign = "right";
+      c.fillText(r.paymentNumbers.join("  /  "), W - M, y, W - 2 * M);
+      c.direction = "rtl";
+      y += Math.round(18 * s * 1.5);
+    }
   } else if (r.paid <= 0) {
     font(17);
     c.textAlign = "right";
@@ -501,7 +524,7 @@ export function testReceipt(repName: string, van: string, companyName: string, t
       { name: "ربع كيلو", qty: 10, rate: 25, amount: 250 },
       { name: "كرتونة 2 كيلو", qty: 2, rate: 310.5, amount: 621 },
     ],
-    subtotal: 871, discount: 0, total: 871, paid: 500, remaining: 371, paymentMethod: "فودافون كاش — كاش كريم عوض · رقم 123456",
+    subtotal: 871, discount: 0, total: 871, paid: 500, remaining: 371, paymentMethod: "فودافون كاش — كاش كريم عوض · رقم 123456", paymentNumbers: ["01097012948"],
     previousBalance: 1000, newBalance: 1371,
     companyName, thanks,
   };

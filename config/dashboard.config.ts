@@ -850,18 +850,23 @@ export const dashboardConfig = {
     // bankChip = الكلمة الصغيرة تحت اسم حساب البنك
     // label = the name shown on screen exactly, accountNumber = the account number in the Chart of Accounts,
     // kind = cash / fawry / bank (a bank account used for InstaPay, violet); bankChip = the small chip under a bank name
+    // vodafoneNumbers = أرقام فودافون كاش على المحفظة دي: بتظهر تحت اسمها في تطبيق المناديب (الضغط بينسخ الرقم)
+    // وبتتطبع على الفاتورة لما العميل يدفع عليها. اكتب الرقم 11 رقم زي ما هو
+    // vodafoneNumbers = the Vodafone Cash numbers on this wallet: shown under its name in the rep app (tap = copy) and
+    // printed on the receipt when the customer pays into it. Write the 11 digits as is
     accounts: [
-      { label: "كاش الحاج أشرف", accountNumber: "1112", kind: "cash" }, // 1112 - كاش الحاج اشرف - AC
-      { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash" }, // 1111 - كاش حمادة شاهين - AC
-      { label: "كاش زياد عوض", accountNumber: "1119", kind: "cash" }, // 1119 - كاش زياد عوض - AC
+      // رقمين فودافون كاش على محفظة الحاج أشرف - two Vodafone Cash numbers on this wallet
+      { label: "كاش الحاج أشرف", accountNumber: "1112", kind: "cash", vodafoneNumbers: ["01003116858", "01017791711"] }, // 1112 - كاش الحاج اشرف - AC
+      { label: "كاش أ. حمادة", accountNumber: "1111", kind: "cash", vodafoneNumbers: ["01009714089"] }, // 1111 - كاش حمادة شاهين - AC
+      { label: "كاش زياد عوض", accountNumber: "1119", kind: "cash", vodafoneNumbers: ["01003965158"] }, // 1119 - كاش زياد عوض - AC
       // لسه مش متعمل في ERPNext - الكارت بيكتب "مش مربوط" لحد ما يتعمل - not created yet; shows "not linked" until it exists
-      { label: "كاش يوسف عاطف", accountNumber: "1120", kind: "cash" },
-      { label: "كاش كريم عوض", accountNumber: "1113", kind: "cash" }, // 1113 - كاش كريم عوض - AC (اسمه في ERPNext "كاش محمود عوض")
+      { label: "كاش يوسف عاطف", accountNumber: "1120", kind: "cash", vodafoneNumbers: ["01020953904"] },
+      { label: "كاش كريم عوض", accountNumber: "1113", kind: "cash", vodafoneNumbers: ["01097012948"] }, // 1113 - كاش كريم عوض - AC (اسمه في ERPNext "كاش محمود عوض")
       { label: "فوري", accountNumber: "1114", kind: "fawry" }, // 1114 - ماكينة فوري - AC
       // حسابات البنك الأهلي (تحت 1200 - البنوك) اللي عليها InstaPay - the Al Ahly accounts (under 1200) used for InstaPay
       { label: "انستاباي الحاج أشرف — الأساسية", accountNumber: "1206", kind: "bank", bankChip: "InstaPay · الأهلي" }, // 1206 - الاهلي بلاتنيوم - AC
       { label: "انستاباي الحاج أشرف — العائد اليومي", accountNumber: "1202", kind: "bank", bankChip: "InstaPay · الأهلي" }, // 1202 - الاهلى العائد اليومى - AC
-    ] as { label: string; accountNumber: string; kind: "cash" | "fawry" | "bank"; bankChip?: string }[],
+    ] as { label: string; accountNumber: string; kind: "cash" | "fawry" | "bank"; bankChip?: string; vodafoneNumbers?: string[] }[],
   },
 
   // ============================================================

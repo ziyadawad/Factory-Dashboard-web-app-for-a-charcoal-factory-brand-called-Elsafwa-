@@ -284,6 +284,7 @@ export default function RepApp() {
           paid: t.paid,
           remaining: t.remaining,
           paymentMethod: methodText(options, t.method, draft.target, draft.payRef),
+          paymentNumbers: t.method && t.method !== "cash" ? (options.payTargets[t.method].find((w) => w.id === draft.target)?.numbers ?? []) : [],
           previousBalance: typeof balance === "number" ? balance : null,
           newBalance: typeof balance === "number" ? Math.round((balance + t.remaining) * 100) / 100 : null,
           companyName: options.companyName,
