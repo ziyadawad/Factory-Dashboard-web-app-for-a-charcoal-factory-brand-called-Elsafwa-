@@ -376,10 +376,16 @@ export default function WhatsAppPage({
           {error ? `مش قادرين نجيب الجروبات — بنحاول تاني… (${error instanceof Error ? error.message : ""})` : "جاري التحميل…"}
         </div>
       ) : (
-        // 3 أعمدة جنب بعض (من اليمين)، والصفحة نفسها مش بتعمل سكرول - 3 columns side by side (from the right); the page never scrolls
-        <div className="flex-1 min-h-0 grid grid-cols-3 gap-4">
+        // الأعمدة جنب بعض (من اليمين)، كل واحد 300px على الأقل: لو الشاشة ضيقة (1366) سكرول بالعرض بيقف على عمود
+        // Columns side by side (from the right), each at least 300px: on a narrow screen (1366) a horizontal snap scroll
+        <div
+          className="flex-1 min-h-0 grid grid-flow-col gap-3 min-[1600px]:gap-4 overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
+          style={{ gridAutoColumns: "minmax(300px, 1fr)" }}
+        >
           {columns.map(({ section, list }) => (
-            <GroupColumn key={section.id} section={section} groups={list} alert={flash} onOpen={openGroup} />
+            <div key={section.id} className="min-h-0 min-w-0 grid snap-start">
+              <GroupColumn section={section} groups={list} alert={flash} onOpen={openGroup} />
+            </div>
           ))}
         </div>
       )}

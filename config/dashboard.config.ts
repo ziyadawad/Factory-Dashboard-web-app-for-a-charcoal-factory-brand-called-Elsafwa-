@@ -632,6 +632,7 @@ export const dashboardConfig = {
     // is written by id or name (exact or normalized like the keywords). A pinned group still flashes on a new message
     // but never moves; the rest follow by last message. A section not listed = all by last message
     pinned: {
+      reps: ["مبيعات التعبئة"],
       treasury: ["بنوك مصنع الصفوة", "مصروفات مصنع الصفوة"],
     } as Record<string, string[]>,
     hidden: [] as string[], // جروبات متتعرضش خالص (id أو الاسم) - groups never shown (id or name)
@@ -647,7 +648,8 @@ export const dashboardConfig = {
     // name wins); the rest go to the default: true section. Keywords match after normalizing: no spaces or diacritics,
     // ة = ه, أ / إ / آ = ا, ى = ي, ئ = ي, ؤ = و, English lower-case
     // ===== الأعمدة: كل قسم عمود لوحده جنب بعض (من اليمين للشمال بالترتيب ده) - one column per section (right to left) =====
-    columnOrder: ["packaging", "production", "treasury"],
+    // 4 أعمدة: التعبئة والبلاستيك | المناديب | الإنتاج | الخزنة والحضور - 4 columns (right to left)
+    columnOrder: ["packaging", "reps", "production", "treasury"],
     // ===== تنبيه "رسالة جديدة" (على كل الصفحات): spotlight =====
     // الشاشة بتسأل كل latestPollSeconds سؤال صغير بس (آخر رسالة جت امتى، من Redis)، ولو فيه جديد بتجيب الرسايل نفسها.
     // رسالة جديدة: صوت هادي واحد بس لكل كارت (عمره ما بيتكرر لنفس الرسايل)، والشاشة بتروح لصفحة الواتساب وبيظهر كارت كبير
@@ -675,7 +677,18 @@ export const dashboardConfig = {
     // ساعات الهدوء بتوقيت القاهرة: لا صوت ولا نقل للصفحة (الرسايل بتتحفظ عادي). null = من غير ساعات هدوء
     // Quiet hours (Cairo time): no chime, no jump (messages are still saved). null = no quiet hours
     quietHours: { from: "22:00", to: "07:00" } as { from: string; to: string } | null,
+    // prefixes = الاسم بيبدأ بيها (زي 🟢)، salesReps = الاسم فيه "جروب" + اسم مندوب من sales.reps
+    // prefixes = the name starts with one (like 🟢); salesReps = the name has "جروب" + a rep name from sales.reps
     sections: [
+      {
+        id: "reps",
+        title: "المناديب",
+        icon: "🚚",
+        color: "#22C55E", // أخضر - green
+        keywords: [] as string[],
+        prefixes: ["🟢"],
+        salesReps: true,
+      },
       {
         id: "packaging",
         title: "التعبئة والبلاستيك",
@@ -699,12 +712,23 @@ export const dashboardConfig = {
         keywords: [] as string[],
         default: true, // أي جروب ملوش قسم بييجي هنا - any group without a section lands here
       },
-    ] as { id: string; title: string; icon: string; color: string; keywords: string[]; default?: boolean }[],
-    // نقل جروب بالإيد لقسم: "id الجروب أو اسمه بالظبط": "id القسم" (packaging / treasury / production)
+    ] as {
+      id: string;
+      title: string;
+      icon: string;
+      color: string;
+      keywords: string[];
+      prefixes?: string[];
+      salesReps?: boolean;
+      default?: boolean;
+    }[],
+    // نقل جروب بالإيد لقسم: "id الجروب أو اسمه بالظبط": "id القسم" (reps / packaging / treasury / production)
     // Move a group by hand: "group id or exact name": "section id"
     // مثال - example: { "120363040866284130@g.us": "treasury", "المشتريات": "packaging" }
     sectionOverrides: {
       "مجموعة المقترحات": "treasury", // المقترحات: من الإنتاج للخزنة والحضور - suggestions: moved from production to treasury
+      "علاء ابراهيم وصفي": "reps", // من غير "جروب" في الاسم: لو الـ 🟢 اتشالت يفضل في المناديب - no "جروب": stays a rep group without the 🟢
+      "مبيعات التعبئة": "reps", // مبيعات التعبئة: من التعبئة للمناديب (متثبت أول واحد) - sales: packaging -> reps (pinned first)
     } as Record<string, string>,
   },
 

@@ -23,6 +23,10 @@ export function normalizeName(text: string): string {
 }
 
 const SECTIONS = cfg.sections.map((s) => ({ ...s, keys: s.keywords.map(normalizeName).filter(Boolean) }));
+// "جروب" + اسم مندوب (sales.reps، بعد التوحيد) - "جروب" + a rep name (sales.reps, normalized)
+const GROUP_WORD = normalizeName("جروب");
+const REP_NAMES = dashboardConfig.sales.reps.map((r) => normalizeName(r.name)).filter(Boolean);
+const isRepGroup = (name: string) => name.includes(GROUP_WORD) && REP_NAMES.some((rep) => name.includes(rep));
 const DEFAULT = SECTIONS.find((s) => s.default) ?? SECTIONS[SECTIONS.length - 1];
 const OVERRIDES = Object.entries(cfg.sectionOverrides as Record<string, string>);
 
@@ -32,8 +36,14 @@ export function sectionOf(group: { id: string; name: string }): WaSection {
   const override = OVERRIDES.find(([key]) => key === group.id || key === group.name || normalizeName(key) === name);
   const manual = override && SECTIONS.find((s) => s.id === override[1]);
   if (manual) return manual;
-  // 2) الكلمات بالترتيب - 2) keywords, in order
-  for (const s of SECTIONS) if (!s.default && s.keys.some((k) => name.includes(k))) return s;
+  // 2) بالترتيب: أول حرف (prefixes)، "جروب" + مندوب (salesReps)، الكلمات - 2) in order: prefixes, salesReps, keywords
+  const raw = group.name.trim();
+  for (const s of SECTIONS) {
+    if (s.default) continue;
+    if (s.prefixes?.some((p) => raw.startsWith(p))) return s;
+    if (s.salesReps && isRepGroup(name)) return s;
+    if (s.keys.some((k) => name.includes(k))) return s;
+  }
   // 3) الباقي - 3) the rest
   return DEFAULT;
 }
