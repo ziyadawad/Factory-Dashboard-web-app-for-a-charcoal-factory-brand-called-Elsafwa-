@@ -7,6 +7,7 @@ import { erpDocUrl, erpPost, erpToday } from "./erp";
 import { redis, redisSettings } from "./redis";
 import { loadUnlinkedPayments, packetsOf, productOfItem } from "./sales";
 import { normalizeArabic } from "./arabic";
+import type { Segment } from "./customer-types";
 import type { CustomerDetails, CustomerInvoice, CustomerNote, CustomerPayment, CustomerRow, CustomersData, Totals } from "./customer-types";
 
 const cfg = dashboardConfig.customers;
@@ -80,6 +81,18 @@ function gpsOf(...texts: (string | null | undefined)[]): { lat: number; lng: num
   }
   return null;
 }
+
+// جملة / قطاعي: بالإيد (segmentOverrides) ← مجموعة العميل (segmentRule.groups) ← متوسط الباكت في الفاتورة
+// Wholesale / retail: by hand (segmentOverrides) → the customer group (segmentRule.groups) → average packets per invoice
+function segmentOf(id: string, group: string | null, avgPackets: number): { segment: Segment; source: "override" | "group" | "rule" } {
+  const manual = cfg.segmentOverrides[id];
+  if (manual === "جملة" || manual === "قطاعي") return { segment: manual, source: "override" };
+  const byGroup = group ? cfg.segmentRule.groups[group] : undefined;
+  if (byGroup === "جملة" || byGroup === "قطاعي") return { segment: byGroup, source: "group" };
+  return { segment: avgPackets >= cfg.segmentRule.minAvgPackets ? "جملة" : "قطاعي", source: "rule" };
+}
+const DISTRIBUTOR_IDS = new Set(cfg.distributors);
+const DISTRIBUTOR_GROUPS = new Set(cfg.distributorGroups);
 
 function typeOf(c: CustomerDoc): string | null {
   const fromDetails = /نوع العميل:\s*([^\n]+)/.exec(c.customer_details ?? "")?.[1]?.trim();
@@ -209,6 +222,7 @@ async function loadModel(): Promise<Model> {
     const three = zero();
     const all = zero();
     const productTotals = sales.products.map(() => 0);
+    const monthProducts = sales.products.map(() => 0);
     const repCounts = new Map<string, number>();
     const history = new Map<string, { id: string; invoices90: number; invoicesAll: number; last: string }>();
     let firstDate: string | null = null;
@@ -230,6 +244,7 @@ async function loadModel(): Promise<Model> {
         if (inv.date <= prevSameDay) add(lastMonthToDate);
       }
       inv.products.forEach((p, i) => (productTotals[i] += p));
+      if (inv.date.startsWith(month)) inv.products.forEach((p, i) => (monthProducts[i] += p));
       if (!inv.isReturn) {
         firstDate ??= inv.date;
         lastDate = inv.date;
@@ -270,6 +285,14 @@ async function loadModel(): Promise<Model> {
       address: addressLine || null,
       gps: gpsOf(a?.address_line2, a?.address_line1),
       type: typeOf(c),
+      group: c.customer_group?.trim() || null,
+      ...(() => {
+        const avgPackets = all.invoices > 0 ? Math.round((all.packets / all.invoices) * 10) / 10 : 0;
+        const seg = segmentOf(c.name, c.customer_group?.trim() || null, avgPackets);
+        return { avgPackets, segment: seg.segment, segmentSource: seg.source };
+      })(),
+      isDistributor: DISTRIBUTOR_IDS.has(c.name) || (!!c.customer_group && DISTRIBUTOR_GROUPS.has(c.customer_group.trim())),
+      monthProducts: monthProducts.map((p) => Math.round(p)),
       repId,
       repFromOverride: !!(override && repIds.has(override)),
       reps: ranked.map(([id]) => id),
@@ -312,6 +335,8 @@ async function loadModel(): Promise<Model> {
         ...sales.reps.filter((r) => !cfg.routes.some((x) => x.repId === r.id)).map((r, i) => ({ repId: r.id, name: `خط ${cfg.routes.length + i + 1}` })),
       ],
       tags: cfg.tags,
+      products: sales.products.map((p) => p.label),
+      segmentMinAvgPackets: cfg.segmentRule.minAvgPackets,
       customers: rows,
       updatedAt: new Date().toISOString(),
     },

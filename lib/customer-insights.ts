@@ -1,17 +1,32 @@
 // "🧠 تحليل واقتراحات" في صفحة العملاء: قواعد ثابتة من الداتا (من غير AI)، والحدود في customers.insights
 // The customers page "🧠 تحليل واقتراحات": fixed rules over the data (no AI), thresholds in customers.insights
 import { dashboardConfig } from "@/config/dashboard.config";
-import type { CustomerRow, CustomersRep } from "./customer-types";
+import type { CustomerRow, CustomersRep, Segment } from "./customer-types";
 
 const T = dashboardConfig.customers.insights;
 export const NO_REP = "__none__";
+export const DISTRIBUTORS = "__dist__"; // رابط لصفحة الموزعين - a link to the distributors page
+
+// العميل اللي "مش متظبط": مش موزع، ومن غير مندوب أو اشترى من أكتر من عربية آخر 90 يوم (إلا لو متثبت بالإيد)
+// A "not settled" customer: not a distributor, and no rep or bought from 2+ vans in 90 days (unless pinned by hand)
+export const isMisfit = (r: CustomerRow) => !r.isDistributor && !r.repFromOverride && (r.repId === null || r.reps.length > 1);
+// عميل جوه خط المندوب ده - a customer inside this rep's route
+export const inRoute = (r: CustomerRow, repId: string) => !r.isDistributor && !isMisfit(r) && r.repId === repId;
+export type SegKey = "wholesale" | "retail";
+export const SEG_OF: Record<SegKey, Segment> = { wholesale: "جملة", retail: "قطاعي" };
 
 // lost = اشترى آخر 3 شهور ووقف أكتر من inactiveDays (بيتفتح من الاقتراحات بس) - bought in 90 days then stopped (from suggestions)
 // month = اشترى الشهر ده (من كارت المؤشرات) - bought this month (from the KPI card)
 export type CustomerStatus = "active" | "inactive" | "new" | "debt" | "lost" | "month";
 export const isLost = (r: CustomerRow, inactiveDays: number) => r.daysSince !== null && r.daysSince > inactiveDays && r.three.invoices > 0;
 // فلتر بيتطبق لما تدوس على اقتراح - the filter a suggestion applies
-export type InsightLink = { rep: string; area: string | null; status: CustomerStatus | null };
+export type InsightLink = { rep: string; area: string | null; status: CustomerStatus | null; seg?: SegKey | null };
+
+// أرقام مجموعة عملاء (جملة / قطاعي / موزعين / خطوط) - the numbers of a customer set
+export type SegStat = {
+  customers: number; active: number; lost: number; month: number; amount: number; lastMonthToDate: number;
+  growth: number | null; debt: number; threeAmount: number;
+};
 
 export type Suggestion = { icon: string; tone: "good" | "warn" | "bad" | "info"; text: string; detail?: string; link: InsightLink };
 
@@ -45,7 +60,26 @@ export type Insights = {
   uncovered: { area: AreaStat; count: number; mainRep: string | null }[];
   suggestions: Suggestion[];
   total: { month: number; lastMonthToDate: number; growth: number | null };
+  // جملة مقابل قطاعي لكل خط (أو للخط المختار) - wholesale vs retail per route (or the chosen route)
+  segments: { repId: string; name: string; w: SegStat; r: SegStat }[];
+  // الموزعين مقابل الخطوط (في نطاق "الكل" بس) - distributors vs routes ("all" scope only)
+  distVsRoutes: { dist: SegStat; routes: SegStat; share: number | null } | null;
 };
+
+export function segStat(rows: CustomerRow[], inactiveDays: number): SegStat {
+  const s: SegStat = { customers: rows.length, active: 0, lost: 0, month: 0, amount: 0, lastMonthToDate: 0, growth: null, debt: 0, threeAmount: 0 };
+  for (const r of rows) {
+    if (!r.inactive) s.active += 1;
+    if (isLost(r, inactiveDays)) s.lost += 1;
+    s.month += r.month.packets;
+    s.amount += r.month.amount;
+    s.lastMonthToDate += r.lastMonthToDate.packets;
+    s.debt += r.debt;
+    s.threeAmount += r.three.amount;
+  }
+  s.growth = Math.max(s.month, s.lastMonthToDate) >= T.minAreaPackets ? pct(s.month, s.lastMonthToDate) : null;
+  return s;
+}
 
 const pct = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
 const fmt = (n: number) => new Intl.NumberFormat("en-US").format(Math.round(n));
@@ -86,7 +120,10 @@ function areaStats(rows: CustomerRow[], inactiveDays: number): AreaStat[] {
 
 // rows = عملاء النطاق (مندوب أو الكل)، all = كل العملاء (للتداخل والمناطق من غير مندوب)
 // rows = the customers in scope (a rep or all), all = every customer (for overlaps and uncovered areas)
-export function buildInsights(rows: CustomerRow[], all: CustomerRow[], repId: string, reps: Map<string, CustomersRep>, inactiveDays: number): Insights {
+export function buildInsights(
+  rows: CustomerRow[], all: CustomerRow[], repId: string, reps: Map<string, CustomersRep>, inactiveDays: number,
+  routes: { repId: string; name: string }[] = []
+): Insights {
   const name = (id: string | null | undefined) => (id ? reps.get(id)?.name ?? id : "بدون مندوب");
   const scoped = repId !== "all";
   const areas = areaStats(rows, inactiveDays).sort((a, b) => b.month - a.month || b.three - a.three);
@@ -163,6 +200,77 @@ export function buildInsights(rows: CustomerRow[], all: CustomerRow[], repId: st
       link: { rep: NO_REP, area: u.area.key, status: null },
     });
   }
+  // ===== جملة مقابل قطاعي لكل خط، والموزعين مقابل الخطوط - wholesale vs retail per route, distributors vs routes =====
+  const segments = routes
+    .filter((rt) => !scoped || rt.repId === repId)
+    .map((rt) => {
+      const own = all.filter((r) => inRoute(r, rt.repId));
+      return { repId: rt.repId, name: rt.name, w: segStat(own.filter((r) => r.segment === "جملة"), inactiveDays), r: segStat(own.filter((r) => r.segment === "قطاعي"), inactiveDays) };
+    });
+  // بيتحطوا بعد أول اقتراحات المناطق عشان الحد الأقصى ميقطعهمش - placed right after the top area suggestions so the cap keeps them
+  const segS: (Suggestion & { sev: number })[] = [];
+  const distS: Suggestion[] = [];
+  for (const sg of segments) {
+    const who = `${sg.name} (${name(sg.repId)})`;
+    for (const [key, st] of [["wholesale", sg.w], ["retail", sg.r]] as [SegKey, SegStat][]) {
+      const label = SEG_OF[key];
+      if (st.growth !== null && st.growth <= T.growthDownPercent) {
+        segS.push({
+          sev: 3000 + Math.abs(st.growth),
+          icon: "📉", tone: "bad",
+          text: `${label} ${who} نازل ${Math.abs(st.growth)}% عن الشهر اللي فات`,
+          detail: `${fmt(st.month)} باكت مقابل ${fmt(st.lastMonthToDate)} لحد نفس اليوم — ${key === "retail" ? "زوّد زيارات المحلات" : "كلّم عملاء الجملة الكبار"}`,
+          link: { rep: sg.repId, area: null, status: null, seg: key },
+        });
+      }
+      if (st.lost >= T.segmentLostMin) {
+        segS.push({
+          sev: 2000 + st.lost,
+          icon: "🚶", tone: "bad",
+          text: `${st.lost} عميل ${label} في ${who} وقفوا`,
+          detail: `اشتروا آخر 3 شهور ووقفوا أكتر من ${inactiveDays} يوم — من ${st.customers} عميل ${label}`,
+          link: { rep: sg.repId, area: null, status: "lost", seg: key },
+        });
+      }
+      if (st.debt >= T.highDebtAmount && st.threeAmount > 0 && st.debt / st.threeAmount >= T.highDebtRatio) {
+        segS.push({
+          sev: 1000 + Math.round((st.debt / st.threeAmount) * 100),
+          icon: "💰", tone: "warn",
+          text: `مديونية ${label} ${who} عالية (${fmt(st.debt)} ج.م): ركز على التحصيل`,
+          detail: `= ${Math.round((st.debt / st.threeAmount) * 100)}% من مبيعات ${label} آخر 3 شهور`,
+          link: { rep: sg.repId, area: null, status: "debt", seg: key },
+        });
+      }
+    }
+  }
+  let distVsRoutes: Insights["distVsRoutes"] = null;
+  if (!scoped) {
+    const dist = segStat(all.filter((r) => r.isDistributor), inactiveDays);
+    const routeRows = all.filter((r) => routes.some((rt) => inRoute(r, rt.repId)));
+    const routesStat = segStat(routeRows, inactiveDays);
+    const totalMonth = dist.month + routesStat.month;
+    distVsRoutes = { dist, routes: routesStat, share: totalMonth > 0 ? Math.round((dist.month / totalMonth) * 100) : null };
+    if (dist.growth !== null && (dist.growth <= T.growthDownPercent || dist.growth >= T.growthUpPercent)) {
+      distS.push({
+        icon: dist.growth < 0 ? "📉" : "📈", tone: dist.growth < 0 ? "bad" : "good",
+        text: `الموزعين ${dist.growth < 0 ? "نازلين" : "طالعين"} ${Math.abs(dist.growth)}% عن الشهر اللي فات`,
+        detail: `${fmt(dist.month)} باكت مقابل ${fmt(dist.lastMonthToDate)} — الخطوط ${routesStat.growth === null ? "—" : `${routesStat.growth > 0 ? "+" : ""}${routesStat.growth}%`}`,
+        link: { rep: DISTRIBUTORS, area: null, status: null },
+      });
+    }
+    if (distVsRoutes.share !== null) {
+      distS.push({
+        icon: "🚛", tone: "info",
+        text: `الموزعين = ${distVsRoutes.share}% من باكت الشهر (${fmt(dist.month)} من ${fmt(totalMonth)})`,
+        detail: `الخطوط الأربعة ${fmt(routesStat.month)} باكت · مديونية الموزعين ${fmt(dist.debt)} ج.م`,
+        link: { rep: DISTRIBUTORS, area: null, status: null },
+      });
+    }
+  }
+
+  const topSeg = segS.sort((x, y) => y.sev - x.sev).slice(0, T.maxSegmentSuggestions).map((x) => ({ icon: x.icon, tone: x.tone, text: x.text, detail: x.detail, link: x.link }));
+  s.splice(Math.min(T.areaSuggestionsFirst, s.length), 0, ...topSeg, ...distS);
+
   for (const a of growthUp.slice(0, 2)) {
     s.push({
       icon: "📈", tone: "good",
@@ -178,5 +286,7 @@ export function buildInsights(rows: CustomerRow[], all: CustomerRow[], repId: st
     areas, growthUp, growthDown, losing, highDebt, bestAvg, worstAvg, overlaps, uncovered,
     suggestions: s.slice(0, T.maxSuggestions),
     total: { month, lastMonthToDate, growth: pct(month, lastMonthToDate) },
+    segments,
+    distVsRoutes,
   };
 }

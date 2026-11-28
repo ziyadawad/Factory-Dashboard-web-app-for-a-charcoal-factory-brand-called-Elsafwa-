@@ -831,6 +831,27 @@ export const dashboardConfig = {
     // A customer with no rep, or who bought from 2+ vans in the last 90 days, is "not settled" and stays out of the
     // routes until pinned here
     repOverrides: {} as Record<string, string>,
+    // ===== جملة / قطاعي (صفحة كل خط) =====
+    // ERPNext مفيهوش علامة واضحة (قايمة أسعار واحدة "Standard Selling"، و820 عميل من غير مجموعة)، فالتقسيم بالترتيب ده:
+    //   1) segmentOverrides تحت (بالإيد)  2) مجموعة العميل في groups  3) متوسط الباكت في الفاتورة (من الأول) ≥ minAvgPackets = جملة
+    // الداتا: 627 من 965 عميل خطوط متوسطهم أقل من 5 باكت، والعدد بيقل جامد بعد 10 (كبار العملاء متوسطهم 35، تجزئة 3)
+    // Wholesale / retail (each route page). ERPNext has no clear mark (one price list, 820 customers without a group), so:
+    //   1) segmentOverrides below (by hand)  2) the customer group in `groups`  3) average packets per invoice (all
+    //   time) ≥ minAvgPackets = wholesale. Data: 627 of 965 route customers average under 5 packets; it thins out after 10
+    segmentRule: {
+      minAvgPackets: 10, // متوسط الفاتورة بالباكت من هنا وفوق = جملة - from this average (packets per invoice) up = wholesale
+      groups: { "كبار العملاء": "جملة", "تجزئة": "قطاعي" } as Record<string, "جملة" | "قطاعي">, // مجموعة ERPNext ← النوع
+    },
+    // تثبيت جملة / قطاعي لعميل بالإيد: "كود العميل في ERPNext": "جملة" أو "قطاعي" (بيغلب على المجموعة والمتوسط)
+    // Pin wholesale / retail by hand: "ERPNext customer id": "جملة" | "قطاعي" (wins over the group and the average)
+    segmentOverrides: {} as Record<string, "جملة" | "قطاعي">,
+    // ===== الموزعين (كارت "🚛 الموزعين"): كود العميل في ERPNext بالظبط. مش بيتحسبوا جوه الخطوط ولا في "مش متظبطين" =====
+    // فيه كمان "احمد حسان - 1" و"حماده العزباوي تعبئة" في ERPNext - لو نفس الموزع ضيفهم هنا
+    // Distributors (the "🚛 الموزعين" card): exact ERPNext customer ids; not counted in the routes nor in "not settled".
+    // ERPNext also has "احمد حسان - 1" and "حماده العزباوي تعبئة" - add them here if they are the same distributor
+    distributors: ["عمرو خاطر", "محمد عادل حمزة", "اسامه شبرا", "حماده العزباوي", "احمد حسان"] as string[],
+    distributorGroups: ["موزع"] as string[], // أي عميل في المجموعة دي = موزع (مش موجودة في ERPNext لسه) - any customer in this group
+    distributorColor: "#06B6D4", // لون كارت الموزعين - the distributors card color
     // التاجات الجاهزة في ملاحظات العميل - the ready-made tags in a customer's notes
     tags: ["عميل مهم", "بيدفع متأخر", "بيدفع كاش", "محتاج متابعة", "زبون جديد"] as string[],
     // ===== "🧠 تحليل واقتراحات": قواعد ثابتة من الداتا (من غير AI) - rule-based insights from the data (no AI) =====
@@ -847,7 +868,10 @@ export const dashboardConfig = {
       // "move area" only when the second rep has up to 40% of that area's customers (more = shared, not a move)
       moveMaxShare: 0.4,
       overlapMinCustomers: 2, // كل مندوب لازم يبقى عنده كده عملاء على الأقل في المنطقة عشان تبقى "تداخل" - per rep, for an overlap
-      maxSuggestions: 14, // أكتر عدد اقتراحات - the most suggestions shown
+      segmentLostMin: 10, // كام عميل جملة / قطاعي وقفوا في خط عشان يطلع اقتراح - stopped wholesale / retail customers per route
+      maxSegmentSuggestions: 6, // أكتر عدد اقتراحات جملة / قطاعي (الأهم الأول) - the most wholesale / retail suggestions (worst first)
+      areaSuggestionsFirst: 4, // اقتراحات الجملة / القطاعي والموزعين بتيجي بعد أول كام اقتراح مناطق - they come after this many area ones
+      maxSuggestions: 20, // أكتر عدد اقتراحات - the most suggestions shown
     },
   },
 

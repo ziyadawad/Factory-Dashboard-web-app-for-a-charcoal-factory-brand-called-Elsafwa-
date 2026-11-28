@@ -3,10 +3,10 @@
 // لوحة "🧠 تحليل واقتراحات": الاقتراحات فوق (كل واحد بيفتح قايمة العملاء بالفلتر بتاعه)، وتحتها كروت التحليل
 // The "🧠 تحليل واقتراحات" panel: suggestions on top (each opens the customers list with its filter), analysis cards below
 
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { X } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
-import type { AreaStat, InsightLink, Insights, Suggestion } from "@/lib/customer-insights";
+import { DISTRIBUTORS, type AreaStat, type InsightLink, type Insights, type SegKey, type SegStat, type Suggestion } from "@/lib/customer-insights";
 import type { CustomersRep } from "@/lib/customer-types";
 import { N, NO_REP, RepChip } from "./common";
 
@@ -47,6 +47,26 @@ function Line({ label, onClick, children }: { label: string; onClick: () => void
       <span className="flex-1 min-w-0 truncate text-gray-100 font-semibold">📍 {label}</span>
       <span className="shrink-0 flex items-center gap-2 text-gray-400">{children}</span>
     </button>
+  );
+}
+
+// سطر أرقام جملة / قطاعي / موزعين - a wholesale / retail / distributors numbers row
+function SegCells({ s, onClick }: { s: SegStat; onClick?: () => void }) {
+  const td = "px-2 text-center whitespace-nowrap";
+  return (
+    <>
+      <td className={td}><N value={s.customers} className="text-gray-100 font-bold" /></td>
+      <td className={td}><N value={s.month} className="text-brandYellow font-bold" /></td>
+      <td className={td}><Growth value={s.growth} /></td>
+      <td className={td}>
+        {onClick && s.lost > 0 ? (
+          <button type="button" onClick={onClick} className="hover:underline"><N value={s.lost} className="text-statusRed font-bold" /></button>
+        ) : (
+          <N value={s.lost} className={s.lost ? "text-statusRed font-bold" : "text-gray-600"} />
+        )}
+      </td>
+      <td className={td}><N value={s.debt} className={s.debt > 0.5 ? "text-brandOrange font-bold" : "text-gray-600"} /></td>
+    </>
   );
 }
 
@@ -210,6 +230,76 @@ export default function InsightsPanel({ insights, scope, repId, reps, inactiveDa
               ))}
             </Card>
           </div>
+
+          {/* جملة مقابل قطاعي لكل خط، والموزعين مقابل الخطوط - wholesale vs retail per route, distributors vs routes */}
+          {insights.segments.length > 0 && (
+            <section className="rounded-2xl border border-cardBorder bg-background/50 p-3">
+              <h3 className="text-[16px] font-extrabold text-white">🏪 جملة مقابل 🛒 قطاعي</h3>
+              <p className="text-[12px] text-gray-500 mb-2">عملاء · باكت الشهر · النمو عن الشهر اللي فات · وقفوا قريب · المديونية — اضغط على الخط تفتحه</p>
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate border-spacing-0 text-[14px] leading-[2.2]">
+                  <thead>
+                    <tr className="text-gray-400">
+                      <th rowSpan={2} className="px-2 text-start font-semibold border-b border-cardBorder">الخط</th>
+                      <th colSpan={5} className="px-2 font-semibold text-amber-300 border-b border-cardBorder">🏪 جملة</th>
+                      <th colSpan={5} className="px-2 font-semibold text-sky-300 border-b border-cardBorder">🛒 قطاعي</th>
+                    </tr>
+                    <tr className="text-[12px] text-gray-500">
+                      {[0, 1].map((i) => (
+                        <Fragment key={i}>
+                          <th className="px-2 font-semibold border-b border-cardBorder">عملاء</th>
+                          <th className="px-2 font-semibold border-b border-cardBorder">باكت</th>
+                          <th className="px-2 font-semibold border-b border-cardBorder">نمو</th>
+                          <th className="px-2 font-semibold border-b border-cardBorder">وقفوا</th>
+                          <th className="px-2 font-semibold border-b border-cardBorder">مديونية</th>
+                        </Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {insights.segments.map((sg) => {
+                      const open = (seg: SegKey, status: InsightLink["status"] = null) => onPick({ rep: sg.repId, area: null, status, seg });
+                      return (
+                        <tr key={sg.repId} className="border-b border-cardBorder/60 hover:bg-white/5">
+                          <td className="px-2">
+                            <button type="button" onClick={() => onPick({ rep: sg.repId, area: null, status: null })} className="flex items-center gap-1.5 hover:underline">
+                              <span className="text-gray-100 font-bold">{sg.name}</span> <RepChip rep={reps.get(sg.repId)} small />
+                            </button>
+                          </td>
+                          <SegCells s={sg.w} onClick={() => open("wholesale", "lost")} />
+                          <SegCells s={sg.r} onClick={() => open("retail", "lost")} />
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {insights.distVsRoutes && (
+            <section className="rounded-2xl border border-cyan-400/40 bg-cyan-400/5 p-3">
+              <h3 className="text-[16px] font-extrabold text-white">🚛 الموزعين مقابل الخطوط</h3>
+              <div className="flex flex-wrap items-center gap-6 text-[14px] text-gray-300 mt-1">
+                {[
+                  { label: "🚛 الموزعين", s: insights.distVsRoutes.dist },
+                  { label: "🚚 الخطوط الأربعة", s: insights.distVsRoutes.routes },
+                ].map((x) => (
+                  <div key={x.label} className="flex flex-wrap items-center gap-3">
+                    <span className="font-extrabold text-white">{x.label}</span>
+                    <span><N value={x.s.customers} className="font-bold text-gray-100" /> عميل</span>
+                    <span><N value={x.s.month} className="font-bold text-brandYellow" /> باكت الشهر</span>
+                    <Growth value={x.s.growth} />
+                    <span>مديونية <N value={x.s.debt} className="font-bold text-brandOrange" /></span>
+                  </div>
+                ))}
+                {insights.distVsRoutes.share !== null && (
+                  <button type="button" onClick={() => onPick({ rep: DISTRIBUTORS, area: null, status: null })} className="ms-auto rounded-full border border-cyan-400/50 px-3 py-0.5 font-bold text-cyan-200 hover:bg-cyan-400/10">
+                    الموزعين = {insights.distVsRoutes.share}% من باكت الشهر ←
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 // صفحة العملاء (/customers): الأنواع اللي بتتبعت للمتصفح - the customers page: types sent to the browser
 
 export type Totals = { packets: number; amount: number; invoices: number };
+// جملة / قطاعي - wholesale / retail
+export type Segment = "جملة" | "قطاعي";
 
 export type CustomerNote = { text: string; tags: string[]; updatedAt: string };
 
@@ -12,6 +14,12 @@ export type CustomerRow = {
   areaKey: string; // المنطقة بعد التوحيد (للتجميع) - normalized area (grouping key), "" = none
   address: string | null;
   gps: { lat: number; lng: number } | null;
+  group: string | null; // مجموعة العميل في ERPNext - the ERPNext customer group
+  segment: Segment;
+  segmentSource: "override" | "group" | "rule"; // بالإيد / من المجموعة / من متوسط الفاتورة - by hand / group / average order
+  avgPackets: number; // متوسط الباكت في الفاتورة (من الأول) - average packets per invoice (all time)
+  isDistributor: boolean; // موزع (customers.distributors) - a distributor
+  monthProducts: number[]; // باكتات الشهر لكل منتج (بترتيب products) - this month's packets per product
   type: string | null; // نوع العميل - customer type (from the rep app details, else the group)
   repId: string | null; // المندوب اللي بيخدمه - the rep who serves him
   repFromOverride: boolean;
@@ -47,6 +55,8 @@ export type CustomersData = {
   reps: CustomersRep[];
   routes: CustomersRoute[];
   tags: string[];
+  products: string[]; // أسامي المنتجات (ربع / نص / كيلو...) - product labels
+  segmentMinAvgPackets: number;
   customers: CustomerRow[];
   notes: Record<string, CustomerNote>;
   notesEnabled: boolean;
