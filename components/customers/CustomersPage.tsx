@@ -6,9 +6,9 @@
 // The customers page: KPIs, filters, then 4 tabs (by rep, table, areas, data quality). A customer opens his panel.
 // Fetched only while this page is open (5-minute server cache)
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, Download, MapPin, RefreshCw, Search, Users } from "lucide-react";
+import { ArrowRight, Download, MapPin, Maximize2, Minimize2, RefreshCw, Search, Users } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { normalizeArabic } from "@/lib/arabic";
 import { formatTime12 } from "@/lib/format";
@@ -38,6 +38,19 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "debt", label: "المديونية" },
   { id: "oldest", label: "الأقدم" },
 ];
+// تكبير الصفحة للقراية من بعيد (90%–130%)، محفوظ في المتصفح - page zoom for reading from a distance, kept in localStorage
+const ZOOM_KEY = "elsafwa:customers-zoom";
+const ZOOM_MIN = 0.9;
+const ZOOM_MAX = 1.3;
+const ZOOM_STEP = 0.1;
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+
+// يفتح أو يقفل ملء الشاشة (لو المتصفح رفض مفيش حاجة بتحصل) - enter or leave fullscreen (ignored if the browser refuses)
+function toggleFullscreen() {
+  const request = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  request?.catch((error) => console.log("Fullscreen error:", error));
+}
+
 const VIEWS: { id: View; label: string }[] = [
   { id: "reps", label: "🚚 حسب المندوب" },
   { id: "table", label: "📋 جدول" },
@@ -426,6 +439,46 @@ export default function CustomersPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAllAreas, setShowAllAreas] = useState(false);
   const [localNotes, setLocalNotes] = useState<Record<string, CustomerNote | null>>({});
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  // ملء الشاشة: الأيقونة بتتظبط من fullscreenchange (حتى لو خرجت بـ Esc)، وزرار F بيفتح/يقفل (زي الداشبورد)
+  // Fullscreen: the icon follows fullscreenchange (also when leaving with Esc); the F key toggles it (like the dashboard)
+  useEffect(() => {
+    const update = () => setIsFullscreen(!!document.fullscreenElement);
+    update();
+    document.addEventListener("fullscreenchange", update);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F" && e.code !== "KeyF") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      e.preventDefault();
+      toggleFullscreen();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  // التكبير المحفوظ - the saved zoom
+  useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(ZOOM_KEY));
+      if (saved) setZoom(clampZoom(saved));
+    } catch {}
+  }, []);
+  const changeZoom = useCallback((step: number) => {
+    setZoom((was) => {
+      const next = clampZoom(was + step);
+      try {
+        window.localStorage.setItem(ZOOM_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const reps = useMemo(() => new Map((data?.reps ?? []).map((r) => [r.id, r])), [data]);
   const notes = useMemo(() => {
@@ -502,6 +555,8 @@ export default function CustomersPage() {
       )}
 
       {/* الهيدر: رجوع واللوجو والعنوان - header: back, logo and title */}
+      {/* الهيدر والمحتوى متكبرين بالـ zoom (والارتفاع متظبط عشان يفضلوا مالين الشاشة) - header + content zoomed, height compensated */}
+      <div className="relative z-[1] flex flex-col min-h-0" style={{ zoom, height: `${100 / zoom}vh` }}>
       <header className="relative z-[1] shrink-0 flex items-center gap-4 px-4 py-2.5 border-b border-cardBorder bg-card/80 backdrop-blur">
         <a
           href="/?page=sales"
@@ -526,6 +581,42 @@ export default function CustomersPage() {
             aria-label="تحديث"
           >
             <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          {/* التكبير − / + - zoom */}
+          <div className="flex items-center rounded-xl border border-cardBorder bg-background overflow-hidden" dir="ltr">
+            <button
+              type="button"
+              onClick={() => changeZoom(-ZOOM_STEP)}
+              disabled={zoom <= ZOOM_MIN}
+              className="px-2.5 py-1 text-[20px] font-extrabold leading-none text-gray-300 hover:bg-cardBorder disabled:opacity-30"
+              title="تصغير"
+              aria-label="تصغير"
+            >
+              −
+            </button>
+            <span className="px-1.5 min-w-[52px] text-center font-numbers text-[14px] font-bold text-gray-300 border-x border-cardBorder leading-[2.1]">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => changeZoom(ZOOM_STEP)}
+              disabled={zoom >= ZOOM_MAX}
+              className="px-2.5 py-1 text-[20px] font-extrabold leading-none text-gray-300 hover:bg-cardBorder disabled:opacity-30"
+              title="تكبير"
+              aria-label="تكبير"
+            >
+              +
+            </button>
+          </div>
+          {/* ملء الشاشة (نفس زرار الداشبورد) - fullscreen (same as the dashboard button) */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="p-2 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors"
+            title={isFullscreen ? "خروج من ملء الشاشة (F)" : "ملء الشاشة (F)"}
+            aria-label={isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"}
+          >
+            {isFullscreen ? <Minimize2 className="w-5 h-5 text-gray-300" /> : <Maximize2 className="w-5 h-5 text-gray-300" />}
           </button>
         </div>
       </header>
@@ -647,6 +738,7 @@ export default function CustomersPage() {
           </div>
         </main>
       )}
+      </div>
 
       {open && data && (
         <CustomerPanel
@@ -655,6 +747,7 @@ export default function CustomersPage() {
           reps={reps}
           inactiveDays={data.inactiveDays}
           tags={data.tags}
+          zoom={zoom}
           note={notes[open.id] ?? null}
           notesEnabled={data.notesEnabled}
           onNoteSaved={onNoteSaved}
