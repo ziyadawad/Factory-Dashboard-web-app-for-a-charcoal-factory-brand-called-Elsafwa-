@@ -559,69 +559,6 @@ function SegCard({ title, color, rows, selected, onClick, inactiveDays }: {
 // ===== الموزعين - distributors =====
 const DIST_COLOR = dashboardConfig.customers.distributorColor;
 
-function DistributorsCard({ rows, onOpen }: { rows: CustomerRow[]; onOpen: () => void }) {
-  const month = rows.reduce((t, r) => t + r.month.packets, 0);
-  const amount = rows.reduce((t, r) => t + r.month.amount, 0);
-  const debt = rows.reduce((t, r) => t + r.debt, 0);
-  const lastDays = rows.reduce<number | null>((m, r) => (r.daysSince === null ? m : m === null ? r.daysSince : Math.min(m, r.daysSince)), null);
-  const last = recency(lastDays, dashboardConfig.customers.inactiveDays);
-  const top = rows.slice().sort((a, b) => b.month.packets - a.month.packets || b.three.packets - a.three.packets).slice(0, 3);
-  const stat = (label: string, value: React.ReactNode) => (
-    <div className="rounded-xl border border-white/[0.07] bg-background/50 px-2.5 py-1.5 min-w-0">
-      <p className="text-[13px] text-gray-400 font-semibold truncate">{label}</p>
-      <div className="leading-[1.3]">{value}</div>
-    </div>
-  );
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group min-h-0 h-full text-start rounded-3xl border-2 p-4 flex flex-col justify-between gap-3 overflow-hidden transition-transform hover:-translate-y-0.5"
-      style={{
-        borderColor: `${DIST_COLOR}99`,
-        background: `radial-gradient(circle at 50% -10%, ${DIST_COLOR}40, transparent 55%), #141A2A`,
-        boxShadow: `0 0 34px ${DIST_COLOR}33, inset 0 0 0 1px ${DIST_COLOR}22`,
-      }}
-    >
-      <div className="shrink-0 flex items-center justify-between gap-2">
-        <span className="rounded-full px-3 py-0.5 text-[15px] font-extrabold text-white" style={{ background: `${DIST_COLOR}55`, border: `1px solid ${DIST_COLOR}` }}>
-          مبيعات المصنع
-        </span>
-        <span className={`rounded-full border px-2.5 py-0.5 text-[13px] font-bold ${last.cls}`}>آخر طلب {last.text}</span>
-      </div>
-      <div className="shrink-0 flex flex-col items-center gap-2">
-        <span
-          className="flex items-center justify-center rounded-full text-[56px]"
-          style={{ width: 104, height: 104, background: `${DIST_COLOR}33`, boxShadow: `0 0 0 6px ${DIST_COLOR}` }}
-          aria-hidden
-        >
-          🚛
-        </span>
-        <p className="text-[30px] font-extrabold text-white leading-[1.4] text-center">الموزعين</p>
-      </div>
-      <div className="shrink-0 grid grid-cols-2 gap-2">
-        {stat("🚛 الموزعين", <N value={rows.length} className="text-[24px] font-extrabold text-white" />)}
-        {stat("📦 باكت الشهر", <N value={month} className="text-[24px] font-extrabold text-brandYellow" />)}
-        {stat("💵 مبلغ الشهر", <N value={amount} className="text-[24px] font-extrabold text-white" />)}
-        {stat("💰 المديونية", <N value={debt} className="text-[24px] font-extrabold text-brandOrange" />)}
-      </div>
-      <div className="shrink-0 rounded-xl border border-white/[0.07] bg-background/50 px-3 py-2 overflow-hidden">
-        <p className="text-[13px] text-gray-400 font-semibold">🏆 الأكبر الشهر ده:</p>
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {top.map((d) => (
-            <span key={d.id} className="rounded-full px-2.5 py-0.5 text-[14px] font-bold text-gray-100" style={{ background: `${DIST_COLOR}26`, border: `1px solid ${DIST_COLOR}66` }}>
-              {d.name} <span className="font-numbers text-gray-400">{formatNumber(d.month.packets)}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-      <p className="shrink-0 text-center text-[14px] font-bold opacity-80 group-hover:opacity-100" style={{ color: DIST_COLOR }}>
-        افتح الموزعين ←
-      </p>
-    </button>
-  );
-}
-
 // صفحة الموزعين: كارت كبير لكل موزع، الأكبر الأول - the distributors page: a big card each, biggest first
 function DistributorsView({ rows, products, inactiveDays, onOpen }: { rows: CustomerRow[]; products: string[]; inactiveDays: number; onOpen: (id: string) => void }) {
   const sorted = rows.slice().sort((a, b) => b.three.packets - a.three.packets || b.all.packets - a.all.packets);
@@ -803,7 +740,8 @@ function AreaGroups({ rows, notes, inactiveDays, color, onOpen }: {
   );
 }
 
-// كارت خط كبير بلون المندوب ونور حواليه - a big route card in the rep's color with a glow
+// كارت خط بلون المندوب ونور حواليه. شاشة واسعة (4 في صف): طولي بصورة ~110px. أقل من 1600 (2×2): أفقي ومضغوط
+// A route card in the rep's color with a glow. Wide screen (4 in a row): tall, photo ~110px. Under 1600 (2×2): compact, horizontal
 function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void }) {
   const k = kpisOf(rows);
   const month = rows.reduce((t, r) => t + r.month.packets, 0);
@@ -817,76 +755,115 @@ function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRe
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [rows]);
-  const stat = (label: string, value: React.ReactNode) => (
-    <div className="rounded-xl border border-white/[0.07] bg-background/50 px-2.5 py-1.5 min-w-0">
-      <p className="text-[13px] text-gray-400 font-semibold truncate">{label}</p>
-      <div className="leading-[1.3]">{value}</div>
-    </div>
+  const stats: { label: string; value: number; cls: string }[] = [
+    { label: "👥 العملاء", value: k.total, cls: "text-white" },
+    { label: "🟢 اشتروا الشهر ده", value: k.activeMonth, cls: "text-statusGreen" },
+    { label: "🔴 متوقفين", value: k.inactive, cls: "text-statusRed" },
+    { label: "✨ جداد الشهر ده", value: k.isNew, cls: "text-sky-300" },
+    { label: "📦 باكت الشهر", value: month, cls: "text-brandYellow" },
+    { label: "💰 المديونية", value: k.debt, cls: "text-brandOrange" },
+  ];
+  const chips = (
+    <>
+      <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[14px] font-extrabold text-white whitespace-nowrap" style={{ background: `${rep.color}55`, border: `1px solid ${rep.color}` }}>
+        {name}
+      </span>
+      <span className="shrink-0 flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap">
+        <Truck size={14} /> {rep.van}
+      </span>
+    </>
+  );
+  const areaChip = (a: { label: string; count: number }) => (
+    <span key={a.label} className="shrink-0 rounded-full px-2 py-0.5 text-[13px] font-bold text-gray-100 whitespace-nowrap" style={{ background: `${rep.color}26`, border: `1px solid ${rep.color}66` }}>
+      {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
+    </span>
   );
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group min-h-0 h-full text-start rounded-3xl border-2 p-4 flex flex-col justify-between gap-3 overflow-hidden transition-transform hover:-translate-y-0.5"
+      className="group min-w-0 min-h-0 h-full text-start rounded-3xl border-2 overflow-hidden transition-transform hover:-translate-y-0.5"
       style={{
         borderColor: `${rep.color}99`,
         background: `radial-gradient(circle at 50% -10%, ${rep.color}40, transparent 55%), #141A2A`,
-        boxShadow: `0 0 34px ${rep.color}33, inset 0 0 0 1px ${rep.color}22`,
+        boxShadow: `0 0 30px ${rep.color}33, inset 0 0 0 1px ${rep.color}22`,
       }}
     >
-      <div className="shrink-0 flex items-center justify-between gap-2">
-        <span className="rounded-full px-3 py-0.5 text-[15px] font-extrabold text-white" style={{ background: `${rep.color}55`, border: `1px solid ${rep.color}` }}>
-          {name}
-        </span>
-        <span className="flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2.5 py-0.5 text-[14px] font-bold text-brandOrange">
-          <Truck size={15} /> {rep.van}
-        </span>
-      </div>
-      <div className="shrink-0 flex flex-col items-center gap-2">
-        <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={104} />
-        <p className="text-[30px] font-extrabold text-white leading-[1.4] text-center">{rep.name}</p>
-      </div>
-      <div className="shrink-0 grid grid-cols-2 gap-2">
-        {stat("👥 العملاء", <N value={k.total} className="text-[24px] font-extrabold text-white" />)}
-        {stat("🟢 اشتروا الشهر ده", <N value={k.activeMonth} className="text-[24px] font-extrabold text-statusGreen" />)}
-        {stat("🔴 متوقفين", <N value={k.inactive} className="text-[24px] font-extrabold text-statusRed" />)}
-        {stat("✨ جداد الشهر ده", <N value={k.isNew} className="text-[24px] font-extrabold text-sky-300" />)}
-        {stat("📦 باكت الشهر", <N value={month} className="text-[24px] font-extrabold text-brandYellow" />)}
-        {stat("💰 المديونية", <N value={k.debt} className="text-[24px] font-extrabold text-brandOrange" />)}
-      </div>
-      <div className="shrink-0 rounded-xl border border-white/[0.07] bg-background/50 px-3 py-2 overflow-hidden">
-        <p className="text-[13px] text-gray-400 font-semibold">
-          📍 <N value={areas.length} className="text-white font-bold" /> منطقة — أكبر 3:
-        </p>
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {areas.slice(0, 3).map((a) => (
-            <span key={a.label} className="rounded-full px-2.5 py-0.5 text-[14px] font-bold text-gray-100" style={{ background: `${rep.color}26`, border: `1px solid ${rep.color}66` }}>
-              {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
-            </span>
+      {/* شاشة واسعة: طولي - wide screen: tall */}
+      <div className="h-full p-3.5 flex flex-col justify-between gap-2.5 max-[1599px]:hidden">
+        <div className="shrink-0 flex items-center justify-between gap-2">{chips}</div>
+        <div className="shrink-0 flex flex-col items-center gap-1.5">
+          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={110} />
+          <p className="text-[24px] font-extrabold text-white leading-[1.4] text-center truncate max-w-full">{rep.name}</p>
+        </div>
+        <div className="shrink-0 grid grid-cols-2 gap-1.5">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-xl border border-white/[0.07] bg-background/50 px-2 py-1 min-w-0">
+              <p className="text-[12px] text-gray-400 font-semibold truncate">{s.label}</p>
+              <N value={s.value} className={`text-[21px] font-extrabold leading-[1.3] ${s.cls}`} />
+            </div>
           ))}
-          {areas.length === 0 && <span className="text-gray-500 text-[14px]">—</span>}
+        </div>
+        <div className="shrink-0 rounded-xl border border-white/[0.07] bg-background/50 px-2.5 py-1.5 min-w-0">
+          <p className="text-[12px] text-gray-400 font-semibold">
+            📍 <N value={areas.length} className="text-white font-bold" /> منطقة — أكبر 3:
+          </p>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {areas.slice(0, 3).map(areaChip)}
+            {areas.length === 0 && <span className="text-gray-500 text-[13px]">—</span>}
+          </div>
+        </div>
+        <p className="shrink-0 text-center text-[13px] font-bold opacity-80 group-hover:opacity-100" style={{ color: rep.color }}>
+          افتح الخط ←
+        </p>
+      </div>
+
+      {/* شاشة أصغر (2×2): أفقي ومضغوط - smaller screen (2×2): compact and horizontal */}
+      <div className="hidden max-[1599px]:flex h-full p-3 flex-col gap-2 min-w-0">
+        <div className="shrink-0 flex items-center gap-2.5 min-w-0">
+          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={58} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[20px] font-extrabold text-white leading-[1.35] truncate">{rep.name}</p>
+            <div className="flex items-center gap-1.5 min-w-0">{chips}</div>
+          </div>
+        </div>
+        <div className="shrink-0 grid grid-cols-3 gap-1.5">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-lg border border-white/[0.07] bg-background/50 px-2 py-0.5 min-w-0">
+              <p className="text-[11px] text-gray-400 font-semibold truncate">{s.label}</p>
+              <N value={s.value} className={`text-[17px] font-extrabold leading-[1.3] ${s.cls}`} />
+            </div>
+          ))}
+        </div>
+        <div className="shrink-0 flex items-center gap-1 min-w-0 overflow-hidden text-[12px] text-gray-400">
+          <span className="shrink-0">📍 {formatNumber(areas.length)} منطقة:</span>
+          {areas.slice(0, 3).map(areaChip)}
         </div>
       </div>
-      <p className="shrink-0 text-center text-[14px] font-bold opacity-80 group-hover:opacity-100" style={{ color: rep.color }}>
-        افتح الخط ←
-      </p>
     </button>
   );
 }
 
-// زرار مربع في شبكة 2×2 (صفحة الخطوط) - a square button in the 2×2 grid (the routes page)
-function SquareButton({ icon, label, sub, onClick, tone = "default" }: { icon: string; label: string; sub?: string; onClick: () => void; tone?: "default" | "sky" }) {
+// زرار في شبكة 2×3 (صفحة الخطوط) - a button in the 2×3 grid (the routes page)
+const BUTTON_TONES = {
+  default: "border-cardBorder bg-card/90 hover:bg-white/[0.06]",
+  sky: "border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20",
+  cyan: "border-cyan-400/60 bg-cyan-400/10 hover:bg-cyan-400/20",
+};
+function SquareButton({ icon, label, sub, onClick, tone = "default", wide = false }: {
+  icon: string; label: string; sub?: React.ReactNode; onClick: () => void; tone?: keyof typeof BUTTON_TONES; wide?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`aspect-square rounded-2xl border flex flex-col items-center justify-center gap-1 transition-colors ${
-        tone === "sky" ? "border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20" : "border-cardBorder bg-card/90 hover:bg-white/[0.06]"
-      }`}
+      className={`${wide ? "col-span-2 flex-row gap-3" : "flex-col gap-0.5"} h-[100px] max-[1599px]:h-[70px] rounded-2xl border flex items-center justify-center px-2 transition-colors ${BUTTON_TONES[tone]}`}
     >
-      <span className="text-[34px] leading-none">{icon}</span>
-      <span className="text-[16px] font-extrabold text-white">{label}</span>
-      {sub && <span className="text-[12px] text-gray-400">{sub}</span>}
+      <span className="text-[32px] max-[1599px]:text-[22px] leading-none">{icon}</span>
+      <span className={`flex flex-col ${wide ? "items-start" : "items-center"}`}>
+        <span className="text-[16px] max-[1599px]:text-[14px] font-extrabold text-white whitespace-nowrap">{label}</span>
+        {sub && <span className="text-[12px] max-[1599px]:text-[11px] text-gray-400 whitespace-nowrap">{sub}</span>}
+      </span>
     </button>
   );
 }
@@ -1128,38 +1105,51 @@ export default function CustomersPage() {
         {/* المؤشرات = إجمالي كل العملاء، والضغط بيفتح كل العملاء بالفلتر - KPIs = totals; a click opens all customers filtered */}
         <KpiRow rows={all} inactiveDays={inactiveDays} status={null} onStatus={(s) => go({ view: "all", status: s })} split />
         <div className="flex-1 min-h-0 flex gap-4">
-          {/* الخطوط الأربعة + الموزعين: 5 في صف (3 في الصف على الشاشات الأصغر) - the 4 routes + distributors: 5 in a row (3 per row smaller) */}
-          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-            <div className="h-full min-h-[560px] grid gap-4 grid-cols-5 max-[1599px]:grid-cols-3 max-[1599px]:h-auto">
+          {/* الخطوط الأربعة: صف واحد على 1920 و2×2 تحت 1600، من غير سكرول. خط 1 على اليمين (ترتيب customers.routes)
+              The 4 routes: one row at 1920 and 2×2 under 1600, no scrolling. خط 1 on the right (customers.routes order) */}
+          <div className="flex-1 min-w-0 min-h-0">
+            <div className="h-full grid gap-3 grid-cols-4 max-[1599px]:grid-cols-2 max-[1599px]:grid-rows-2">
               {data.routes.map((route) => {
                 const rep = reps.get(route.repId);
                 if (!rep) return null;
                 return <RouteCard key={route.repId} name={route.name} rep={rep} rows={byRoute.get(route.repId) ?? []} onOpen={() => go({ route: route.repId })} />;
               })}
-              <DistributorsCard rows={distributors} onOpen={() => go({ view: "distributors" })} />
             </div>
           </div>
-          {/* على الشمال: 4 أزرار مربعة، وتحتهم العملاء المش متظبطين - on the left: 4 square buttons, then the unsettled customers */}
-          <div className="shrink-0 w-[300px] max-[1599px]:w-[250px] flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
+          {/* على الشمال: شبكة 2×3 (الكل، المناطق، الجودة، التحليل، الموزعين)، وتحتها العملاء المش متظبطين
+              On the left: a 2×3 grid (all, areas, quality, insights, distributors), then the unsettled customers */}
+          <div className="shrink-0 w-[300px] max-[1599px]:w-[250px] flex flex-col gap-3 max-[1599px]:gap-2">
+            <div className="grid grid-cols-2 gap-3 max-[1599px]:gap-2">
               <SquareButton icon="📋" label="الكل" sub={`${formatNumber(all.length)} عميل`} onClick={() => go({ view: "all" })} />
               <SquareButton icon="📍" label="المناطق" onClick={() => go({ view: "areas" })} />
               <SquareButton icon="🧹" label="جودة البيانات" onClick={() => go({ view: "quality" })} />
               <SquareButton icon="🧠" label="تحليل واقتراحات" tone="sky" onClick={() => go({ view: "insights" })} />
+              <SquareButton
+                icon="🚛"
+                label="الموزعين"
+                tone="cyan"
+                wide
+                sub={
+                  <>
+                    <N value={distributors.length} className="text-gray-200 font-bold" /> موزع · <N value={distributors.reduce((t, r) => t + r.month.packets, 0)} className="text-brandYellow font-bold" /> باكت الشهر
+                  </>
+                }
+                onClick={() => go({ view: "distributors" })}
+              />
             </div>
             <button
               type="button"
               onClick={() => go({ view: "misfits" })}
-              className="rounded-2xl border-2 border-statusAmber/60 bg-statusAmber/10 hover:bg-statusAmber/20 p-4 text-start transition-colors"
+              className="rounded-2xl border-2 border-statusAmber/60 bg-statusAmber/10 hover:bg-statusAmber/20 p-4 max-[1599px]:p-3 text-start transition-colors"
             >
-              <p className="text-[17px] font-extrabold text-statusAmber">⚠ عملاء مش متظبطين</p>
-              <p className="leading-[1.3] mt-1">
-                <N value={misfits.length} className="text-[38px] font-extrabold text-white" /> <span className="text-gray-400">عميل</span>
+              <p className="text-[17px] max-[1599px]:text-[15px] font-extrabold text-statusAmber">⚠ عملاء مش متظبطين</p>
+              <p className="leading-[1.3] mt-1 max-[1599px]:mt-0">
+                <N value={misfits.length} className="text-[38px] max-[1599px]:text-[28px] font-extrabold text-white" /> <span className="text-gray-400">عميل</span>
               </p>
               <p className="text-[13px] text-gray-300 mt-1">
                 🏭 بدون مندوب <N value={noRep} className="font-bold text-white" /> · 🔀 أكتر من مندوب <N value={misfits.length - noRep} className="font-bold text-white" />
               </p>
-              <p className="text-[12px] text-gray-500 mt-1">مش ظاهرين جوه الخطوط · اضغط تشوفهم ←</p>
+              <p className="text-[12px] text-gray-500 mt-1 max-[1599px]:hidden">مش ظاهرين جوه الخطوط · اضغط تشوفهم ←</p>
             </button>
           </div>
         </div>
