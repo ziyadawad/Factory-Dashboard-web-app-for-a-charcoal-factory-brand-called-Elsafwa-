@@ -27,3 +27,13 @@ export function xlsxResponse(buffer: ArrayBuffer, fileName: string): NextRespons
     },
   });
 }
+
+// زي الـ middleware بالظبط: لو فيه DASHBOARD_PASSWORD لازم كوكي الدخول، ولو مفيش (تجربة) مسموح
+// Same rule as the middleware: with DASHBOARD_PASSWORD set the login cookie is required; without it (dev) allowed
+export function dashboardAuthError(request: NextRequest): NextResponse | null {
+  const password = process.env.DASHBOARD_PASSWORD;
+  if (password && request.cookies.get("dashboard-session")?.value !== password) {
+    return NextResponse.json({ error: "login required" }, { status: 401, headers: NO_STORE });
+  }
+  return null;
+}

@@ -580,7 +580,19 @@ export default function Dashboard() {
             )}
             {/* صفحة الإنتاج: "📱 شاشة الأوبريتر" وتحته "📊 ملخص الشهر" (فوق بعض، عشان الساعة والتاريخ يفضلوا باينين)
                 The production page: the operator button with the month summary under it (stacked, so the clock stays visible) */}
-            {pageId === "sales" && <OperatorQrButton open={repQrOpen} setOpen={setRepQrOpen} app={REP_APP} />}
+            {/* صفحة المناديب: "📱 أبلكيشن المناديب" (QR) وتحته "👥 العملاء" (صفحة /customers كاملة) - the rep app QR, with the customers page under it */}
+            {pageId === "sales" && (
+              <div className="flex flex-col items-stretch gap-1">
+                <OperatorQrButton open={repQrOpen} setOpen={setRepQrOpen} app={REP_APP} />
+                <a
+                  href="/customers"
+                  className="px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap text-center"
+                  title="قاعدة بيانات العملاء بالمندوب والمنطقة"
+                >
+                  👥 العملاء
+                </a>
+              </div>
+            )}
             {pageId === "production" && (
               <div className="flex flex-col items-stretch gap-1">
                 <OperatorQrButton open={operatorQrOpen} setOpen={setOperatorQrOpen} />

@@ -802,6 +802,26 @@ export const dashboardConfig = {
     } as Record<string, "wood" | "plastic" | "hidden">,
   },
 
+  // ============================================================
+  // صفحة "👥 العملاء" (/customers): قاعدة بيانات العملاء متقسمة بالمندوب والمنطقة - قراية بس من ERPNext
+  // (الملاحظات والتاجات بس بتتحفظ عندنا في Redis، مش في ERPNext). برّه تقليب التلفزيون، بتتفتح من زرار في صفحة المناديب
+  // The "👥 العملاء" page (/customers): the customer database by rep and area - read-only from ERPNext (only the notes
+  // and tags are stored on our side, in Redis). Outside the TV rotation; opened from a button on the reps page
+  // ============================================================
+  customers: {
+    cacheMinutes: 5, // السيرفر بيكلم ERPNext مرة كل 5 دقايق بالكتير - ERPNext is asked at most every 5 min
+    inactiveDays: 14, // أكتر من كده من غير شرا = متوقف - more days than this without buying = inactive
+    // مندوب العميل = اللي عمل له أكتر فواتير آخر repLookbackDays يوم (بمخزن العربية) - the rep with most invoices lately
+    repLookbackDays: 90,
+    // لون كل مندوب (بالـ id بتاعه في sales.reps) - each rep's color (by his id in sales.reps)
+    repColors: { ibrahim: "#EE7000", karim: "#2F80ED", islam: "#16A34A", mostafa: "#A855F7" } as Record<string, string>,
+    // تثبيت مندوب لعميل بالإيد: "كود العميل في ERPNext": "id المندوب" (مثلا "CUST-0012": "karim")
+    // Pin a customer to a rep by hand: "ERPNext customer id": "rep id"
+    repOverrides: {} as Record<string, string>,
+    // التاجات الجاهزة في ملاحظات العميل - the ready-made tags in a customer's notes
+    tags: ["عميل مهم", "بيدفع متأخر", "بيدفع كاش", "محتاج متابعة", "زبون جديد"] as string[],
+  },
+
   pages: {
     autoRotate: true, // true = الصفحات تتقلب لوحدها، false = تفضل ثابتة - true = pages switch by themselves
     // title = اسم الصفحة اللي بيظهر في نص الهيدر - title = page name shown in the center of the header

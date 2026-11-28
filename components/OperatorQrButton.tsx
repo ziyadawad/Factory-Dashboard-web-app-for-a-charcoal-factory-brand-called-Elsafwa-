@@ -81,24 +81,24 @@ function OperatorQrPopup({ onClose, app }: { onClose: () => void; app: QrApp }) 
   );
 }
 
-// "🧾 فواتير المناديب" في هيدر صفحة مبيعات المناديب - in the reps sales page header
+// "📱 أبلكيشن المناديب" في هيدر صفحة مبيعات المناديب - in the reps sales page header
 export const REP_APP: QrApp = {
   url: dashboardConfig.sales.repAppUrl || "/rep",
   localPath: "/rep",
-  title: "🧾 فواتير المناديب",
+  title: "📱 أبلكيشن المناديب",
   subtitle: "امسح الكود بموبايل المندوب — كل مندوب برقمه السري",
   openLabel: "افتح التطبيق",
-  buttonLabel: "🧾 فواتير المناديب",
+  buttonLabel: "📱 أبلكيشن المناديب",
 };
 
 // open بيتمسك في الصفحة عشان التقليب يقف والـ QR مفتوح - open lives in the page so rotation pauses while the QR is shown
-export default function OperatorQrButton({ open, setOpen, app = OPERATOR_APP }: { open: boolean; setOpen: (open: boolean) => void; app?: QrApp }) {
+export default function OperatorQrButton({ open, setOpen, app = OPERATOR_APP, className = "" }: { open: boolean; setOpen: (open: boolean) => void; app?: QrApp; className?: string }) {
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap"
+        className={`${className} px-2 min-[1600px]:px-3 py-1 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors text-[13px] min-[1600px]:text-[14px] leading-tight font-bold text-gray-200 whitespace-nowrap`}
         title={app.url}
       >
         {app.buttonLabel}

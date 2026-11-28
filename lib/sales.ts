@@ -225,7 +225,7 @@ async function loadDebtRows(): Promise<DebtRow[]> {
 // + قيود اليومية على العميل اللي مش متربطة بفاتورة (الدائن بيقلل المديونية، المدين بيزودها)
 // Unlinked payments per customer (Receive lowers the debt, Pay = a refund to the customer raises it)
 // + Journal Entry lines on the customer not linked to an invoice (credit lowers the debt, debit raises it)
-async function loadUnlinkedPayments(): Promise<Map<string, number>> {
+export async function loadUnlinkedPayments(): Promise<Map<string, number>> {
   const child = "`tabJournal Entry Account`";
   const [payments, journals] = await Promise.all([
     getList<UnlinkedRow>({
