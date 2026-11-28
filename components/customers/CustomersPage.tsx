@@ -21,6 +21,7 @@ import type { CustomerNote, CustomerRow, CustomersData, CustomersRep, Segment } 
 import { fetcher, fmtDate, Money, N, NO_REP, recency, RepChip } from "./common";
 import CustomerPanel from "./CustomerPanel";
 import RepAvatar from "../RepAvatar";
+import VanIllustration from "../VanIllustration";
 import InsightsPanel from "./InsightsPanel";
 
 const ambient = dashboardConfig.sizes.ambient;
@@ -740,6 +741,30 @@ function AreaGroups({ rows, notes, inactiveDays, color, onOpen }: {
   );
 }
 
+// لافتة الخط: "خط" صغيرة فوق والرقم كبير تحت، بلون الخط ونور حواليها (لو الاسم مش "خط N" بيتكتب كله)
+// The route sign: "خط" small on top and the number big below, in the route color with a glow (any other name is shown whole)
+function RouteSign({ name, color, small = false }: { name: string; color: string; small?: boolean }) {
+  const m = /^\s*خط\s*(.+?)\s*$/.exec(name);
+  return (
+    <div
+      className={`shrink-0 flex flex-col items-center justify-center rounded-2xl border-2 ${small ? "px-3 py-1 min-w-[64px]" : "px-4 py-1.5 min-w-[78px]"}`}
+      style={{ borderColor: color, background: `linear-gradient(180deg, ${color}55, ${color}22)`, boxShadow: `0 0 22px ${color}66, inset 0 0 12px ${color}33` }}
+    >
+      {m ? (
+        <>
+          <span className={`${small ? "text-[12px]" : "text-[14px]"} font-extrabold text-white/90 leading-none`}>خط</span>
+          <span className={`${small ? "text-[36px]" : "text-[48px]"} font-black text-white leading-[1.05] font-numbers`} style={{ textShadow: `0 0 12px ${color}` }}>
+            {m[1]}
+          </span>
+        </>
+      ) : (
+        <span className={`${small ? "text-[20px]" : "text-[26px]"} font-black text-white leading-[1.3] whitespace-nowrap`}>{name}</span>
+      )}
+    </div>
+  );
+}
+const vanNumber = (van: string) => /\d+/.exec(van)?.[0] ?? "";
+
 // كارت خط: الخط هو العنوان الكبير ("خط 1" بلونه)، وتحته المندوب بصورته وعربيته. بعدين 3×2 أرقام، وسطر المناطق، و"افتح الخط".
 // شاشة واسعة (4 في صف): العنوان فوق والمندوب تحته. أقل من 1600 (2×2): العنوان والمندوب في سطر واحد عشان الكارت يكفي
 // A route card: the route is the big title ("خط 1" in its color), the rep with photo and van under it; then a 3×2
@@ -780,27 +805,35 @@ function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRe
         boxShadow: `0 0 30px ${rep.color}33, inset 0 0 0 1px ${rep.color}22`,
       }}
     >
-      {/* العنوان: الخط، وتحته (أو جنبه في 2×2) المندوب والعربية - the title: the route, then (or beside it in 2×2) the rep and van */}
-      <div className="shrink-0 flex flex-col max-[1599px]:flex-row max-[1599px]:items-center gap-2 max-[1599px]:gap-3 min-w-0">
-        <p className="shrink-0 text-[34px] font-extrabold leading-[1.25] whitespace-nowrap" style={{ color: rep.color }}>
-          {name}
-        </p>
-        <div className="flex items-center gap-2.5 min-w-0">
-          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={56} />
-          <div className="min-w-0 flex flex-col gap-1">
-            <p className="text-[16px] text-gray-300 leading-[1.4] truncate">
-              <span className="text-gray-500">المندوب:</span> <span className="font-extrabold text-white">{rep.name}</span>
-            </p>
-            <span className="self-start flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap leading-[1.4]">
-              <Truck size={14} /> {rep.van}
-            </span>
+      {/* العنوان: لافتة الخط يمين، المندوب بصورته جنب اسمه، ورسمة العربية برقمها شمال
+          The header: the route sign on the right, the rep photo next to his name, the van drawing with its number on the left */}
+      {/* واسعة: اللافتة والعربية فوق والمندوب سطر لوحده تحتهم (عشان الاسم ميتقطعش). 2×2: الكل في سطر واحد
+          Wide: the sign and the van on top, the rep on his own line below (so the name never truncates). 2×2: one row */}
+      <div className="shrink-0 flex flex-wrap items-center gap-2.5 min-w-0">
+        <span className="max-[1599px]:hidden">
+          <RouteSign name={name} color={rep.color} />
+        </span>
+        <span className="hidden max-[1599px]:block">
+          <RouteSign name={name} color={rep.color} small />
+        </span>
+        <div className="flex-1 min-w-0 flex items-center gap-2 min-[1600px]:order-3 min-[1600px]:basis-full min-[1600px]:rounded-xl min-[1600px]:border min-[1600px]:border-white/[0.07] min-[1600px]:bg-background/40 min-[1600px]:px-2.5 min-[1600px]:py-1.5">
+          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={44} />
+          <div className="min-w-0">
+            <p className="text-[12px] text-gray-500 leading-[1.3]">المندوب</p>
+            <p className="text-[18px] max-[1599px]:text-[15px] font-extrabold text-white leading-[1.35] truncate">{rep.name}</p>
           </div>
         </div>
+        <span className="max-[1599px]:hidden min-[1600px]:order-2 min-[1600px]:ms-auto">
+          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={90} />
+        </span>
+        <span className="hidden max-[1599px]:block">
+          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={72} />
+        </span>
       </div>
 
       {/* 3×2 أرقام: واسعة = ارتفاع ثابت والمسافات بتتوزع بالتساوي على الكارت، 2×2 = بتملا الباقي
           A 3×2 stats grid: wide = a fixed height with the card's spacing spread evenly; 2×2 = fills what is left */}
-      <div className="shrink-0 h-[230px] max-[1599px]:h-auto max-[1599px]:flex-1 max-[1599px]:min-h-0 grid grid-cols-3 grid-rows-2 gap-2 max-[1599px]:gap-1.5">
+      <div className="shrink-0 h-[280px] max-[1599px]:h-auto max-[1599px]:flex-1 max-[1599px]:min-h-0 grid grid-cols-3 grid-rows-2 gap-2 max-[1599px]:gap-1.5">
         {stats.map((s) => (
           // واسعة: خانة في النص برقم كبير. 2×2: العنوان والرقم في سطر واحد عشان الخانة القصيرة متقطعش
           // Wide: a centered tile with a big number. 2×2: label and number on one line so the short cell never clips
@@ -809,7 +842,7 @@ function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRe
             className="min-w-0 rounded-xl border border-white/[0.07] bg-background/50 px-2 py-1 flex flex-col items-center justify-center text-center gap-1 max-[1599px]:flex-row max-[1599px]:justify-between max-[1599px]:text-start max-[1599px]:gap-1.5"
           >
             <p className="min-w-0 text-[13px] max-[1599px]:text-[11px] text-gray-400 font-semibold max-w-full leading-[1.35] max-[1599px]:truncate">{s.label}</p>
-            <N value={s.value} className={`text-[26px] max-[1599px]:text-[17px] font-extrabold leading-[1.15] ${s.cls}`} />
+            <N value={s.value} className={`text-[28px] max-[1599px]:text-[17px] font-extrabold leading-[1.15] ${s.cls}`} />
           </div>
         ))}
       </div>
@@ -1106,18 +1139,27 @@ export default function CustomersPage() {
               <SquareButton icon="📍" label="المناطق" onClick={() => go({ view: "areas" })} />
               <SquareButton icon="🧹" label="جودة البيانات" onClick={() => go({ view: "quality" })} />
               <SquareButton icon="🧠" label="تحليل واقتراحات" tone="sky" onClick={() => go({ view: "insights" })} />
-              <SquareButton
-                icon="🚛"
-                label="الموزعين"
-                tone="cyan"
-                wide
-                sub={
-                  <>
-                    <N value={distributors.length} className="text-gray-200 font-bold" /> موزع · <N value={distributors.reduce((t, r) => t + r.month.packets, 0)} className="text-brandYellow font-bold" /> باكت الشهر
-                  </>
-                }
+              {/* الموزعين: العدد والباكت بأرقام كبيرة على سطرين - distributors: count and packets as big numbers on two lines */}
+              <button
+                type="button"
                 onClick={() => go({ view: "distributors" })}
-              />
+                className={`col-span-2 h-[100px] max-[1599px]:h-[70px] rounded-2xl border flex items-center justify-between gap-3 px-4 max-[1599px]:px-3 transition-colors ${BUTTON_TONES.cyan}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[34px] max-[1599px]:text-[24px] leading-none">🚛</span>
+                  <span className="text-[17px] max-[1599px]:text-[15px] font-extrabold text-white whitespace-nowrap">الموزعين</span>
+                </span>
+                <span className="flex flex-col items-end leading-[1.15]">
+                  <span className="whitespace-nowrap">
+                    <N value={distributors.length} className="text-[26px] max-[1599px]:text-[20px] font-extrabold text-white" />{" "}
+                    <span className="text-[13px] max-[1599px]:text-[12px] text-gray-300 font-bold">موزع</span>
+                  </span>
+                  <span className="whitespace-nowrap">
+                    <N value={distributors.reduce((t, r) => t + r.month.packets, 0)} className="text-[26px] max-[1599px]:text-[20px] font-extrabold text-brandYellow" />{" "}
+                    <span className="text-[13px] max-[1599px]:text-[12px] text-gray-300 font-bold">باكت الشهر</span>
+                  </span>
+                </span>
+              </button>
             </div>
             <button
               type="button"
