@@ -7,7 +7,8 @@ const T = dashboardConfig.customers.insights;
 export const NO_REP = "__none__";
 
 // lost = اشترى آخر 3 شهور ووقف أكتر من inactiveDays (بيتفتح من الاقتراحات بس) - bought in 90 days then stopped (from suggestions)
-export type CustomerStatus = "active" | "inactive" | "new" | "debt" | "lost";
+// month = اشترى الشهر ده (من كارت المؤشرات) - bought this month (from the KPI card)
+export type CustomerStatus = "active" | "inactive" | "new" | "debt" | "lost" | "month";
 export const isLost = (r: CustomerRow, inactiveDays: number) => r.daysSince !== null && r.daysSince > inactiveDays && r.three.invoices > 0;
 // فلتر بيتطبق لما تدوس على اقتراح - the filter a suggestion applies
 export type InsightLink = { rep: string; area: string | null; status: CustomerStatus | null };

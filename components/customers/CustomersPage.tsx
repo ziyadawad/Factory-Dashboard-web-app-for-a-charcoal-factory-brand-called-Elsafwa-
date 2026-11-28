@@ -35,6 +35,10 @@ const STATUS: { id: Status; label: string; test: (r: CustomerRow) => boolean }[]
   { id: "inactive", label: "🔴 متوقف", test: (r) => r.inactive },
   { id: "debt", label: "💰 عليه مديونية", test: (r) => r.debt > 0.5 },
 ];
+// فلاتر مش في الشرايح (بتيجي من كارت مؤشر أو اقتراح) - filters not among the chips (from a KPI card or a suggestion)
+const EXTRA_LABEL: Partial<Record<Status, string>> = { lost: "🚶 وقفوا قريب", month: "🟢 اشتروا الشهر ده" };
+const statusLabel = (s: Status) => EXTRA_LABEL[s] ?? STATUS.find((x) => x.id === s)?.label ?? s;
+
 const SORTS: { id: Sort; label: string }[] = [
   { id: "top", label: "الأكثر شراء" },
   { id: "recent", label: "آخر شراء" },
@@ -62,6 +66,41 @@ function sortRows(rows: CustomerRow[], sort: Sort): CustomerRow[] {
   if (sort === "debt") out.sort((a, b) => b.debt - a.debt || byText(a.name, b.name));
   if (sort === "oldest") out.sort((a, b) => byText(a.firstDate ?? a.created ?? "9999", b.firstDate ?? b.created ?? "9999") || byText(a.name, b.name));
   return out;
+}
+
+// كارت مؤشر (زي الأول): أرقام المندوب المختار بشريحة باسمه، والضغط بيفلتر - a KPI card (as before): the chosen rep's
+// numbers with a chip of his name; clicking filters the list
+function Kpi({ label, value, sub, color = "text-white", money = false, rep, selected, onClick }: {
+  label: string; value: number; sub?: string; color?: string; money?: boolean;
+  rep: { name: string; color: string } | null; selected: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`relative flex-1 min-w-[170px] text-start rounded-2xl border px-4 py-2.5 transition-colors ${
+        selected ? "border-brandOrange/70 bg-brandOrange/10 shadow-[0_0_16px_rgba(255,122,0,0.25)]" : "border-cardBorder bg-card/90 hover:bg-white/[0.05]"
+      }`}
+    >
+      <p className="text-gray-400 font-semibold text-[15px] leading-[1.7] whitespace-nowrap">{label}</p>
+      <p className="leading-[1.25] whitespace-nowrap">
+        {money ? <Money value={value} className={`text-[30px] font-extrabold ${color}`} /> : <N value={value} className={`text-[30px] font-extrabold ${color}`} />}
+        {sub && <span className="text-gray-500 text-[14px] ms-2">{sub}</span>}
+      </p>
+      {/* شريحة المندوب في الركن فوق (الاسم الأول بس) عشان العنوان والرقم ميتغطوش - the rep chip in the top corner (first name
+          only) so the label and number are never covered; the full name on hover */}
+      {rep && (
+        <span
+          className="absolute top-2 end-2 rounded-full px-2 text-[11px] font-bold text-gray-100 leading-[1.7] whitespace-nowrap"
+          style={{ background: `${rep.color}33`, border: `1px solid ${rep.color}99` }}
+          title={rep.name}
+        >
+          {rep.name.split(" ")[0]}
+        </span>
+      )}
+    </button>
+  );
 }
 
 // كارت مندوب (الخطوة 1): لونه واسمه وعربيته وأرقامه، والمختار بيتنور بلونه
@@ -494,7 +533,12 @@ export default function CustomersPage() {
     const q = normalizeArabic(query);
     const qDigits = query.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\D/g, "");
     const inactiveDays = data?.inactiveDays ?? 14;
-    const test = status === "lost" ? (r: CustomerRow) => isLost(r, inactiveDays) : STATUS.find((x) => x.id === status)?.test;
+    const test =
+      status === "lost"
+        ? (r: CustomerRow) => isLost(r, inactiveDays)
+        : status === "month"
+          ? (r: CustomerRow) => r.activeMonth
+          : STATUS.find((x) => x.id === status)?.test;
     const rows = inArea.filter((r) => {
       if (test && !test(r)) return false;
       if (q) {
@@ -514,6 +558,7 @@ export default function CustomersPage() {
       isNew: byRep.filter((r) => r.isNew).length,
       inactive: byRep.filter((r) => r.inactive).length,
       debt: byRep.reduce((t, r) => t + r.debt, 0),
+      debtors: byRep.filter((r) => r.debt > 0.5).length,
     }),
     [byRep]
   );
@@ -532,6 +577,7 @@ export default function CustomersPage() {
     setArea(null);
     setStatus(null);
   }, []);
+  const toggleStatus = useCallback((s: Status) => setStatus((was) => (was === s ? null : s)), []);
   const pickArea = useCallback((key: string) => {
     setArea(key);
     setView("reps");
@@ -628,23 +674,31 @@ export default function CustomersPage() {
                 </option>
               ))}
             </select>
-            <div className="ms-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-gray-400">
-              <span>
-                <N value={kpi.total} className="text-white font-extrabold text-[17px]" /> عميل
-              </span>
-              <span>
-                🟢 اشتروا الشهر ده <N value={kpi.activeMonth} className="text-statusGreen font-extrabold text-[17px]" />
-              </span>
-              <span>
-                ✨ جداد <N value={kpi.isNew} className="text-sky-300 font-extrabold text-[17px]" />
-              </span>
-              <span>
-                🔴 متوقفين <N value={kpi.inactive} className="text-statusRed font-extrabold text-[17px]" />
-              </span>
-              <span>
-                💰 <Money value={kpi.debt} className="text-brandOrange font-extrabold text-[17px]" />
-              </span>
-            </div>
+          </div>
+
+          {/* المؤشرات (المندوب المختار أو الكل)، والضغط على كارت بيفلتر القايمة - KPIs (chosen rep or all); a card filters the list */}
+          <div className="shrink-0 flex flex-wrap gap-3">
+            <Kpi label="👥 إجمالي العملاء" value={kpi.total} rep={selectedRep} selected={status === null} onClick={() => setStatus(null)} />
+            <Kpi label="🟢 اشتروا الشهر ده" value={kpi.activeMonth} color="text-statusGreen" rep={selectedRep} selected={status === "month"} onClick={() => toggleStatus("month")} />
+            <Kpi label="✨ جداد الشهر ده" value={kpi.isNew} color="text-sky-300" rep={selectedRep} selected={status === "new"} onClick={() => toggleStatus("new")} />
+            <Kpi
+              label={`🔴 متوقفين (أكتر من ${data.inactiveDays} يوم)`}
+              value={kpi.inactive}
+              color="text-statusRed"
+              rep={selectedRep}
+              selected={status === "inactive"}
+              onClick={() => toggleStatus("inactive")}
+            />
+            <Kpi
+              label="💰 إجمالي المديونية"
+              value={kpi.debt}
+              sub={`عند ${kpi.debtors} عميل`}
+              color="text-brandOrange"
+              money
+              rep={selectedRep}
+              selected={status === "debt"}
+              onClick={() => toggleStatus("debt")}
+            />
           </div>
 
           {/* الخطوة 1: كروت المناديب - step 1: the rep cards */}
@@ -671,9 +725,9 @@ export default function CustomersPage() {
                   </button>
                 ))}
                 {/* "وقفوا قريب" بيظهر بس لما اقتراح يفتحه - "stopped recently" shows only when a suggestion opens it */}
-                {status === "lost" && (
-                  <button type="button" className={chip(true)} onClick={() => setStatus(null)} title="اشتروا آخر 3 شهور ووقفوا">
-                    🚶 وقفوا قريب <span className="font-numbers text-gray-300">{inArea.filter((r) => isLost(r, data.inactiveDays)).length}</span> ✕
+                {status !== null && EXTRA_LABEL[status] && (
+                  <button type="button" className={chip(true)} onClick={() => setStatus(null)}>
+                    {EXTRA_LABEL[status]} ✕
                   </button>
                 )}
               </div>
@@ -724,7 +778,7 @@ export default function CustomersPage() {
             )}
             {!selectedRep && status !== null && (
               <button type="button" className={chip(true)} onClick={() => setStatus(null)}>
-                {status === "lost" ? "🚶 وقفوا قريب" : STATUS.find((x) => x.id === status)?.label} ✕
+                {statusLabel(status)} ✕
               </button>
             )}
             <p className="ms-auto text-gray-400 text-[14px]">
