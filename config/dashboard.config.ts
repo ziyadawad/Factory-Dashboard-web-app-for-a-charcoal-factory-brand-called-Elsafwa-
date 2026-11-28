@@ -1552,6 +1552,7 @@ export const dashboardConfig = {
       summaryHeight: 64, // ارتفاع الشريط اللي فوق (إجمالي الشهر مقابل التارجت) - top summary strip height
       summaryNumberFontSize: 32, // حجم أرقام الشريط اللي فوق - summary numbers font size
       nameFontSize: 30, // حجم اسم المندوب - rep name font size
+      avatarSize: 56, // صورة المندوب الدايرية جنب اسمه (public/reps/<id>.jpg) - the rep's round photo next to his name
       vanFontSize: 15, // حجم اسم العربية (سوزوكي 4) - van chip font size
       monthNumberFontSize: 64, // حجم رقم مبيعات الشهر - month packets number size (px)
       labelFontSize: 16, // حجم العناوين الصغيرة (مبيعات الشهر، آخر يوم بيع...) - small labels
@@ -1577,6 +1578,7 @@ export const dashboardConfig = {
         donutPercentFontSize: 26,
         donutLabelFontSize: 11,
         nameFontSize: 24,
+        avatarSize: 44,
         vanFontSize: 13,
         monthNumberFontSize: 50,
         labelFontSize: 14,

@@ -17,6 +17,7 @@ import Header from "../Header";
 import type { CustomerNote, CustomerRow, CustomersData, CustomersRep } from "@/lib/customer-types";
 import { fetcher, fmtDate, Money, N, NO_REP, recency, RepChip } from "./common";
 import CustomerPanel from "./CustomerPanel";
+import RepAvatar from "../RepAvatar";
 import InsightsPanel from "./InsightsPanel";
 
 const ambient = dashboardConfig.sizes.ambient;
@@ -45,12 +46,14 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "debt", label: "المديونية" },
   { id: "oldest", label: "الأقدم" },
 ];
-// أيقونات العرض في شريط الأدوات (أعمدة المناديب = الافتراضي) - the toolbar view icons (rep columns = default)
-const VIEW_ICONS: { id: View; icon: string; label: string }[] = [
-  { id: "table", icon: "📋", label: "جدول" },
-  { id: "areas", icon: "📍", label: "المناطق" },
-  { id: "quality", icon: "🧹", label: "جودة البيانات" },
+// أزرار العرض في شريط الأدوات (أعمدة المناديب = الافتراضي) - the toolbar view buttons (rep columns = default)
+const VIEW_BUTTONS: { id: View; label: string }[] = [
+  { id: "table", label: "📋 جدول" },
+  { id: "areas", label: "📍 المناطق" },
+  { id: "quality", label: "🧹 جودة البيانات" },
 ];
+// الحالات اللي ليها كارت مؤشر فوق (الكارت نفسه بيتنور) - statuses with a KPI card on top (the card itself lights up)
+const KPI_STATUS = new Set<Status>(["month", "new", "inactive", "debt"]);
 
 const chip = (on: boolean) =>
   `px-3 py-1 rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
@@ -141,8 +144,8 @@ function CustomerCard({ row, note, inactiveDays, onOpen }: { row: CustomerRow; n
 }
 
 // عمود مندوب: العملاء متجمعين بالمنطقة - one rep's column, customers grouped by area
-function RepColumn({ title, color, rows, notes, inactiveDays, wide, onOpen }: {
-  title: string; color: string; rows: CustomerRow[]; notes: Record<string, CustomerNote>; inactiveDays: number; wide: boolean; onOpen: (id: string) => void;
+function RepColumn({ title, color, repId, repName, rows, notes, inactiveDays, wide, onOpen }: {
+  title: string; color: string; repId?: string; repName?: string; rows: CustomerRow[]; notes: Record<string, CustomerNote>; inactiveDays: number; wide: boolean; onOpen: (id: string) => void;
 }) {
   const groups = useMemo(() => {
     const map = new Map<string, { label: string; rows: CustomerRow[] }>();
@@ -160,13 +163,16 @@ function RepColumn({ title, color, rows, notes, inactiveDays, wide, onOpen }: {
   const debt = rows.reduce((s, r) => s + r.debt, 0);
   return (
     <div className="min-h-0 flex flex-col rounded-2xl border border-cardBorder bg-card/90 overflow-hidden" style={{ borderTopWidth: 4, borderTopColor: color }}>
-      <div className="shrink-0 px-3 py-2 border-b border-cardBorder">
-        <p className="text-[19px] font-extrabold text-white leading-[1.6] truncate">{title}</p>
-        <p className="text-[13px] text-gray-400 flex gap-3 flex-wrap">
-          <span><N value={rows.length} className="text-gray-200 font-bold" /> عميل</span>
-          <span>الشهر <N value={month} className="text-brandYellow font-bold" /> باكت</span>
-          <span>مديونية <N value={debt} className="text-brandOrange font-bold" /></span>
-        </p>
+      <div className="shrink-0 flex items-center gap-3 px-3 py-2 border-b border-cardBorder">
+        {repId && <RepAvatar id={repId} name={repName ?? title} color={color} size={40} />}
+        <div className="min-w-0">
+          <p className="text-[19px] font-extrabold text-white leading-[1.6] truncate">{title}</p>
+          <p className="text-[13px] text-gray-400 flex gap-3 flex-wrap">
+            <span><N value={rows.length} className="text-gray-200 font-bold" /> عميل</span>
+            <span>الشهر <N value={month} className="text-brandYellow font-bold" /> باكت</span>
+            <span>مديونية <N value={debt} className="text-brandOrange font-bold" /></span>
+          </p>
+        </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-2">
         {rows.length === 0 && <p className="text-center text-gray-500 py-8">مفيش عملاء</p>}
@@ -193,8 +199,8 @@ function ByRepView({ rows, reps, repFilter, notes, inactiveDays, onOpen }: {
   rows: CustomerRow[]; reps: CustomersRep[]; repFilter: string; notes: Record<string, CustomerNote>; inactiveDays: number; onOpen: (id: string) => void;
 }) {
   const columns = [
-    ...reps.map((r) => ({ id: r.id, title: `${r.name} · ${r.van}`, color: r.color })),
-    { id: NO_REP, title: "بدون مندوب (مبيعات المصنع)", color: "#6B7280" },
+    ...reps.map((r) => ({ id: r.id, title: `${r.name} · ${r.van}`, color: r.color, repName: r.name as string | undefined })),
+    { id: NO_REP, title: "بدون مندوب (مبيعات المصنع)", color: "#6B7280", repName: undefined },
   ]
     .filter((c) => repFilter === "all" || c.id === repFilter)
     .map((c) => ({ ...c, rows: rows.filter((r) => (r.repId ?? NO_REP) === c.id) }))
@@ -206,7 +212,7 @@ function ByRepView({ rows, reps, repFilter, notes, inactiveDays, onOpen }: {
         style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(270px, 1fr))`, minWidth: columns.length * 280 }}
       >
         {columns.map((c) => (
-          <RepColumn key={c.id} title={c.title} color={c.color} rows={c.rows} notes={notes} inactiveDays={inactiveDays} wide={columns.length === 1} onOpen={onOpen} />
+          <RepColumn key={c.id} title={c.title} color={c.color} repId={c.repName ? c.id : undefined} repName={c.repName} rows={c.rows} notes={notes} inactiveDays={inactiveDays} wide={columns.length === 1} onOpen={onOpen} />
         ))}
       </div>
     </div>
@@ -633,15 +639,16 @@ export default function CustomersPage() {
             />
           </div>
 
-          {/* شريط الأدوات: المناديب، البحث، الترتيب، أيقونات العرض، والعدد - the toolbar: reps, search, sort, view icons, count */}
-          <div className="shrink-0 flex items-center gap-2 min-w-0">
-            {/* المناديب (بتتزحلق بالعرض لو الشاشة ضيقة) - the reps (scroll sideways on a narrow screen) */}
-            <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">
+          {/* شريط الأدوات: المناديب، البحث، الترتيب، العدد، وأزرار العرض على الشمال - the toolbar: reps, search, sort, count, view buttons on the left.
+              سطر واحد على 1920؛ تحت 1600 المناديب بياخدوا سطر لوحدهم - one line at 1920; under 1600 the reps take their own line */}
+          <div className="shrink-0 flex flex-wrap items-center gap-2 min-w-0">
+            {/* المناديب (ولو لسه مش واخدين بيتزحلقوا بالعرض) - the reps (and if they still don't fit they scroll sideways) */}
+            <div className="flex-1 min-w-0 max-[1599px]:basis-full overflow-x-auto [scrollbar-width:thin]">
               <div className="flex items-center gap-1.5 w-max">
                 {[
-                  { id: "all", name: "الكل", color: "#9CA3AF" },
-                  ...data.reps.map((r) => ({ id: r.id, name: r.name, color: r.color })),
-                  { id: NO_REP, name: "بدون مندوب", color: "#6B7280" },
+                  { id: "all", name: "الكل", color: "#9CA3AF", photo: false },
+                  ...data.reps.map((r) => ({ id: r.id, name: r.name, color: r.color, photo: true })),
+                  { id: NO_REP, name: "بدون مندوب", color: "#6B7280", photo: false },
                 ].map((r) => {
                   const on = repFilter === r.id;
                   return (
@@ -650,12 +657,16 @@ export default function CustomersPage() {
                       type="button"
                       onClick={() => pickRep(r.id)}
                       aria-pressed={on}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
+                      className={`flex items-center gap-1.5 ${r.photo ? "ps-1 pe-3 py-0.5" : "px-3 py-1"} rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
                         on ? "text-white" : "border-cardBorder bg-card/90 text-gray-300 hover:bg-white/5"
                       }`}
                       style={on ? { borderColor: r.color, background: `${r.color}33` } : undefined}
                     >
-                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+                      {r.photo ? (
+                        <RepAvatar id={r.id} name={r.name} color={r.color} size={24} />
+                      ) : (
+                        <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+                      )}
                       {r.name}
                     </button>
                   );
@@ -683,53 +694,51 @@ export default function CustomersPage() {
                 </option>
               ))}
             </select>
-            {/* أيقونات العرض: الضغط بيبدّل، والضغط تاني بيرجع لأعمدة المناديب - view icons: click switches, again returns to the columns */}
-            <div className="shrink-0 flex items-center gap-1">
-              {VIEW_ICONS.map((v) => {
-                const on = view === v.id;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setView(on ? "reps" : v.id)}
-                    title={on ? `${v.label} — اضغط تاني ترجع لأعمدة المناديب` : v.label}
-                    aria-label={v.label}
-                    aria-pressed={on}
-                    className={`w-9 h-9 flex items-center justify-center rounded-xl border text-[17px] transition-colors ${
-                      on ? "border-brandOrange bg-brandOrange/20" : "border-cardBorder bg-card hover:bg-white/5"
-                    }`}
-                  >
-                    {v.icon}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setInsightsOpen(true)}
-                title="تحليل واقتراحات"
-                aria-label="تحليل واقتراحات"
-                className="w-9 h-9 flex items-center justify-center rounded-xl border border-sky-400/50 bg-sky-400/10 text-[17px] hover:bg-sky-400/20 transition-colors"
-              >
-                🧠
-              </button>
-            </div>
             {/* فلتر منطقة / حالة من غير مندوب (من المناطق أو اقتراح أو كارت) - an area / status filter without a rep */}
             {!selectedRep && areaLabel !== null && (
               <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setArea(null)}>
                 📍 {areaLabel} ✕
               </button>
             )}
-            {!selectedRep && status !== null && (
+            {!selectedRep && status !== null && !KPI_STATUS.has(status) && (
               <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setStatus(null)}>
                 {statusLabel(status)} ✕
               </button>
             )}
-            <p className="shrink-0 text-gray-400 text-[13px] whitespace-nowrap">
+            <p className="shrink-0 ms-auto text-gray-400 text-[13px] whitespace-nowrap">
               ظاهر <N value={filtered.length} className="text-white font-bold" /> من <N value={byRep.length} /> عميل
             </p>
+            {/* أزرار العرض متجمعة على الشمال: الضغط بيبدّل، والضغط تاني بيرجع لأعمدة المناديب
+                The view buttons grouped on the left: a click switches, a second click returns to the rep columns */}
+            <div className="shrink-0 flex items-center gap-1.5">
+              {VIEW_BUTTONS.map((v) => {
+                const on = view === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setView(on ? "reps" : v.id)}
+                    aria-pressed={on}
+                    title={on ? "اضغط تاني ترجع لأعمدة المناديب" : undefined}
+                    className={`px-3 py-1 rounded-xl text-[15px] font-extrabold border whitespace-nowrap transition-colors ${
+                      on ? "bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white border-transparent" : "bg-card border-cardBorder text-gray-300 hover:bg-white/5"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setInsightsOpen(true)}
+                className="px-3 py-1 rounded-xl text-[15px] font-extrabold border border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20 whitespace-nowrap transition-colors"
+              >
+                🧠 تحليل واقتراحات
+              </button>
+            </div>
           </div>
 
-          {/* الخطوة 2 (بعد اختيار مندوب): الحالة بعددها ومناطقه - step 2 (after picking a rep): statuses with counts and his areas */}
+          {/* بعد اختيار مندوب: مناطقه بس (الحالات من كروت المؤشرات فوق) - after picking a rep: his areas only (statuses = the KPI cards) */}
           {selectedRep && (
             <div
               className="shrink-0 flex items-center gap-2 rounded-2xl border bg-card/80 px-3 py-2 min-w-0"
@@ -738,20 +747,12 @@ export default function CustomersPage() {
               <span className="shrink-0 flex items-center gap-1 text-[14px] font-bold text-white whitespace-nowrap">
                 <Truck size={15} style={{ color: selectedRep.color }} /> {selectedRep.name}
               </span>
-              <div className="shrink-0 flex items-center gap-1.5">
-                {STATUS.map((x) => (
-                  <button key={x.id} type="button" className={chip(status === x.id)} onClick={() => setStatus(status === x.id ? null : x.id)}>
-                    {x.label} <span className="font-numbers text-gray-400">{inArea.filter(x.test).length}</span>
-                  </button>
-                ))}
-                {/* "وقفوا قريب" بيظهر بس لما اقتراح يفتحه - "stopped recently" shows only when a suggestion opens it */}
-                {status !== null && EXTRA_LABEL[status] && (
-                  <button type="button" className={chip(true)} onClick={() => setStatus(null)}>
-                    {EXTRA_LABEL[status]} ✕
-                  </button>
-                )}
-              </div>
-              <span className="shrink-0 w-px h-6 bg-cardBorder mx-1" />
+              {/* حالة من غير كارت مؤشر (نشط / وقفوا قريب من اقتراح) - a status with no KPI card (from a suggestion) */}
+              {status !== null && !KPI_STATUS.has(status) && (
+                <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setStatus(null)}>
+                  {statusLabel(status)} ✕
+                </button>
+              )}
               <MapPin size={15} className="shrink-0 text-gray-500" />
               {/* المناطق بتتزحلق بالعرض - areas scroll sideways */}
               <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">

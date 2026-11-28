@@ -7,6 +7,7 @@ import { formatDayName, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import RepDetailsPanel from "./RepDetailsPanel";
+import RepAvatar from "./RepAvatar";
 import { useCallback, useEffect, useState } from "react";
 import { monthName, Num, Percent, ProductChips, SummaryStrip, useCompactRows } from "./SalesCommon";
 
@@ -94,6 +95,11 @@ function DebtBox({ debt, sizes }: { debt: RepDebtSummary | null; sizes: Sizes })
   );
 }
 
+// id ولون كل مندوب (للصورة) بالاسم - each rep's id and color (for the photo), by name
+const REP_META = new Map(
+  dashboardConfig.sales.reps.map((r) => [r.name, { id: r.id, color: dashboardConfig.customers.repColors[r.id] ?? "#FF7A00" }])
+);
+
 // كارت مندوب - one rep's card
 function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: boolean; sizes: Sizes; onOpen: () => void }) {
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
@@ -113,6 +119,9 @@ function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: bool
     >
       {/* الاسم والعربية والترتيب - name, van and rank */}
       <div className="shrink-0 flex items-center gap-3 min-w-0">
+        {REP_META.has(rep.name) && (
+          <RepAvatar id={REP_META.get(rep.name)!.id} name={rep.name} color={REP_META.get(rep.name)!.color} size={sizes.avatarSize} />
+        )}
         <h3 className="font-extrabold text-white truncate leading-[1.75]" style={{ fontSize: sizes.nameFontSize }}>
           {toEnglishDigits(rep.name)}
         </h3>
