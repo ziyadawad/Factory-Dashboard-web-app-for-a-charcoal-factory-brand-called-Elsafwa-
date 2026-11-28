@@ -52,8 +52,9 @@ function Line({ label, onClick, children }: { label: string; onClick: () => void
 
 const Empty = ({ text = "مفيش" }: { text?: string }) => <p className="text-gray-500 text-[14px] px-2 py-1">{text}</p>;
 
-export default function InsightsPanel({ insights, scope, repId, reps, inactiveDays, onPick, onClose }: {
+export default function InsightsPanel({ insights, scope, repId, reps, inactiveDays, onPick, onClose, inline = false }: {
   insights: Insights;
+  inline?: boolean; // صفحة جوه الصفحة بدل نافذة فوقها - a page inside the page instead of a popup
   scope: string;
   repId: string; // "all" أو المندوب المختار - "all" or the chosen rep
   reps: Map<string, CustomersRep>;
@@ -62,17 +63,27 @@ export default function InsightsPanel({ insights, scope, repId, reps, inactiveDa
   onClose: () => void;
 }) {
   useEffect(() => {
+    if (inline) return; // كصفحة: الرجوع بالزرار مش بـ Esc - as a page: back with the button, not Esc
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, inline]);
   const { areas, total } = insights;
   // المنطقة بتفتح في نفس النطاق (المندوب المختار أو الكل) - an area opens in the same scope (the chosen rep or all)
   const go = (a: AreaStat, status: InsightLink["status"] = null) => onPick({ rep: repId, area: a.key, status });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3" onClick={onClose} role="dialog" aria-modal="true" aria-label="تحليل واقتراحات">
-      <div className="relative w-[min(1400px,97vw)] h-[94vh] flex flex-col rounded-2xl border border-cardBorder bg-card shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={inline ? "h-full" : "fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3"}
+      onClick={inline ? undefined : onClose}
+      role={inline ? undefined : "dialog"}
+      aria-modal={inline ? undefined : true}
+      aria-label="تحليل واقتراحات"
+    >
+      <div
+        className={`relative flex flex-col rounded-2xl border border-cardBorder bg-card overflow-hidden ${inline ? "w-full h-full bg-card/90" : "w-[min(1400px,97vw)] h-[94vh] shadow-2xl"}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="shrink-0 flex flex-wrap items-center gap-3 px-5 py-3 border-b border-cardBorder">
           <h2 className="text-[24px] font-extrabold text-white">🧠 تحليل واقتراحات</h2>
           <span className="px-3 py-0.5 rounded-full border border-cardBorder text-gray-300 font-bold">{scope}</span>
@@ -80,9 +91,11 @@ export default function InsightsPanel({ insights, scope, repId, reps, inactiveDa
             الشهر ده <N value={total.month} className="text-brandYellow font-bold" /> باكت مقابل <N value={total.lastMonthToDate} className="text-gray-200 font-bold" /> لحد
             نفس اليوم الشهر اللي فات <Growth value={total.growth} />
           </span>
-          <button type="button" onClick={onClose} aria-label="إغلاق" className="ms-auto p-2 rounded-xl border border-cardBorder bg-background/70 text-gray-300 hover:text-white">
-            <X size={22} />
-          </button>
+          {!inline && (
+            <button type="button" onClick={onClose} aria-label="إغلاق" className="ms-auto p-2 rounded-xl border border-cardBorder bg-background/70 text-gray-300 hover:text-white">
+              <X size={22} />
+            </button>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-4">

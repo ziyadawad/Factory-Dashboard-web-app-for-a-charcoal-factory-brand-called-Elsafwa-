@@ -1,17 +1,18 @@
 "use client";
 
-// صفحة "👥 العملاء" (/customers): قاعدة بيانات العملاء متقسمة بالمندوب والمنطقة - قراية بس من ERPNext (الملاحظات عندنا)
-// فوق: المؤشرات، وبعدين الفلاتر (المندوب / المنطقة / الحالة / البحث / الترتيب)، وتحت 4 تابات: حسب المندوب، جدول،
-// المناطق، جودة البيانات. الضغط على عميل بيفتح لوحة تفاصيله. البيانات بتتجاب بس والصفحة مفتوحة (كاش 5 دقايق على السيرفر)
-// The customers page: KPIs, filters, then 4 tabs (by rep, table, areas, data quality). A customer opens his panel.
-// Fetched only while this page is open (5-minute server cache)
+// صفحة "👥 العملاء" (/customers): قراية بس من ERPNext (الملاحظات عندنا). الرئيسية = 4 خطوط (مندوب بعربيته) + أزرار
+// الكل / المناطق / جودة البيانات / التحليل + العملاء المش متظبطين. الضغط على خط بيفتح صفحته (مناطقه وعملاؤه)، وعلى عميل لوحته.
+// المكان بيتكتب في الرابط (?route=karim&view=areas) فالريفرش بيرجع لنفس الصفحة. البيانات بتتجاب بس والصفحة مفتوحة
+// The customers page: read-only from ERPNext (notes on our side). Landing = 4 routes (a rep with his van) + buttons
+// for all / areas / data quality / insights + the unsettled customers. A route opens its page (areas and customers),
+// a customer opens his panel. The place is kept in the URL (?route=karim&view=areas) so a refresh stays there
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, Download, MapPin, RefreshCw, Search, Truck, Users } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { normalizeArabic } from "@/lib/arabic";
-import { formatTime12 } from "@/lib/format";
+import { formatNumber, formatTime12 } from "@/lib/format";
 import { buildInsights, isLost, type CustomerStatus, type InsightLink } from "@/lib/customer-insights";
 import Header from "../Header";
 import type { CustomerNote, CustomerRow, CustomersData, CustomersRep } from "@/lib/customer-types";
@@ -23,7 +24,6 @@ import InsightsPanel from "./InsightsPanel";
 const ambient = dashboardConfig.sizes.ambient;
 const REFRESH_MS = dashboardConfig.customers.cacheMinutes * 60_000;
 
-type View = "reps" | "table" | "areas" | "quality";
 type Status = CustomerStatus;
 type Sort = "top" | "recent" | "debt" | "oldest";
 type TableKey =
@@ -46,15 +46,6 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "debt", label: "المديونية" },
   { id: "oldest", label: "الأقدم" },
 ];
-// أزرار العرض في شريط الأدوات (أعمدة المناديب = الافتراضي) - the toolbar view buttons (rep columns = default)
-const VIEW_BUTTONS: { id: View; label: string }[] = [
-  { id: "table", label: "📋 جدول" },
-  { id: "areas", label: "📍 المناطق" },
-  { id: "quality", label: "🧹 جودة البيانات" },
-];
-// الحالات اللي ليها كارت مؤشر فوق (الكارت نفسه بيتنور) - statuses with a KPI card on top (the card itself lights up)
-const KPI_STATUS = new Set<Status>(["month", "new", "inactive", "debt"]);
-
 const chip = (on: boolean) =>
   `px-3 py-1 rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
     on ? "border-brandOrange bg-brandOrange/20 text-white" : "border-cardBorder bg-background/70 text-gray-300 hover:bg-white/5"
@@ -140,82 +131,6 @@ function CustomerCard({ row, note, inactiveDays, onOpen }: { row: CustomerRow; n
         </div>
       )}
     </button>
-  );
-}
-
-// عمود مندوب: العملاء متجمعين بالمنطقة - one rep's column, customers grouped by area
-function RepColumn({ title, color, repId, repName, rows, notes, inactiveDays, wide, onOpen }: {
-  title: string; color: string; repId?: string; repName?: string; rows: CustomerRow[]; notes: Record<string, CustomerNote>; inactiveDays: number; wide: boolean; onOpen: (id: string) => void;
-}) {
-  const groups = useMemo(() => {
-    const map = new Map<string, { label: string; rows: CustomerRow[] }>();
-    for (const row of rows) {
-      const key = row.areaKey || "";
-      const g = map.get(key) ?? { label: row.area ?? "بدون منطقة", rows: [] };
-      g.rows.push(row);
-      map.set(key, g);
-    }
-    return Array.from(map.entries())
-      .sort(([ka, a], [kb, b]) => (ka === "" ? 1 : kb === "" ? -1 : b.rows.length - a.rows.length || byText(a.label, b.label)))
-      .map(([, g]) => g);
-  }, [rows]);
-  const month = rows.reduce((s, r) => s + r.month.packets, 0);
-  const debt = rows.reduce((s, r) => s + r.debt, 0);
-  return (
-    <div className="min-h-0 flex flex-col rounded-2xl border border-cardBorder bg-card/90 overflow-hidden" style={{ borderTopWidth: 4, borderTopColor: color }}>
-      <div className="shrink-0 flex items-center gap-3 px-3 py-2 border-b border-cardBorder">
-        {repId && <RepAvatar id={repId} name={repName ?? title} color={color} size={40} />}
-        <div className="min-w-0">
-          <p className="text-[19px] font-extrabold text-white leading-[1.6] truncate">{title}</p>
-          <p className="text-[13px] text-gray-400 flex gap-3 flex-wrap">
-            <span><N value={rows.length} className="text-gray-200 font-bold" /> عميل</span>
-            <span>الشهر <N value={month} className="text-brandYellow font-bold" /> باكت</span>
-            <span>مديونية <N value={debt} className="text-brandOrange font-bold" /></span>
-          </p>
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-2">
-        {rows.length === 0 && <p className="text-center text-gray-500 py-8">مفيش عملاء</p>}
-        {groups.map((g) => (
-          <div key={g.label} className="flex flex-col gap-1.5">
-            <p className="sticky top-0 z-[1] bg-card/95 backdrop-blur text-[14px] font-bold text-gray-300 px-1 py-0.5 flex items-center gap-1">
-              <MapPin size={13} style={{ color }} />
-              {g.label}
-              <span className="text-gray-500 font-semibold">({g.rows.length})</span>
-            </p>
-            <div className={wide ? "grid gap-1.5 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]" : "flex flex-col gap-1.5"}>
-              {g.rows.map((row) => (
-                <CustomerCard key={row.id} row={row} note={notes[row.id]} inactiveDays={inactiveDays} onOpen={() => onOpen(row.id)} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ByRepView({ rows, reps, repFilter, notes, inactiveDays, onOpen }: {
-  rows: CustomerRow[]; reps: CustomersRep[]; repFilter: string; notes: Record<string, CustomerNote>; inactiveDays: number; onOpen: (id: string) => void;
-}) {
-  const columns = [
-    ...reps.map((r) => ({ id: r.id, title: `${r.name} · ${r.van}`, color: r.color, repName: r.name as string | undefined })),
-    { id: NO_REP, title: "بدون مندوب (مبيعات المصنع)", color: "#6B7280", repName: undefined },
-  ]
-    .filter((c) => repFilter === "all" || c.id === repFilter)
-    .map((c) => ({ ...c, rows: rows.filter((r) => (r.repId ?? NO_REP) === c.id) }))
-    .filter((c) => c.id !== NO_REP || c.rows.length > 0 || repFilter === NO_REP);
-  return (
-    <div className="h-full min-h-0 overflow-x-auto">
-      <div
-        className="h-full min-h-0 grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(270px, 1fr))`, minWidth: columns.length * 280 }}
-      >
-        {columns.map((c) => (
-          <RepColumn key={c.id} title={c.title} color={c.color} repId={c.repName ? c.id : undefined} repName={c.repName} rows={c.rows} notes={notes} inactiveDays={inactiveDays} wide={columns.length === 1} onOpen={onOpen} />
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -447,23 +362,440 @@ function QualityView({ rows, reps, onOpen }: { rows: CustomerRow[]; reps: Map<st
   );
 }
 
+// ===== التنقل جوه الصفحة (والرابط بيتحدث عشان الريفرش يرجع لنفس المكان) =====
+// Navigation inside the page (the URL is updated so a refresh returns to the same place):
+//   (لا حاجة) = الخطوط · ?route=karim = صفحة خط · ?route=karim&view=areas|insights · ?view=all|areas|quality|insights|misfits
+//   &area=<key> &status=<status> &customer=<id>
+type GlobalView = "all" | "areas" | "quality" | "insights" | "misfits";
+type RouteView = "areas" | "insights";
+type Nav = { route: string | null; view: GlobalView | RouteView | null; area: string | null; status: Status | null; customer: string | null };
+const EMPTY_NAV: Nav = { route: null, view: null, area: null, status: null, customer: null };
+const GLOBAL_VIEWS = new Set(["all", "areas", "quality", "insights", "misfits"]);
+const ROUTE_VIEWS = new Set(["areas", "insights"]);
+const STATUSES = new Set(["active", "inactive", "new", "debt", "lost", "month"]);
+
+function readNav(): Nav {
+  const p = new URLSearchParams(window.location.search);
+  const route = p.get("route");
+  const view = p.get("view");
+  const status = p.get("status");
+  return {
+    route,
+    view: view && (route ? ROUTE_VIEWS : GLOBAL_VIEWS).has(view) ? (view as Nav["view"]) : null,
+    area: p.get("area"),
+    status: status && STATUSES.has(status) ? (status as Status) : null,
+    customer: p.get("customer"),
+  };
+}
+
+function navUrl(nav: Nav): string {
+  const p = new URLSearchParams();
+  if (nav.route) p.set("route", nav.route);
+  if (nav.view) p.set("view", nav.view);
+  if (nav.area !== null) p.set("area", nav.area);
+  if (nav.status) p.set("status", nav.status);
+  if (nav.customer) p.set("customer", nav.customer);
+  const q = p.toString();
+  return `${window.location.pathname}${q ? `?${q}` : ""}`;
+}
+
+// العميل اللي "مش متظبط": من غير مندوب، أو اشترى من أكتر من عربية آخر 90 يوم (إلا لو متثبت بالإيد في repOverrides)
+// A "not settled" customer: no rep, or bought from 2+ vans in the last 90 days (unless pinned in repOverrides)
+const isMisfit = (r: CustomerRow) => !r.repFromOverride && (r.repId === null || r.reps.length > 1);
+
+function statusTest(status: Status | null, inactiveDays: number): ((r: CustomerRow) => boolean) | null {
+  if (!status) return null;
+  if (status === "lost") return (r) => isLost(r, inactiveDays);
+  if (status === "month") return (r) => r.activeMonth;
+  return STATUS.find((x) => x.id === status)?.test ?? null;
+}
+
+function useFiltered(rows: CustomerRow[], area: string | null, status: Status | null, query: string, sort: Sort, inactiveDays: number) {
+  return useMemo(() => {
+    const q = normalizeArabic(query);
+    const qDigits = query.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\D/g, "");
+    const test = statusTest(status, inactiveDays);
+    const out = rows.filter((r) => {
+      if (area !== null && r.areaKey !== area) return false;
+      if (test && !test(r)) return false;
+      if (q) {
+        const inName = normalizeArabic(r.name).includes(q);
+        const inMobile = qDigits.length >= 3 && (r.mobile ?? "").replace(/\D/g, "").includes(qDigits);
+        if (!inName && !inMobile) return false;
+      }
+      return true;
+    });
+    return sortRows(out, sort);
+  }, [rows, area, status, query, sort, inactiveDays]);
+}
+
+function kpisOf(rows: CustomerRow[]) {
+  return {
+    total: rows.length,
+    activeMonth: rows.filter((r) => r.activeMonth).length,
+    isNew: rows.filter((r) => r.isNew).length,
+    inactive: rows.filter((r) => r.inactive).length,
+    debt: rows.reduce((t, r) => t + r.debt, 0),
+    debtors: rows.filter((r) => r.debt > 0.5).length,
+  };
+}
+
+// صف كروت المؤشرات (الضغط بيفلتر، والضغط تاني بيلغي) - the KPI cards row (a click filters, again clears)
+function KpiRow({ rows, inactiveDays, status, onStatus }: { rows: CustomerRow[]; inactiveDays: number; status: Status | null; onStatus: (s: Status | null) => void }) {
+  const k = kpisOf(rows);
+  const toggle = (s: Status) => onStatus(status === s ? null : s);
+  return (
+    <div className="shrink-0 flex flex-wrap gap-3">
+      <Kpi label="👥 إجمالي العملاء" value={k.total} rep={null} selected={false} onClick={() => onStatus(null)} />
+      <Kpi label="🟢 اشتروا الشهر ده" value={k.activeMonth} color="text-statusGreen" rep={null} selected={status === "month"} onClick={() => toggle("month")} />
+      <Kpi label="✨ جداد الشهر ده" value={k.isNew} color="text-sky-300" rep={null} selected={status === "new"} onClick={() => toggle("new")} />
+      <Kpi label={`🔴 متوقفين (أكتر من ${inactiveDays} يوم)`} value={k.inactive} color="text-statusRed" rep={null} selected={status === "inactive"} onClick={() => toggle("inactive")} />
+      <Kpi label="💰 إجمالي المديونية" value={k.debt} sub={`عند ${k.debtors} عميل`} color="text-brandOrange" money rep={null} selected={status === "debt"} onClick={() => toggle("debt")} />
+    </div>
+  );
+}
+
+function BackButton({ onClick, label = "رجوع" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-xl border border-cardBorder bg-card text-gray-300 hover:text-white hover:bg-cardBorder text-[14px] font-bold"
+    >
+      <ArrowRight size={16} /> {label}
+    </button>
+  );
+}
+
+function SearchSort({ query, setQuery, sort, setSort }: { query: string; setQuery: (q: string) => void; sort: Sort; setSort: (s: Sort) => void }) {
+  return (
+    <>
+      <div className="relative shrink-0">
+        <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="بحث بالاسم أو الموبايل"
+          className="w-[210px] ps-8 pe-2 py-1 rounded-xl border border-cardBorder bg-card text-[14px] text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
+        />
+      </div>
+      <select
+        value={sort}
+        onChange={(e) => setSort(e.target.value as Sort)}
+        className="shrink-0 py-1 px-2 rounded-xl border border-cardBorder bg-card text-[14px] text-gray-200 outline-none focus:border-brandOrange"
+        aria-label="الترتيب"
+      >
+        {SORTS.map((x) => (
+          <option key={x.id} value={x.id}>
+            {x.label}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+// شرايح المناطق بعددها (بتتزحلق بالعرض) - area chips with counts (scroll sideways)
+function AreaChips({ rows, area, onArea }: { rows: CustomerRow[]; area: string | null; onArea: (a: string | null) => void }) {
+  const chips = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+    for (const r of rows) {
+      const a = map.get(r.areaKey) ?? { key: r.areaKey, label: r.area ?? "بدون منطقة", count: 0 };
+      a.count += 1;
+      map.set(r.areaKey, a);
+    }
+    return Array.from(map.values()).sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : b.count - a.count));
+  }, [rows]);
+  return (
+    <div className="shrink-0 flex items-center gap-2 rounded-2xl border border-cardBorder bg-card/80 px-3 py-2 min-w-0">
+      <MapPin size={15} className="shrink-0 text-gray-500" />
+      <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">
+        <div className="flex items-center gap-1.5 w-max pb-0.5">
+          <button type="button" className={chip(area === null)} onClick={() => onArea(null)}>
+            كل المناطق <span className="font-numbers text-gray-400">{rows.length}</span>
+          </button>
+          {chips.map((a) => (
+            <button key={a.key || "none"} type="button" className={chip(area === a.key)} onClick={() => onArea(area === a.key ? null : a.key)}>
+              {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// العملاء متجمعين بالمنطقة، 3–4 كروت في الصف - customers grouped by area, 3–4 cards per row
+function AreaGroups({ rows, notes, inactiveDays, color, onOpen }: {
+  rows: CustomerRow[]; notes: Record<string, CustomerNote>; inactiveDays: number; color: string; onOpen: (id: string) => void;
+}) {
+  const groups = useMemo(() => {
+    const map = new Map<string, { label: string; rows: CustomerRow[] }>();
+    for (const row of rows) {
+      const g = map.get(row.areaKey) ?? { label: row.area ?? "بدون منطقة", rows: [] };
+      g.rows.push(row);
+      map.set(row.areaKey, g);
+    }
+    return Array.from(map.entries())
+      .sort(([ka, a], [kb, b]) => (ka === "" ? 1 : kb === "" ? -1 : b.rows.length - a.rows.length || byText(a.label, b.label)))
+      .map(([, g]) => g);
+  }, [rows]);
+  return (
+    <div className="h-full min-h-0 overflow-y-auto rounded-2xl border border-cardBorder bg-card/90 p-3 flex flex-col gap-3" style={{ borderTopWidth: 4, borderTopColor: color }}>
+      {rows.length === 0 && <p className="text-center text-gray-500 py-10">مفيش عملاء</p>}
+      {groups.map((g) => (
+        <div key={g.label} className="flex flex-col gap-1.5">
+          <p className="sticky top-0 z-[1] bg-card/95 backdrop-blur text-[15px] font-bold text-gray-300 px-1 py-0.5 flex items-center gap-1">
+            <MapPin size={14} style={{ color }} />
+            {g.label}
+            <span className="text-gray-500 font-semibold">({g.rows.length})</span>
+          </p>
+          <div className="grid gap-1.5 grid-cols-[repeat(auto-fill,minmax(330px,1fr))]">
+            {g.rows.map((row) => (
+              <CustomerCard key={row.id} row={row} note={notes[row.id]} inactiveDays={inactiveDays} onOpen={() => onOpen(row.id)} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// كارت خط كبير بلون المندوب ونور حواليه - a big route card in the rep's color with a glow
+function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void }) {
+  const k = kpisOf(rows);
+  const month = rows.reduce((t, r) => t + r.month.packets, 0);
+  const areas = useMemo(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const r of rows) {
+      if (!r.areaKey) continue;
+      const a = map.get(r.areaKey) ?? { label: r.area ?? r.areaKey, count: 0 };
+      a.count += 1;
+      map.set(r.areaKey, a);
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [rows]);
+  const stat = (label: string, value: React.ReactNode) => (
+    <div className="rounded-xl border border-white/[0.07] bg-background/50 px-2.5 py-1.5 min-w-0">
+      <p className="text-[13px] text-gray-400 font-semibold truncate">{label}</p>
+      <div className="leading-[1.3]">{value}</div>
+    </div>
+  );
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group min-h-0 h-full text-start rounded-3xl border-2 p-4 flex flex-col justify-between gap-3 overflow-hidden transition-transform hover:-translate-y-0.5"
+      style={{
+        borderColor: `${rep.color}99`,
+        background: `radial-gradient(circle at 50% -10%, ${rep.color}40, transparent 55%), #141A2A`,
+        boxShadow: `0 0 34px ${rep.color}33, inset 0 0 0 1px ${rep.color}22`,
+      }}
+    >
+      <div className="shrink-0 flex items-center justify-between gap-2">
+        <span className="rounded-full px-3 py-0.5 text-[15px] font-extrabold text-white" style={{ background: `${rep.color}55`, border: `1px solid ${rep.color}` }}>
+          {name}
+        </span>
+        <span className="flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2.5 py-0.5 text-[14px] font-bold text-brandOrange">
+          <Truck size={15} /> {rep.van}
+        </span>
+      </div>
+      <div className="shrink-0 flex flex-col items-center gap-2">
+        <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={104} />
+        <p className="text-[30px] font-extrabold text-white leading-[1.4] text-center">{rep.name}</p>
+      </div>
+      <div className="shrink-0 grid grid-cols-2 gap-2">
+        {stat("👥 العملاء", <N value={k.total} className="text-[24px] font-extrabold text-white" />)}
+        {stat("🟢 اشتروا الشهر ده", <N value={k.activeMonth} className="text-[24px] font-extrabold text-statusGreen" />)}
+        {stat("🔴 متوقفين", <N value={k.inactive} className="text-[24px] font-extrabold text-statusRed" />)}
+        {stat("✨ جداد الشهر ده", <N value={k.isNew} className="text-[24px] font-extrabold text-sky-300" />)}
+        {stat("📦 باكت الشهر", <N value={month} className="text-[24px] font-extrabold text-brandYellow" />)}
+        {stat("💰 المديونية", <N value={k.debt} className="text-[24px] font-extrabold text-brandOrange" />)}
+      </div>
+      <div className="shrink-0 rounded-xl border border-white/[0.07] bg-background/50 px-3 py-2 overflow-hidden">
+        <p className="text-[13px] text-gray-400 font-semibold">
+          📍 <N value={areas.length} className="text-white font-bold" /> منطقة — أكبر 3:
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {areas.slice(0, 3).map((a) => (
+            <span key={a.label} className="rounded-full px-2.5 py-0.5 text-[14px] font-bold text-gray-100" style={{ background: `${rep.color}26`, border: `1px solid ${rep.color}66` }}>
+              {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
+            </span>
+          ))}
+          {areas.length === 0 && <span className="text-gray-500 text-[14px]">—</span>}
+        </div>
+      </div>
+      <p className="shrink-0 text-center text-[14px] font-bold opacity-80 group-hover:opacity-100" style={{ color: rep.color }}>
+        افتح الخط ←
+      </p>
+    </button>
+  );
+}
+
+// زرار مربع في شبكة 2×2 (صفحة الخطوط) - a square button in the 2×2 grid (the routes page)
+function SquareButton({ icon, label, sub, onClick, tone = "default" }: { icon: string; label: string; sub?: string; onClick: () => void; tone?: "default" | "sky" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`aspect-square rounded-2xl border flex flex-col items-center justify-center gap-1 transition-colors ${
+        tone === "sky" ? "border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20" : "border-cardBorder bg-card/90 hover:bg-white/[0.06]"
+      }`}
+    >
+      <span className="text-[34px] leading-none">{icon}</span>
+      <span className="text-[16px] font-extrabold text-white">{label}</span>
+      {sub && <span className="text-[12px] text-gray-400">{sub}</span>}
+    </button>
+  );
+}
+
+// "⚠ عملاء مش متظبطين": من اشترى منهم وآخر شرا من كل مندوب، واقتراح الخط - the "not settled" customers: who they bought from,
+// the last purchase per rep, and the suggested route (the rep with most purchases)
+function MisfitsView({ rows, reps, routes, onOpen }: { rows: CustomerRow[]; reps: Map<string, CustomersRep>; routes: Map<string, string>; onOpen: (id: string) => void }) {
+  const sorted = useMemo(
+    () => rows.slice().sort((a, b) => b.reps.length - a.reps.length || b.three.packets - a.three.packets || b.all.packets - a.all.packets || byText(a.name, b.name)),
+    [rows]
+  );
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (text: string, id: string) => {
+    navigator.clipboard?.writeText(text).then(() => setCopied(id)).catch(() => {});
+  };
+  const th = "px-2 py-2 text-center font-semibold text-gray-400 whitespace-nowrap border-b border-cardBorder";
+  const td = "px-2 border-b border-cardBorder/60 text-center";
+  return (
+    <div className="h-full min-h-0 flex flex-col rounded-2xl border border-statusAmber/40 bg-card/90 overflow-hidden">
+      <p className="shrink-0 px-4 py-2 border-b border-cardBorder text-[14px] text-gray-400">
+        العملاء دول مش ظاهرين جوه الخطوط لحد ما يبقى ليهم مندوب واحد. لتثبيت عميل على خط: انسخ السطر وحطه في{" "}
+        <span dir="ltr" className="font-numbers text-gray-200">customers.repOverrides</span> في الكونفج.
+      </p>
+      <div className="flex-1 min-h-0 overflow-auto">
+        <table className="w-full border-separate border-spacing-0 text-[14px] leading-[2.1]">
+          <thead className="sticky top-0 z-10 bg-card">
+            <tr>
+              <th className={`${th} text-start ps-4`}>العميل</th>
+              <th className={th}>المنطقة</th>
+              <th className={th}>السبب</th>
+              <th className={`${th} text-start`}>اشترى من (فواتير آخر 90 يوم / من الأول · آخر شرا)</th>
+              <th className={th}>آخر شرا</th>
+              <th className={th}>باكت 3 شهور</th>
+              <th className={th}>الاقتراح</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r) => {
+              const best = r.repHistory[0];
+              const line = best ? `"${r.id}": "${best.id}",` : "";
+              return (
+                <tr key={r.id} className="hover:bg-white/5">
+                  <td className="ps-4 pe-2 border-b border-cardBorder/60">
+                    <button type="button" onClick={() => onOpen(r.id)} className="text-white font-semibold hover:underline text-start">
+                      {r.name}
+                    </button>
+                  </td>
+                  <td className={`${td} text-gray-300 whitespace-nowrap`}>{r.area ?? "—"}</td>
+                  <td className={`${td} whitespace-nowrap`}>
+                    {r.repId === null ? (
+                      <span className="text-gray-300">🏭 بدون مندوب</span>
+                    ) : (
+                      <span className="text-statusAmber font-bold">🔀 {r.reps.length} مناديب</span>
+                    )}
+                  </td>
+                  <td className="px-2 border-b border-cardBorder/60">
+                    {r.repHistory.length === 0 ? (
+                      <span className="text-gray-500">مبيعات المصنع على طول</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 py-1">
+                        {r.repHistory.map((h) => (
+                          <span key={h.id} className="inline-flex items-center gap-1 whitespace-nowrap">
+                            <RepChip rep={reps.get(h.id)} small />
+                            <span className="text-[12px] text-gray-400">
+                              <span className="font-numbers text-gray-200">{h.invoices90}</span>/<span className="font-numbers">{h.invoicesAll}</span> · {fmtDate(h.last)}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className={`${td} font-numbers text-gray-300 whitespace-nowrap`}>{fmtDate(r.lastDate)}</td>
+                  <td className={td}>
+                    <N value={r.three.packets} className={r.three.packets ? "text-brandYellow font-bold" : "text-gray-600"} />
+                  </td>
+                  <td className={`${td} whitespace-nowrap`}>
+                    {best ? (
+                      <button
+                        type="button"
+                        onClick={() => copy(line, r.id)}
+                        className="inline-flex items-center gap-1 rounded-full border border-cardBorder px-2 py-0.5 text-[13px] text-gray-200 hover:bg-white/5"
+                        title={`انسخ: ${line}`}
+                      >
+                        ضمه لـ {routes.get(best.id) ?? ""} {reps.get(best.id)?.name ?? best.id} {copied === r.id ? "✓ اتنسخ" : "📋"}
+                      </button>
+                    ) : (
+                      <span className="text-gray-500 text-[13px]">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const GLOBAL_TITLES: Record<GlobalView, string> = {
+  all: "📋 كل العملاء",
+  areas: "📍 المناطق",
+  quality: "🧹 جودة البيانات",
+  insights: "🧠 تحليل واقتراحات",
+  misfits: "⚠ عملاء مش متظبطين",
+};
+
 export default function CustomersPage() {
   const { data, error, isLoading, mutate } = useSWR<CustomersData>("/api/customers", fetcher, {
     refreshInterval: REFRESH_MS,
     revalidateOnFocus: false,
     keepPreviousData: true,
   });
-  const [view, setView] = useState<View>("reps");
-  const [repFilter, setRepFilter] = useState<string>("all");
-  const [area, setArea] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status | null>(null);
+  const [nav, setNav] = useState<Nav>(EMPTY_NAV);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("top");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [insightsOpen, setInsightsOpen] = useState(false);
   const [localNotes, setLocalNotes] = useState<Record<string, CustomerNote | null>>({});
 
+  // الرابط ← المكان، وزرار الرجوع في المتصفح - the URL → the place, and the browser back button
+  useEffect(() => {
+    setNav(readNav());
+    const onPop = () => setNav(readNav());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const go = useCallback((next: Partial<Nav>, opts: { replace?: boolean } = {}) => {
+    const target: Nav = { ...EMPTY_NAV, ...next };
+    if (opts.replace) window.history.replaceState(null, "", navUrl(target));
+    else window.history.pushState(null, "", navUrl(target));
+    // البحث بيتمسح لما تروح صفحة تانية بس (مش مع شرايح المنطقة) - search clears only when moving to another page
+    if (target.route !== navRef.current.route || target.view !== navRef.current.view) setQuery("");
+    setNav(target);
+  }, []);
+  const openCustomer = useCallback((id: string) => {
+    const target = { ...readNav(), customer: id };
+    window.history.pushState({ customer: true }, "", navUrl(target));
+    setNav(target);
+  }, []);
+  const closeCustomer = useCallback(() => {
+    if ((window.history.state as { customer?: boolean } | null)?.customer) window.history.back();
+    else {
+      const target = { ...readNav(), customer: null };
+      window.history.replaceState(null, "", navUrl(target));
+      setNav(target);
+    }
+  }, []);
+
   const reps = useMemo(() => new Map((data?.reps ?? []).map((r) => [r.id, r])), [data]);
+  const routeNames = useMemo(() => new Map((data?.routes ?? []).map((r) => [r.repId, r.name])), [data]);
   const notes = useMemo(() => {
     const out: Record<string, CustomerNote> = { ...(data?.notes ?? {}) };
     for (const [id, n] of Object.entries(localNotes)) {
@@ -473,86 +805,229 @@ export default function CustomersPage() {
     return out;
   }, [data, localNotes]);
   const all = useMemo(() => data?.customers ?? [], [data]);
-  const byRep = useMemo(() => (repFilter === "all" ? all : all.filter((r) => (r.repId ?? NO_REP) === repFilter)), [all, repFilter]);
-
-  // الخطوة 2: مناطق المندوب المختار (الأكبر الأول) - step 2: the chosen rep's areas (biggest first)
-  const areaChips = useMemo(() => {
-    const map = new Map<string, { key: string; label: string; count: number }>();
-    for (const r of byRep) {
-      const a = map.get(r.areaKey) ?? { key: r.areaKey, label: r.area ?? "بدون منطقة", count: 0 };
-      a.count += 1;
-      map.set(r.areaKey, a);
+  const inactiveDays = data?.inactiveDays ?? 14;
+  const misfits = useMemo(() => all.filter(isMisfit), [all]);
+  const byRoute = useMemo(() => {
+    const map = new Map<string, CustomerRow[]>();
+    for (const r of all) {
+      if (isMisfit(r) || !r.repId) continue;
+      const arr = map.get(r.repId) ?? [];
+      arr.push(r);
+      map.set(r.repId, arr);
     }
-    return Array.from(map.values()).sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : b.count - a.count));
-  }, [byRep]);
-  // الحالات بعددها (جوه المنطقة المختارة لو فيه) - status counts (within the chosen area, if any)
-  const inArea = useMemo(() => (area === null ? byRep : byRep.filter((r) => r.areaKey === area)), [byRep, area]);
+    return map;
+  }, [all]);
 
-  const filtered = useMemo(() => {
-    const q = normalizeArabic(query);
-    const qDigits = query.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\D/g, "");
-    const inactiveDays = data?.inactiveDays ?? 14;
-    const test =
-      status === "lost"
-        ? (r: CustomerRow) => isLost(r, inactiveDays)
-        : status === "month"
-          ? (r: CustomerRow) => r.activeMonth
-          : STATUS.find((x) => x.id === status)?.test;
-    const rows = inArea.filter((r) => {
-      if (test && !test(r)) return false;
-      if (q) {
-        const inName = normalizeArabic(r.name).includes(q);
-        const inMobile = qDigits.length >= 3 && (r.mobile ?? "").replace(/\D/g, "").includes(qDigits);
-        if (!inName && !inMobile) return false;
-      }
-      return true;
-    });
-    return sortRows(rows, sort);
-  }, [inArea, status, query, sort, data]);
+  const routeRep = nav.route ? reps.get(nav.route) ?? null : null;
+  const routeRows = useMemo(() => (nav.route ? byRoute.get(nav.route) ?? [] : []), [byRoute, nav.route]);
+  const routeFiltered = useFiltered(routeRows, nav.area, nav.status, query, sort, inactiveDays);
+  const globalBase = nav.view === "misfits" ? misfits : all;
+  const globalFiltered = useFiltered(globalBase, nav.area, nav.status, query, sort, inactiveDays);
 
-  const kpi = useMemo(
-    () => ({
-      total: byRep.length,
-      activeMonth: byRep.filter((r) => r.activeMonth).length,
-      isNew: byRep.filter((r) => r.isNew).length,
-      inactive: byRep.filter((r) => r.inactive).length,
-      debt: byRep.reduce((t, r) => t + r.debt, 0),
-      debtors: byRep.filter((r) => r.debt > 0.5).length,
-    }),
-    [byRep]
+  const insights = useMemo(() => {
+    if (!data || nav.view !== "insights") return null;
+    return nav.route ? buildInsights(routeRows, all, nav.route, reps, inactiveDays) : buildInsights(all, all, "all", reps, inactiveDays);
+  }, [data, nav.view, nav.route, routeRows, all, reps, inactiveDays]);
+
+  // اقتراح ← المكان المناسب (خط، أو كل العملاء، أو المش متظبطين) - a suggestion → the right place
+  const applyLink = useCallback(
+    (link: InsightLink) => {
+      if (link.rep === "all") go({ view: "all", area: link.area, status: link.status });
+      else if (link.rep === NO_REP) go({ view: "misfits", area: link.area, status: link.status });
+      else go({ route: link.rep, area: link.area, status: link.status });
+    },
+    [go]
   );
-
-  const insights = useMemo(
-    () => (insightsOpen && data ? buildInsights(byRep, all, repFilter, reps, data.inactiveDays) : null),
-    [insightsOpen, data, byRep, all, repFilter, reps]
-  );
-
-  const open = openId ? all.find((r) => r.id === openId) : undefined;
-  const closePanel = useCallback(() => setOpenId(null), []);
-  const closeInsights = useCallback(() => setInsightsOpen(false), []);
   const onNoteSaved = useCallback((id: string, note: CustomerNote | null) => setLocalNotes((was) => ({ ...was, [id]: note })), []);
-  const pickRep = useCallback((id: string) => {
-    setRepFilter(id);
-    setArea(null);
-    setStatus(null);
-  }, []);
-  const toggleStatus = useCallback((s: Status) => setStatus((was) => (was === s ? null : s)), []);
-  const pickArea = useCallback((key: string) => {
-    setArea(key);
-    setView("reps");
-  }, []);
-  // اقتراح → قايمة العملاء بالفلتر بتاعه - a suggestion → the customers list with its filter
-  const applyLink = useCallback((link: InsightLink) => {
-    setRepFilter(link.rep);
-    setArea(link.area);
-    setStatus(link.status);
-    setQuery("");
-    setView("reps");
-    setInsightsOpen(false);
-  }, []);
-  const selectedRep =
-    repFilter === "all" ? null : repFilter === NO_REP ? { name: "بدون مندوب", van: "مبيعات المصنع", color: "#6B7280" } : reps.get(repFilter) ?? null;
-  const areaLabel = area === null ? null : area === "" ? "بدون منطقة" : all.find((r) => r.areaKey === area)?.area ?? area;
+  const open = nav.customer ? all.find((r) => r.id === nav.customer) : undefined;
+  const areaLabel = nav.area === null ? null : nav.area === "" ? "بدون منطقة" : all.find((r) => r.areaKey === nav.area)?.area ?? nav.area;
+  const pillTitle = routeRep ? `العملاء · ${routeNames.get(routeRep.id) ?? routeRep.name}` : "العملاء";
+
+  const filterChips = (
+    <>
+      {nav.area !== null && (
+        <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => go({ ...nav, area: null, customer: null }, { replace: true })}>
+          📍 {areaLabel} ✕
+        </button>
+      )}
+      {nav.status !== null && (
+        <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => go({ ...nav, status: null, customer: null }, { replace: true })}>
+          {statusLabel(nav.status)} ✕
+        </button>
+      )}
+    </>
+  );
+
+  let body: React.ReactNode = null;
+  if (data && !nav.route && !nav.view) {
+    // ===== الخطوط (الصفحة الرئيسية) - the routes landing =====
+    const noRep = misfits.filter((r) => r.repId === null).length;
+    body = (
+      <>
+        <div className="shrink-0 flex items-center gap-3">
+          <a
+            href="/?page=sales"
+            className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-xl border border-cardBorder bg-card text-gray-300 hover:text-white hover:bg-cardBorder text-[14px] font-bold"
+            title="رجوع لصفحة مبيعات المناديب"
+          >
+            <ArrowRight size={16} /> رجوع
+          </a>
+          <h1 className="text-[24px] font-extrabold text-white flex items-center gap-2">
+            <Users className="text-brandOrange" size={24} /> العملاء
+          </h1>
+          <p className="text-gray-500 text-[14px]">اختار خط عشان تشوف عملاؤه</p>
+        </div>
+        {/* المؤشرات = إجمالي كل العملاء، والضغط بيفتح كل العملاء بالفلتر - KPIs = totals; a click opens all customers filtered */}
+        <KpiRow rows={all} inactiveDays={inactiveDays} status={null} onStatus={(s) => go({ view: "all", status: s })} />
+        <div className="flex-1 min-h-0 flex gap-4">
+          {/* الخطوط: 4 في صف (2×2 على الشاشات الأصغر) - the routes: 4 in a row (2×2 on smaller screens) */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
+            <div className="h-full min-h-[560px] grid gap-4 grid-cols-4 max-[1599px]:grid-cols-2 max-[1599px]:h-auto">
+              {data.routes.map((route) => {
+                const rep = reps.get(route.repId);
+                if (!rep) return null;
+                return <RouteCard key={route.repId} name={route.name} rep={rep} rows={byRoute.get(route.repId) ?? []} onOpen={() => go({ route: route.repId })} />;
+              })}
+            </div>
+          </div>
+          {/* على الشمال: 4 أزرار مربعة، وتحتهم العملاء المش متظبطين - on the left: 4 square buttons, then the unsettled customers */}
+          <div className="shrink-0 w-[300px] max-[1599px]:w-[250px] flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <SquareButton icon="📋" label="الكل" sub={`${formatNumber(all.length)} عميل`} onClick={() => go({ view: "all" })} />
+              <SquareButton icon="📍" label="المناطق" onClick={() => go({ view: "areas" })} />
+              <SquareButton icon="🧹" label="جودة البيانات" onClick={() => go({ view: "quality" })} />
+              <SquareButton icon="🧠" label="تحليل واقتراحات" tone="sky" onClick={() => go({ view: "insights" })} />
+            </div>
+            <button
+              type="button"
+              onClick={() => go({ view: "misfits" })}
+              className="rounded-2xl border-2 border-statusAmber/60 bg-statusAmber/10 hover:bg-statusAmber/20 p-4 text-start transition-colors"
+            >
+              <p className="text-[17px] font-extrabold text-statusAmber">⚠ عملاء مش متظبطين</p>
+              <p className="leading-[1.3] mt-1">
+                <N value={misfits.length} className="text-[38px] font-extrabold text-white" /> <span className="text-gray-400">عميل</span>
+              </p>
+              <p className="text-[13px] text-gray-300 mt-1">
+                🏭 بدون مندوب <N value={noRep} className="font-bold text-white" /> · 🔀 أكتر من مندوب <N value={misfits.length - noRep} className="font-bold text-white" />
+              </p>
+              <p className="text-[12px] text-gray-500 mt-1">مش ظاهرين جوه الخطوط · اضغط تشوفهم ←</p>
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  } else if (data && nav.route) {
+    // ===== صفحة خط - a route page =====
+    if (!routeRep) {
+      body = (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400 text-lg">
+          <p>الخط ده مش موجود</p>
+          <BackButton onClick={() => go({})} />
+        </div>
+      );
+    } else {
+      const routeName = routeNames.get(routeRep.id) ?? "";
+      const toggleView = (v: RouteView) => go({ route: routeRep.id, view: nav.view === v ? null : v });
+      body = (
+        <>
+          <div className="shrink-0 flex flex-wrap items-center gap-3">
+            <BackButton onClick={() => (nav.view ? go({ route: routeRep.id }) : go({}))} label={nav.view ? "رجوع للخط" : "رجوع للخطوط"} />
+            <RepAvatar id={routeRep.id} name={routeRep.name} color={routeRep.color} size={56} />
+            <div className="min-w-0">
+              <h1 className="text-[26px] font-extrabold text-white leading-[1.3]">{routeRep.name}</h1>
+              <p className="flex items-center gap-2 text-[14px]">
+                <span className="rounded-full px-2.5 font-extrabold text-white" style={{ background: `${routeRep.color}55`, border: `1px solid ${routeRep.color}` }}>
+                  {routeName}
+                </span>
+                <span className="flex items-center gap-1 text-brandOrange font-bold">
+                  <Truck size={14} /> {routeRep.van}
+                </span>
+              </p>
+            </div>
+            <div className="ms-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleView("areas")}
+                aria-pressed={nav.view === "areas"}
+                className={`px-3 py-1.5 rounded-xl text-[15px] font-extrabold border transition-colors ${
+                  nav.view === "areas" ? "bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white border-transparent" : "bg-card border-cardBorder text-gray-300 hover:bg-white/5"
+                }`}
+              >
+                📍 مناطق الخط
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleView("insights")}
+                aria-pressed={nav.view === "insights"}
+                className={`px-3 py-1.5 rounded-xl text-[15px] font-extrabold border transition-colors ${
+                  nav.view === "insights" ? "bg-sky-500/40 text-white border-sky-300" : "border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20"
+                }`}
+              >
+                🧠 تحليل الخط
+              </button>
+            </div>
+          </div>
+          <KpiRow rows={routeRows} inactiveDays={inactiveDays} status={nav.status} onStatus={(s) => go({ route: routeRep.id, area: nav.area, status: s }, { replace: true })} />
+          {nav.view === "areas" ? (
+            <div className="flex-1 min-h-0">
+              <AreasView rows={routeRows} reps={reps} onPick={(key) => go({ route: routeRep.id, area: key })} />
+            </div>
+          ) : nav.view === "insights" && insights ? (
+            <div className="flex-1 min-h-0">
+              <InsightsPanel inline insights={insights} scope={`${routeName} · ${routeRep.name}`} repId={routeRep.id} reps={reps} inactiveDays={inactiveDays} onPick={applyLink} onClose={() => go({ route: routeRep.id })} />
+            </div>
+          ) : (
+            <>
+              <AreaChips rows={routeRows} area={nav.area} onArea={(a) => go({ route: routeRep.id, area: a, status: nav.status }, { replace: true })} />
+              <div className="shrink-0 flex flex-wrap items-center gap-2">
+                <SearchSort query={query} setQuery={setQuery} sort={sort} setSort={setSort} />
+                {nav.status !== null && (
+                  <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => go({ route: routeRep.id, area: nav.area }, { replace: true })}>
+                    {statusLabel(nav.status)} ✕
+                  </button>
+                )}
+                <p className="ms-auto text-gray-400 text-[13px] whitespace-nowrap">
+                  ظاهر <N value={routeFiltered.length} className="text-white font-bold" /> من <N value={routeRows.length} /> عميل
+                </p>
+              </div>
+              <div className="flex-1 min-h-0">
+                <AreaGroups rows={routeFiltered} notes={notes} inactiveDays={inactiveDays} color={routeRep.color} onOpen={openCustomer} />
+              </div>
+            </>
+          )}
+        </>
+      );
+    }
+  } else if (data && nav.view) {
+    // ===== صفحات كل العملاء: الكل / المناطق / جودة البيانات / التحليل / المش متظبطين - the all-customers pages =====
+    const view = nav.view as GlobalView;
+    const listed = view === "all" || view === "misfits";
+    body = (
+      <>
+        <div className="shrink-0 flex flex-wrap items-center gap-3">
+          <BackButton onClick={() => go({})} label="رجوع للخطوط" />
+          <h1 className="text-[24px] font-extrabold text-white">{GLOBAL_TITLES[view]}</h1>
+          {listed && <SearchSort query={query} setQuery={setQuery} sort={sort} setSort={setSort} />}
+          {listed && filterChips}
+          {listed && (
+            <p className="ms-auto text-gray-400 text-[13px] whitespace-nowrap">
+              ظاهر <N value={globalFiltered.length} className="text-white font-bold" /> من <N value={globalBase.length} /> عميل
+            </p>
+          )}
+        </div>
+        {view === "all" && <KpiRow rows={all} inactiveDays={inactiveDays} status={nav.status} onStatus={(s) => go({ view: "all", area: nav.area, status: s }, { replace: true })} />}
+        <div className="flex-1 min-h-0">
+          {view === "all" && <TableView rows={globalFiltered} reps={reps} inactiveDays={inactiveDays} onOpen={openCustomer} />}
+          {view === "misfits" && <MisfitsView rows={globalFiltered} reps={reps} routes={routeNames} onOpen={openCustomer} />}
+          {view === "areas" && <AreasView rows={all} reps={reps} onPick={(key) => go({ view: "all", area: key })} />}
+          {view === "quality" && <QualityView rows={all} reps={reps} onOpen={openCustomer} />}
+          {view === "insights" && insights && (
+            <InsightsPanel inline insights={insights} scope="كل المناديب" repId="all" reps={reps} inactiveDays={inactiveDays} onPick={applyLink} onClose={() => go({})} />
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-background">
@@ -565,10 +1040,10 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* نفس هيدر الداشبورد (اللوجو والساعة وملء الشاشة و F)، والحبة مكتوب فيها "العملاء" - the dashboard header, pill = "العملاء" */}
+      {/* نفس هيدر الداشبورد (اللوجو والساعة وملء الشاشة و F) - the dashboard header */}
       <Header
         isConnected={!error}
-        page={{ id: "customers", title: "العملاء" }}
+        page={{ id: "customers", title: pillTitle }}
         actions={
           <div className="flex items-center gap-2">
             {data && <span className="text-gray-400 text-[13px] whitespace-nowrap">آخر تحديث {formatTime12(data.updatedAt)}</span>}
@@ -599,208 +1074,20 @@ export default function CustomersPage() {
           )}
         </div>
       ) : (
-        <main className="relative flex-1 min-h-0 flex flex-col gap-3 p-4">
-          {/* سطر العنوان: رجوع والعنوان - title row: back and title */}
-          <div className="shrink-0 flex flex-wrap items-center gap-3">
-            <a
-              href="/?page=sales"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-cardBorder bg-card text-gray-300 hover:text-white hover:bg-cardBorder text-[14px] font-bold"
-              title="رجوع لصفحة مبيعات المناديب"
-            >
-              <ArrowRight size={16} /> رجوع
-            </a>
-            <h1 className="text-[24px] font-extrabold text-white flex items-center gap-2">
-              <Users className="text-brandOrange" size={24} /> العملاء
-            </h1>
-          </div>
-
-          {/* المؤشرات (المندوب المختار أو الكل)، والضغط على كارت بيفلتر القايمة - KPIs (chosen rep or all); a card filters the list */}
-          <div className="shrink-0 flex flex-wrap gap-3">
-            <Kpi label="👥 إجمالي العملاء" value={kpi.total} rep={selectedRep} selected={status === null} onClick={() => setStatus(null)} />
-            <Kpi label="🟢 اشتروا الشهر ده" value={kpi.activeMonth} color="text-statusGreen" rep={selectedRep} selected={status === "month"} onClick={() => toggleStatus("month")} />
-            <Kpi label="✨ جداد الشهر ده" value={kpi.isNew} color="text-sky-300" rep={selectedRep} selected={status === "new"} onClick={() => toggleStatus("new")} />
-            <Kpi
-              label={`🔴 متوقفين (أكتر من ${data.inactiveDays} يوم)`}
-              value={kpi.inactive}
-              color="text-statusRed"
-              rep={selectedRep}
-              selected={status === "inactive"}
-              onClick={() => toggleStatus("inactive")}
-            />
-            <Kpi
-              label="💰 إجمالي المديونية"
-              value={kpi.debt}
-              sub={`عند ${kpi.debtors} عميل`}
-              color="text-brandOrange"
-              money
-              rep={selectedRep}
-              selected={status === "debt"}
-              onClick={() => toggleStatus("debt")}
-            />
-          </div>
-
-          {/* شريط الأدوات: المناديب، البحث، الترتيب، العدد، وأزرار العرض على الشمال - the toolbar: reps, search, sort, count, view buttons on the left.
-              سطر واحد على 1920؛ تحت 1600 المناديب بياخدوا سطر لوحدهم - one line at 1920; under 1600 the reps take their own line */}
-          <div className="shrink-0 flex flex-wrap items-center gap-2 min-w-0">
-            {/* المناديب (ولو لسه مش واخدين بيتزحلقوا بالعرض) - the reps (and if they still don't fit they scroll sideways) */}
-            <div className="flex-1 min-w-0 max-[1599px]:basis-full overflow-x-auto [scrollbar-width:thin]">
-              <div className="flex items-center gap-1.5 w-max">
-                {[
-                  { id: "all", name: "الكل", color: "#9CA3AF", photo: false },
-                  ...data.reps.map((r) => ({ id: r.id, name: r.name, color: r.color, photo: true })),
-                  { id: NO_REP, name: "بدون مندوب", color: "#6B7280", photo: false },
-                ].map((r) => {
-                  const on = repFilter === r.id;
-                  return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => pickRep(r.id)}
-                      aria-pressed={on}
-                      className={`flex items-center gap-1.5 ${r.photo ? "ps-1 pe-3 py-0.5" : "px-3 py-1"} rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
-                        on ? "text-white" : "border-cardBorder bg-card/90 text-gray-300 hover:bg-white/5"
-                      }`}
-                      style={on ? { borderColor: r.color, background: `${r.color}33` } : undefined}
-                    >
-                      {r.photo ? (
-                        <RepAvatar id={r.id} name={r.name} color={r.color} size={24} />
-                      ) : (
-                        <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
-                      )}
-                      {r.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="relative shrink-0">
-              <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="بحث بالاسم أو الموبايل"
-                className="w-[200px] ps-8 pe-2 py-1 rounded-xl border border-cardBorder bg-card text-[14px] text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
-              />
-            </div>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              className="shrink-0 py-1 px-2 rounded-xl border border-cardBorder bg-card text-[14px] text-gray-200 outline-none focus:border-brandOrange"
-              aria-label="الترتيب"
-            >
-              {SORTS.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.label}
-                </option>
-              ))}
-            </select>
-            {/* فلتر منطقة / حالة من غير مندوب (من المناطق أو اقتراح أو كارت) - an area / status filter without a rep */}
-            {!selectedRep && areaLabel !== null && (
-              <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setArea(null)}>
-                📍 {areaLabel} ✕
-              </button>
-            )}
-            {!selectedRep && status !== null && !KPI_STATUS.has(status) && (
-              <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setStatus(null)}>
-                {statusLabel(status)} ✕
-              </button>
-            )}
-            <p className="shrink-0 ms-auto text-gray-400 text-[13px] whitespace-nowrap">
-              ظاهر <N value={filtered.length} className="text-white font-bold" /> من <N value={byRep.length} /> عميل
-            </p>
-            {/* أزرار العرض متجمعة على الشمال: الضغط بيبدّل، والضغط تاني بيرجع لأعمدة المناديب
-                The view buttons grouped on the left: a click switches, a second click returns to the rep columns */}
-            <div className="shrink-0 flex items-center gap-1.5">
-              {VIEW_BUTTONS.map((v) => {
-                const on = view === v.id;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setView(on ? "reps" : v.id)}
-                    aria-pressed={on}
-                    title={on ? "اضغط تاني ترجع لأعمدة المناديب" : undefined}
-                    className={`px-3 py-1 rounded-xl text-[15px] font-extrabold border whitespace-nowrap transition-colors ${
-                      on ? "bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white border-transparent" : "bg-card border-cardBorder text-gray-300 hover:bg-white/5"
-                    }`}
-                  >
-                    {v.label}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setInsightsOpen(true)}
-                className="px-3 py-1 rounded-xl text-[15px] font-extrabold border border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20 whitespace-nowrap transition-colors"
-              >
-                🧠 تحليل واقتراحات
-              </button>
-            </div>
-          </div>
-
-          {/* بعد اختيار مندوب: مناطقه بس (الحالات من كروت المؤشرات فوق) - after picking a rep: his areas only (statuses = the KPI cards) */}
-          {selectedRep && (
-            <div
-              className="shrink-0 flex items-center gap-2 rounded-2xl border bg-card/80 px-3 py-2 min-w-0"
-              style={{ borderColor: `${selectedRep.color}88`, borderInlineStartWidth: 4, borderInlineStartColor: selectedRep.color }}
-            >
-              <span className="shrink-0 flex items-center gap-1 text-[14px] font-bold text-white whitespace-nowrap">
-                <Truck size={15} style={{ color: selectedRep.color }} /> {selectedRep.name}
-              </span>
-              {/* حالة من غير كارت مؤشر (نشط / وقفوا قريب من اقتراح) - a status with no KPI card (from a suggestion) */}
-              {status !== null && !KPI_STATUS.has(status) && (
-                <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setStatus(null)}>
-                  {statusLabel(status)} ✕
-                </button>
-              )}
-              <MapPin size={15} className="shrink-0 text-gray-500" />
-              {/* المناطق بتتزحلق بالعرض - areas scroll sideways */}
-              <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">
-                <div className="flex items-center gap-1.5 w-max pb-0.5">
-                  <button type="button" className={chip(area === null)} onClick={() => setArea(null)}>
-                    كل المناطق <span className="font-numbers text-gray-400">{byRep.length}</span>
-                  </button>
-                  {areaChips.map((a) => (
-                    <button key={a.key || "none"} type="button" className={chip(area === a.key)} onClick={() => setArea(area === a.key ? null : a.key)}>
-                      {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex-1 min-h-0">
-            {view === "reps" && <ByRepView rows={filtered} reps={data.reps} repFilter={repFilter} notes={notes} inactiveDays={data.inactiveDays} onOpen={setOpenId} />}
-            {view === "table" && <TableView rows={filtered} reps={reps} inactiveDays={data.inactiveDays} onOpen={setOpenId} />}
-            {view === "areas" && <AreasView rows={filtered} reps={reps} onPick={pickArea} />}
-            {view === "quality" && <QualityView rows={filtered} reps={reps} onOpen={setOpenId} />}
-          </div>
-        </main>
+        <main className="relative flex-1 min-h-0 flex flex-col gap-3 p-4">{body}</main>
       )}
 
-      {insights && data && (
-        <InsightsPanel
-          insights={insights}
-          scope={selectedRep ? `${selectedRep.name} · ${selectedRep.van}` : "كل المناديب"}
-          repId={repFilter}
-          reps={reps}
-          inactiveDays={data.inactiveDays}
-          onPick={applyLink}
-          onClose={closeInsights}
-        />
-      )}
       {open && data && (
         <CustomerPanel
           key={open.id}
           row={open}
           reps={reps}
-          inactiveDays={data.inactiveDays}
+          inactiveDays={inactiveDays}
           tags={data.tags}
           note={notes[open.id] ?? null}
           notesEnabled={data.notesEnabled}
           onNoteSaved={onNoteSaved}
-          onClose={closePanel}
+          onClose={closeCustomer}
         />
       )}
     </div>

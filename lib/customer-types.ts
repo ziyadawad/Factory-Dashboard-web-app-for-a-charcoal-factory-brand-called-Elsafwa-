@@ -16,6 +16,8 @@ export type CustomerRow = {
   repId: string | null; // المندوب اللي بيخدمه - the rep who serves him
   repFromOverride: boolean;
   reps: string[]; // كل المناديب اللي باعوله آخر repLookbackDays يوم - every rep who sold to him lately
+  // كل مندوب باعله (من الأول): فواتير آخر 90 يوم، كل الفواتير، وآخر شرا منه - every rep who ever sold to him
+  repHistory: { id: string; invoices90: number; invoicesAll: number; last: string }[];
   created: string | null; // تاريخ إضافته - creation date
   firstDate: string | null; // أول شرا - first purchase
   lastDate: string | null; // آخر شرا - last purchase
@@ -35,12 +37,15 @@ export type CustomerRow = {
 };
 
 export type CustomersRep = { id: string; name: string; van: string; color: string };
+// خط = مندوب بعربيته، بالترتيب واسم الخط من customers.routes - a route = a rep with his van, order and name from customers.routes
+export type CustomersRoute = { repId: string; name: string };
 
 export type CustomersData = {
   today: string;
   month: string;
   inactiveDays: number;
   reps: CustomersRep[];
+  routes: CustomersRoute[];
   tags: string[];
   customers: CustomerRow[];
   notes: Record<string, CustomerNote>;

@@ -210,6 +210,7 @@ async function loadModel(): Promise<Model> {
     const all = zero();
     const productTotals = sales.products.map(() => 0);
     const repCounts = new Map<string, number>();
+    const history = new Map<string, { id: string; invoices90: number; invoicesAll: number; last: string }>();
     let firstDate: string | null = null;
     let lastDate: string | null = null;
     let lastRep: string | null = null;
@@ -236,6 +237,11 @@ async function loadModel(): Promise<Model> {
         if (rep) {
           lastRep = rep;
           if (inv.date >= lookbackFrom) repCounts.set(rep, (repCounts.get(rep) ?? 0) + 1);
+          const h = history.get(rep) ?? { id: rep, invoices90: 0, invoicesAll: 0, last: inv.date };
+          h.invoicesAll += 1;
+          if (inv.date >= lookbackFrom) h.invoices90 += 1;
+          h.last = inv.date; // الفواتير بالترتيب فآخر واحدة = آخر شرا - invoices are in order, so the last one wins
+          history.set(rep, h);
         }
       }
       if (inv.outstanding > 0) {
@@ -267,6 +273,7 @@ async function loadModel(): Promise<Model> {
       repId,
       repFromOverride: !!(override && repIds.has(override)),
       reps: ranked.map(([id]) => id),
+      repHistory: Array.from(history.values()).sort((x, y) => y.invoices90 - x.invoices90 || y.invoicesAll - x.invoicesAll || y.last.localeCompare(x.last)),
       created,
       firstDate,
       lastDate,
@@ -299,6 +306,11 @@ async function loadModel(): Promise<Model> {
       month,
       inactiveDays: cfg.inactiveDays,
       reps: sales.reps.map((r) => ({ id: r.id, name: r.name, van: r.van, color: cfg.repColors[r.id] ?? "#9CA3AF" })),
+      // الخطوط بترتيب الكونفج (والمناديب اللي مش مكتوبين بيتضافوا في الآخر) - routes in config order (unlisted reps appended)
+      routes: [
+        ...cfg.routes.filter((r) => repIds.has(r.repId)),
+        ...sales.reps.filter((r) => !cfg.routes.some((x) => x.repId === r.id)).map((r, i) => ({ repId: r.id, name: `خط ${cfg.routes.length + i + 1}` })),
+      ],
       tags: cfg.tags,
       customers: rows,
       updatedAt: new Date().toISOString(),

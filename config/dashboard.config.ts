@@ -815,8 +815,21 @@ export const dashboardConfig = {
     repLookbackDays: 90,
     // لون كل مندوب (بالـ id بتاعه في sales.reps) - each rep's color (by his id in sales.reps)
     repColors: { ibrahim: "#EE7000", karim: "#2F80ED", islam: "#16A34A", mostafa: "#A855F7" } as Record<string, string>,
+    // ===== الخطوط (صفحة العملاء الرئيسية): كارت لكل مندوب بالترتيب ده، وname = اسم الخط اللي بيظهر (غيّره براحتك) =====
+    // الترتيب: الأقدم الأول (كل العربيات بدأت في ERPNext يوم 2025-09-01، فمبدئيا بترتيب رقم العربية - رتّبهم زي ما تحب)
+    // Routes (the customers landing page): a card per rep in this order; name = the route label shown (rename freely).
+    // Order: most senior first (all vans started in ERPNext on 2025-09-01, so for now by van number - reorder as you like)
+    routes: [
+      { repId: "mostafa", name: "خط 1" }, // مصطفى اليمنى - سوزوكي 1
+      { repId: "karim", name: "خط 2" }, // كريم عوض - سوزوكي 2
+      { repId: "islam", name: "خط 3" }, // اسلام عوض - سوزوكي 3
+      { repId: "ibrahim", name: "خط 4" }, // ابراهيم وصفى - سوزوكي 4
+    ] as { repId: string; name: string }[],
     // تثبيت مندوب لعميل بالإيد: "كود العميل في ERPNext": "id المندوب" (مثلا "CUST-0012": "karim")
     // Pin a customer to a rep by hand: "ERPNext customer id": "rep id"
+    // العميل اللي ملوش مندوب أو اشترى من أكتر من عربية آخر 90 يوم = "عميل مش متظبط" ومش بيظهر جوه الخطوط لحد ما يتثبت هنا
+    // A customer with no rep, or who bought from 2+ vans in the last 90 days, is "not settled" and stays out of the
+    // routes until pinned here
     repOverrides: {} as Record<string, string>,
     // التاجات الجاهزة في ملاحظات العميل - the ready-made tags in a customer's notes
     tags: ["عميل مهم", "بيدفع متأخر", "بيدفع كاش", "محتاج متابعة", "زبون جديد"] as string[],
