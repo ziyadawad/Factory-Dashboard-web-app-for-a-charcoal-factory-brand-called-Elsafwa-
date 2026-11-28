@@ -45,11 +45,11 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "debt", label: "المديونية" },
   { id: "oldest", label: "الأقدم" },
 ];
-const VIEWS: { id: View; label: string }[] = [
-  { id: "reps", label: "🚚 حسب المندوب" },
-  { id: "table", label: "📋 جدول" },
-  { id: "areas", label: "📍 المناطق" },
-  { id: "quality", label: "🧹 جودة البيانات" },
+// أيقونات العرض في شريط الأدوات (أعمدة المناديب = الافتراضي) - the toolbar view icons (rep columns = default)
+const VIEW_ICONS: { id: View; icon: string; label: string }[] = [
+  { id: "table", icon: "📋", label: "جدول" },
+  { id: "areas", icon: "📍", label: "المناطق" },
+  { id: "quality", icon: "🧹", label: "جودة البيانات" },
 ];
 
 const chip = (on: boolean) =>
@@ -99,52 +99,6 @@ function Kpi({ label, value, sub, color = "text-white", money = false, rep, sele
           {rep.name.split(" ")[0]}
         </span>
       )}
-    </button>
-  );
-}
-
-// كارت مندوب (الخطوة 1): لونه واسمه وعربيته وأرقامه، والمختار بيتنور بلونه
-// A rep card (step 1): color, name, van and numbers; the selected one lights up in its color
-function RepCard({ title, sub, color, rows, selected, onClick }: {
-  title: string; sub: string; color: string; rows: CustomerRow[]; selected: boolean; onClick: () => void;
-}) {
-  const active = rows.filter((r) => !r.inactive).length;
-  const month = rows.reduce((t, r) => t + r.month.packets, 0);
-  const debt = rows.reduce((t, r) => t + r.debt, 0);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={`min-w-0 text-start rounded-2xl border px-3 py-2 transition-colors ${selected ? "" : "border-cardBorder bg-card/90 hover:bg-white/[0.05]"}`}
-      style={{
-        borderTopWidth: 4,
-        borderTopColor: color,
-        ...(selected ? { borderColor: color, background: `${color}22`, boxShadow: `0 0 18px ${color}55` } : {}),
-      }}
-    >
-      <div className="flex items-baseline gap-2 min-w-0">
-        <p className="text-[19px] font-extrabold text-white truncate leading-[1.6]">{title}</p>
-        <p className="text-[13px] text-gray-400 truncate">{sub}</p>
-      </div>
-      <div className="grid grid-cols-4 gap-1 text-[12px] text-gray-400 leading-[1.5]">
-        <div>
-          <p>عملاء</p>
-          <N value={rows.length} className="text-[18px] font-extrabold text-white" />
-        </div>
-        <div>
-          <p>نشطين</p>
-          <N value={active} className="text-[18px] font-extrabold text-statusGreen" />
-        </div>
-        <div>
-          <p>باكت الشهر</p>
-          <N value={month} className="text-[18px] font-extrabold text-brandYellow" />
-        </div>
-        <div>
-          <p>مديونية</p>
-          <N value={debt} className="text-[18px] font-extrabold text-brandOrange" />
-        </div>
-      </div>
     </button>
   );
 }
@@ -514,7 +468,6 @@ export default function CustomersPage() {
   }, [data, localNotes]);
   const all = useMemo(() => data?.customers ?? [], [data]);
   const byRep = useMemo(() => (repFilter === "all" ? all : all.filter((r) => (r.repId ?? NO_REP) === repFilter)), [all, repFilter]);
-  const rowsOf = useCallback((id: string) => all.filter((r) => (r.repId ?? NO_REP) === id), [all]);
 
   // الخطوة 2: مناطق المندوب المختار (الأكبر الأول) - step 2: the chosen rep's areas (biggest first)
   const areaChips = useMemo(() => {
@@ -641,7 +594,7 @@ export default function CustomersPage() {
         </div>
       ) : (
         <main className="relative flex-1 min-h-0 flex flex-col gap-3 p-4">
-          {/* سطر العنوان: رجوع، العنوان، البحث والترتيب، والأرقام - title row: back, title, search & sort, numbers */}
+          {/* سطر العنوان: رجوع والعنوان - title row: back and title */}
           <div className="shrink-0 flex flex-wrap items-center gap-3">
             <a
               href="/?page=sales"
@@ -653,27 +606,6 @@ export default function CustomersPage() {
             <h1 className="text-[24px] font-extrabold text-white flex items-center gap-2">
               <Users className="text-brandOrange" size={24} /> العملاء
             </h1>
-            <div className="relative">
-              <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="بحث بالاسم أو الموبايل"
-                className="w-[210px] ps-8 pe-2 py-1 rounded-xl border border-cardBorder bg-card text-[14px] text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
-              />
-            </div>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as Sort)}
-              className="py-1 px-2 rounded-xl border border-cardBorder bg-card text-[14px] text-gray-200 outline-none focus:border-brandOrange"
-              aria-label="الترتيب"
-            >
-              {SORTS.map((x) => (
-                <option key={x.id} value={x.id}>
-                  ترتيب: {x.label}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* المؤشرات (المندوب المختار أو الكل)، والضغط على كارت بيفلتر القايمة - KPIs (chosen rep or all); a card filters the list */}
@@ -701,12 +633,100 @@ export default function CustomersPage() {
             />
           </div>
 
-          {/* الخطوة 1: كروت المناديب - step 1: the rep cards */}
-          <div className="shrink-0 grid gap-3" style={{ gridTemplateColumns: `repeat(${data.reps.length + 1}, minmax(0, 1fr))` }}>
-            <RepCard title="الكل" sub="كل العملاء" color="#9CA3AF" rows={all} selected={repFilter === "all"} onClick={() => pickRep("all")} />
-            {data.reps.map((r) => (
-              <RepCard key={r.id} title={r.name} sub={r.van} color={r.color} rows={rowsOf(r.id)} selected={repFilter === r.id} onClick={() => pickRep(r.id)} />
-            ))}
+          {/* شريط الأدوات: المناديب، البحث، الترتيب، أيقونات العرض، والعدد - the toolbar: reps, search, sort, view icons, count */}
+          <div className="shrink-0 flex items-center gap-2 min-w-0">
+            {/* المناديب (بتتزحلق بالعرض لو الشاشة ضيقة) - the reps (scroll sideways on a narrow screen) */}
+            <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">
+              <div className="flex items-center gap-1.5 w-max">
+                {[
+                  { id: "all", name: "الكل", color: "#9CA3AF" },
+                  ...data.reps.map((r) => ({ id: r.id, name: r.name, color: r.color })),
+                  { id: NO_REP, name: "بدون مندوب", color: "#6B7280" },
+                ].map((r) => {
+                  const on = repFilter === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => pickRep(r.id)}
+                      aria-pressed={on}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[14px] font-bold whitespace-nowrap transition-colors ${
+                        on ? "text-white" : "border-cardBorder bg-card/90 text-gray-300 hover:bg-white/5"
+                      }`}
+                      style={on ? { borderColor: r.color, background: `${r.color}33` } : undefined}
+                    >
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+                      {r.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="relative shrink-0">
+              <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="بحث بالاسم أو الموبايل"
+                className="w-[200px] ps-8 pe-2 py-1 rounded-xl border border-cardBorder bg-card text-[14px] text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
+              />
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              className="shrink-0 py-1 px-2 rounded-xl border border-cardBorder bg-card text-[14px] text-gray-200 outline-none focus:border-brandOrange"
+              aria-label="الترتيب"
+            >
+              {SORTS.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+            {/* أيقونات العرض: الضغط بيبدّل، والضغط تاني بيرجع لأعمدة المناديب - view icons: click switches, again returns to the columns */}
+            <div className="shrink-0 flex items-center gap-1">
+              {VIEW_ICONS.map((v) => {
+                const on = view === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setView(on ? "reps" : v.id)}
+                    title={on ? `${v.label} — اضغط تاني ترجع لأعمدة المناديب` : v.label}
+                    aria-label={v.label}
+                    aria-pressed={on}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl border text-[17px] transition-colors ${
+                      on ? "border-brandOrange bg-brandOrange/20" : "border-cardBorder bg-card hover:bg-white/5"
+                    }`}
+                  >
+                    {v.icon}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setInsightsOpen(true)}
+                title="تحليل واقتراحات"
+                aria-label="تحليل واقتراحات"
+                className="w-9 h-9 flex items-center justify-center rounded-xl border border-sky-400/50 bg-sky-400/10 text-[17px] hover:bg-sky-400/20 transition-colors"
+              >
+                🧠
+              </button>
+            </div>
+            {/* فلتر منطقة / حالة من غير مندوب (من المناطق أو اقتراح أو كارت) - an area / status filter without a rep */}
+            {!selectedRep && areaLabel !== null && (
+              <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setArea(null)}>
+                📍 {areaLabel} ✕
+              </button>
+            )}
+            {!selectedRep && status !== null && (
+              <button type="button" className={`shrink-0 ${chip(true)}`} onClick={() => setStatus(null)}>
+                {statusLabel(status)} ✕
+              </button>
+            )}
+            <p className="shrink-0 text-gray-400 text-[13px] whitespace-nowrap">
+              ظاهر <N value={filtered.length} className="text-white font-bold" /> من <N value={byRep.length} /> عميل
+            </p>
           </div>
 
           {/* الخطوة 2 (بعد اختيار مندوب): الحالة بعددها ومناطقه - step 2 (after picking a rep): statuses with counts and his areas */}
@@ -748,43 +768,6 @@ export default function CustomersPage() {
               </div>
             </div>
           )}
-
-          {/* التابات وزرار التحليل - the tabs and the insights button */}
-          <div className="shrink-0 flex flex-wrap items-center gap-2">
-            {VIEWS.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setView(v.id)}
-                className={`px-4 py-1.5 rounded-xl text-[16px] font-extrabold border transition-colors ${
-                  view === v.id ? "bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white border-transparent" : "bg-card border-cardBorder text-gray-300 hover:bg-white/5"
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setInsightsOpen(true)}
-              className="px-4 py-1.5 rounded-xl text-[16px] font-extrabold border border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20 transition-colors"
-            >
-              🧠 تحليل واقتراحات
-            </button>
-            {/* منطقة متختارة من غير مندوب (من تاب المناطق) - an area picked without a rep (from the areas tab) */}
-            {!selectedRep && areaLabel !== null && (
-              <button type="button" className={chip(true)} onClick={() => setArea(null)}>
-                📍 {areaLabel} ✕
-              </button>
-            )}
-            {!selectedRep && status !== null && (
-              <button type="button" className={chip(true)} onClick={() => setStatus(null)}>
-                {statusLabel(status)} ✕
-              </button>
-            )}
-            <p className="ms-auto text-gray-400 text-[14px]">
-              ظاهر <N value={filtered.length} className="text-white font-bold" /> من <N value={byRep.length} /> عميل
-            </p>
-          </div>
 
           <div className="flex-1 min-h-0">
             {view === "reps" && <ByRepView rows={filtered} reps={data.reps} repFilter={repFilter} notes={notes} inactiveDays={data.inactiveDays} onOpen={setOpenId} />}
