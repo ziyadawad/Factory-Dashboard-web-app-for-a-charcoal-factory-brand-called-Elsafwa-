@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, Download, MapPin, Phone, RefreshCw, Search, Truck, Users } from "lucide-react";
+import { ArrowRight, Download, MapPin, Phone, RefreshCw, Search, Users } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { normalizeArabic } from "@/lib/arabic";
 import { formatNumber, formatTime12 } from "@/lib/format";
@@ -385,12 +385,12 @@ function QualityView({ rows, reps, onOpen }: { rows: CustomerRow[]; reps: Map<st
 //   (لا حاجة) = الخطوط · ?route=karim = صفحة خط · ?route=karim&view=areas|insights · ?view=all|areas|quality|insights|misfits
 //   &area=<key> &status=<status> &customer=<id>
 type GlobalView = "all" | "areas" | "quality" | "insights" | "misfits" | "distributors";
-type RouteView = "areas" | "insights";
+type RouteView = "areas" | "insights" | "quality";
 // seg = جملة / قطاعي جوه صفحة الخط (null = الكل) - wholesale / retail inside a route page (null = both)
 type Nav = { route: string | null; view: GlobalView | RouteView | null; area: string | null; status: Status | null; customer: string | null; seg: SegKey | null };
 const EMPTY_NAV: Nav = { route: null, view: null, area: null, status: null, customer: null, seg: null };
 const GLOBAL_VIEWS = new Set(["all", "areas", "quality", "insights", "misfits", "distributors"]);
-const ROUTE_VIEWS = new Set(["areas", "insights"]);
+const ROUTE_VIEWS = new Set(["areas", "insights", "quality"]);
 const STATUSES = new Set(["active", "inactive", "new", "debt", "lost", "month"]);
 
 function readNav(): Nav {
@@ -828,30 +828,6 @@ function RouteCard({ name, rep, rows, onOpen, presence, arrived = false }: {
   );
 }
 
-// زرار في شبكة 2×3 (صفحة الخطوط) - a button in the 2×3 grid (the routes page)
-const BUTTON_TONES = {
-  default: "border-cardBorder bg-card/90 hover:bg-white/[0.06]",
-  sky: "border-sky-400/50 bg-sky-400/10 hover:bg-sky-400/20",
-  cyan: "border-cyan-400/60 bg-cyan-400/10 hover:bg-cyan-400/20",
-};
-function SquareButton({ icon, label, sub, onClick, tone = "default", wide = false }: {
-  icon: string; label: string; sub?: React.ReactNode; onClick: () => void; tone?: keyof typeof BUTTON_TONES; wide?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${wide ? "col-span-2 flex-row gap-3" : "flex-col gap-0.5"} h-[100px] max-[1599px]:h-[70px] rounded-2xl border flex items-center justify-center px-2 transition-colors ${BUTTON_TONES[tone]}`}
-    >
-      <span className="text-[32px] max-[1599px]:text-[22px] leading-none">{icon}</span>
-      <span className={`flex flex-col ${wide ? "items-start" : "items-center"}`}>
-        <span className="text-[16px] max-[1599px]:text-[14px] font-extrabold text-white whitespace-nowrap">{label}</span>
-        {sub && <span className="text-[12px] max-[1599px]:text-[11px] text-gray-400 whitespace-nowrap">{sub}</span>}
-      </span>
-    </button>
-  );
-}
-
 // "⚠ عملاء مش متظبطين": من اشترى منهم وآخر شرا من كل مندوب، واقتراح الخط - the "not settled" customers: who they bought from,
 // the last purchase per rep, and the suggested route (the rep with most purchases)
 function MisfitsView({ rows, reps, routes, onOpen }: { rows: CustomerRow[]; reps: Map<string, CustomersRep>; routes: Map<string, string>; onOpen: (id: string) => void }) {
@@ -967,7 +943,7 @@ export default function CustomersPage() {
   const [sort, setSort] = useState<Sort>("top");
   const [localNotes, setLocalNotes] = useState<Record<string, CustomerNote | null>>({});
   // حضور المناديب (لعربية كل خط) كل دقيقة والخطوط ظاهرة بس - rep attendance (each route's van), every minute on the landing only
-  const { presence, arrived } = useRepAttendance(!nav.route && !nav.view);
+  const { presence, arrived } = useRepAttendance(!!nav.route || !nav.view);
 
   // الرابط ← المكان، وزرار الرجوع في المتصفح - the URL → the place, and the browser back button
   useEffect(() => {
@@ -1112,36 +1088,32 @@ export default function CustomersPage() {
               })}
             </div>
           </div>
-          {/* على الشمال: شبكة 2×3 (الكل، المناطق، الجودة، التحليل، الموزعين)، وتحتها العملاء المش متظبطين
-              On the left: a 2×3 grid (all, areas, quality, insights, distributors), then the unsettled customers */}
+          {/* على الشمال: الموزعين كارت كبير فوق، وتحته العملاء المش متظبطين (الكل / المناطق / الجودة / التحليل جوه كل خط)
+              On the left: distributors as a big card on top, then the unsettled customers (all / areas / quality /
+              analysis now live inside each route) */}
           <div className="shrink-0 w-[300px] max-[1599px]:w-[250px] flex flex-col gap-3 max-[1599px]:gap-2">
-            <div className="grid grid-cols-2 gap-3 max-[1599px]:gap-2">
-              <SquareButton icon="📋" label="الكل" sub={`${formatNumber(all.length)} عميل`} onClick={() => go({ view: "all" })} />
-              <SquareButton icon="📍" label="المناطق" onClick={() => go({ view: "areas" })} />
-              <SquareButton icon="🧹" label="جودة البيانات" onClick={() => go({ view: "quality" })} />
-              <SquareButton icon="🧠" label="تحليل واقتراحات" tone="sky" onClick={() => go({ view: "insights" })} />
-              {/* الموزعين: العدد والباكت بأرقام كبيرة على سطرين - distributors: count and packets as big numbers on two lines */}
-              <button
-                type="button"
-                onClick={() => go({ view: "distributors" })}
-                className={`col-span-2 h-[100px] max-[1599px]:h-[70px] rounded-2xl border flex items-center justify-between gap-3 px-4 max-[1599px]:px-3 transition-colors ${BUTTON_TONES.cyan}`}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-[34px] max-[1599px]:text-[24px] leading-none">🚛</span>
-                  <span className="text-[17px] max-[1599px]:text-[15px] font-extrabold text-white whitespace-nowrap">الموزعين</span>
+            <button
+              type="button"
+              onClick={() => go({ view: "distributors" })}
+              className="rounded-2xl border-2 border-cyan-400/60 bg-cyan-400/10 hover:bg-cyan-400/20 p-4 max-[1599px]:p-3 flex flex-col gap-2 text-start transition-colors"
+              style={{ boxShadow: "0 0 26px rgba(6,182,212,0.22)" }}
+            >
+              <span className="flex items-center gap-3">
+                <span className="text-[56px] max-[1599px]:text-[40px] leading-none">🚛</span>
+                <span className="text-[24px] max-[1599px]:text-[19px] font-extrabold text-white whitespace-nowrap">الموزعين</span>
+              </span>
+              <span className="flex flex-col leading-[1.2]">
+                <span className="whitespace-nowrap">
+                  <N value={distributors.length} className="text-[40px] max-[1599px]:text-[28px] font-extrabold text-white" />{" "}
+                  <span className="text-[16px] max-[1599px]:text-[14px] text-gray-300 font-bold">موزع</span>
                 </span>
-                <span className="flex flex-col items-end leading-[1.15]">
-                  <span className="whitespace-nowrap">
-                    <N value={distributors.length} className="text-[26px] max-[1599px]:text-[20px] font-extrabold text-white" />{" "}
-                    <span className="text-[13px] max-[1599px]:text-[12px] text-gray-300 font-bold">موزع</span>
-                  </span>
-                  <span className="whitespace-nowrap">
-                    <N value={distributors.reduce((t, r) => t + r.month.packets, 0)} className="text-[26px] max-[1599px]:text-[20px] font-extrabold text-brandYellow" />{" "}
-                    <span className="text-[13px] max-[1599px]:text-[12px] text-gray-300 font-bold">باكت الشهر</span>
-                  </span>
+                <span className="whitespace-nowrap">
+                  <N value={distributors.reduce((t, r) => t + r.month.packets, 0)} className="text-[40px] max-[1599px]:text-[28px] font-extrabold text-brandYellow" />{" "}
+                  <span className="text-[16px] max-[1599px]:text-[14px] text-gray-300 font-bold">باكت الشهر</span>
                 </span>
-              </button>
-            </div>
+              </span>
+              <span className="text-[13px] font-bold text-cyan-300 max-[1599px]:hidden">افتح الموزعين ←</span>
+            </button>
             <button
               type="button"
               onClick={() => go({ view: "misfits" })}
@@ -1176,22 +1148,25 @@ export default function CustomersPage() {
         <>
           <div className="shrink-0 flex flex-wrap items-center gap-3">
             <BackButton onClick={() => (nav.view ? go({ route: routeRep.id }) : go({}))} label={nav.view ? "رجوع للخط" : "رجوع للخطوط"} />
-            {/* الخط هو العنوان الكبير، والمندوب والعربية تحته - the route is the big title, the rep and van under it */}
-            <div className="min-w-0">
-              <h1 className="text-[34px] font-extrabold leading-[1.2]" style={{ color: routeRep.color }}>
-                {routeName}
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <RepAvatar id={routeRep.id} name={routeRep.name} color={routeRep.color} size={32} />
-                <span className="text-[15px] text-gray-300">
-                  <span className="text-gray-500">المندوب:</span> <span className="font-extrabold text-white">{routeRep.name}</span>
-                </span>
-                <span className="flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap">
-                  <Truck size={14} /> {routeRep.van}
-                </span>
+            {/* نفس لافتة الخط والعربية بتوع كروت الخطوط، والمندوب بصورته جنبهم - the same route sign and van as the cards */}
+            <h1 className="sr-only">{routeName}</h1>
+            <RouteSign name={routeName} color={routeRep.color} small />
+            <div className="flex items-center gap-2 min-w-0">
+              <RepAvatar id={routeRep.id} name={routeRep.name} color={routeRep.color} size={44} />
+              <div className="min-w-0">
+                <p className="text-[12px] text-gray-500 leading-[1.3]">المندوب</p>
+                <p className="text-[18px] font-extrabold text-white leading-[1.35] whitespace-nowrap">{routeRep.name}</p>
               </div>
             </div>
-            <div className="ms-auto flex items-center gap-2">
+            <VanIllustration
+              number={vanNumber(routeRep.van)}
+              color={routeRep.color}
+              title={routeRep.van}
+              width={72}
+              driving={!!presence[routeRep.id]?.present && !arrived.has(routeRep.id)}
+              flash={arrived.has(routeRep.id)}
+            />
+            <div className="ms-auto flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => toggleView("areas")}
@@ -1202,6 +1177,17 @@ export default function CustomersPage() {
               >
                 📍 مناطق الخط
               </button>
+              {/* جودة البيانات والتحليل لعملاء الخط ده بس - data quality and the analysis for this route's customers only */}
+              <button
+                type="button"
+                onClick={() => toggleView("quality")}
+                aria-pressed={nav.view === "quality"}
+                className={`px-3 py-1.5 rounded-xl text-[15px] font-extrabold border transition-colors ${
+                  nav.view === "quality" ? "bg-gradient-to-l from-brandOrange to-brandDeepOrange text-white border-transparent" : "bg-card border-cardBorder text-gray-300 hover:bg-white/5"
+                }`}
+              >
+                🧹 جودة البيانات
+              </button>
               <button
                 type="button"
                 onClick={() => toggleView("insights")}
@@ -1210,7 +1196,7 @@ export default function CustomersPage() {
                   nav.view === "insights" ? "bg-sky-500/40 text-white border-sky-300" : "border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20"
                 }`}
               >
-                🧠 تحليل الخط
+                🧠 تحليل واقتراحات
               </button>
             </div>
           </div>
@@ -1230,6 +1216,10 @@ export default function CustomersPage() {
           {nav.view === "areas" ? (
             <div className="flex-1 min-h-0">
               <AreasView rows={routeRows} reps={reps} onPick={(key) => go({ route: routeRep.id, area: key })} />
+            </div>
+          ) : nav.view === "quality" ? (
+            <div className="flex-1 min-h-0">
+              <QualityView rows={routeRows} reps={reps} onOpen={openCustomer} />
             </div>
           ) : nav.view === "insights" && insights ? (
             <div className="flex-1 min-h-0">
