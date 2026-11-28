@@ -1427,3 +1427,7 @@ export interface SupplierDetails {
   erpUrl: string;
   today: string;
 }
+
+// حضور مندوب النهارده: حاضر، وأول بصمة ("2026-11-28 07:42:10" بتوقيت القاهرة، null = حاضر من غير بصمة)
+// A rep's attendance today: present, and the first punch ("2026-11-28 07:42:10" Cairo time; null = present without a punch)
+export type RepPresence = { present: boolean; since: string | null };

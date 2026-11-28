@@ -1002,15 +1002,18 @@ export const dashboardConfig = {
     // modeOfPayment = the rep's cash box Mode of Payment for the paid part (empty =
     // repApp.modeOfPayment), cashAccount = a specific account instead (empty = the Mode of Payment's company account)
     reps: [
-      { id: "ibrahim", name: "ابراهيم وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC", salesPerson: "إبراهيم وصفى", modeOfPayment: "خزنة ابراهيم وصفى", cashAccount: "" },
-      { id: "karim", name: "كريم عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC", salesPerson: "", modeOfPayment: "خزنة كريم عوض", cashAccount: "" },
+      { id: "ibrahim", name: "ابراهيم وصفى", employee: "إبراهيم محمد وصفى", van: "سوزوكي 4", warehouse: "مخزن سوزوكي 4 - AC", salesPerson: "إبراهيم وصفى", modeOfPayment: "خزنة ابراهيم وصفى", cashAccount: "" },
+      { id: "karim", name: "كريم عوض", employee: "كريم مدحت عوض", van: "سوزوكي 2", warehouse: "مخزن سوزوكي 2 - AC", salesPerson: "", modeOfPayment: "خزنة كريم عوض", cashAccount: "" },
       // مفيش "خزنة اسلام عوض" في ERPNext لسه: المدفوع بيروح لـ repApp.modeOfPayment - no cash box yet: uses repApp.modeOfPayment
-      { id: "islam", name: "اسلام عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC", salesPerson: "", modeOfPayment: "", cashAccount: "" },
-      { id: "mostafa", name: "مصطفى اليمنى", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC", salesPerson: "", modeOfPayment: "خزنة مصطفي اليمني", cashAccount: "" },
-      // تارجت شهر معين لمندوب: monthTargets: { "2026-10": 1200 } - a month-specific target for a rep
+      { id: "islam", name: "اسلام عوض", employee: "اسلام محمد عوض", van: "سوزوكي 3", warehouse: "مخزن سوزوكي 3 - AC", salesPerson: "", modeOfPayment: "", cashAccount: "" },
+      { id: "mostafa", name: "مصطفى اليمنى", employee: "مصطفى خالد اليمني", van: "سوزوكي 1", warehouse: "مخزن سوزوكي 1 - AC", salesPerson: "", modeOfPayment: "خزنة مصطفي اليمني", cashAccount: "" },
+      // employee = كود الموظف في ERPNext (Employee ID) للحضور: العربية بتتحرك على صفحة العملاء والمناديب لما يبصم
+    // employee = the ERPNext Employee ID for attendance: the van animates on the customers / reps pages once he punches
+    // تارجت شهر معين لمندوب: monthTargets: { "2026-10": 1200 } - a month-specific target for a rep
     ] as {
       id: string;
       name: string;
+      employee?: string;
       van: string;
       warehouse: string;
       target?: number;

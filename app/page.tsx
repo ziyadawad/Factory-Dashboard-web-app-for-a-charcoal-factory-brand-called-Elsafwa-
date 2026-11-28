@@ -485,7 +485,7 @@ export default function Dashboard() {
       case "stock":
         return <StockSection data={data.stock} className="h-full min-h-0" onOpenItem={setStockItem} />;
       case "sales":
-        return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setSalesDetailsOpen} />;
+        return <SalesRepsSection data={data.sales ?? null} onDetailsChange={setSalesDetailsOpen} active={pageId === "sales"} />;
       case "distributors":
         return <DistributorsSection data={data.distributors ?? null} />;
       case "wallets":

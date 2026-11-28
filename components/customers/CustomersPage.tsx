@@ -13,6 +13,8 @@ import { ArrowRight, Download, MapPin, Phone, RefreshCw, Search, Truck, Users } 
 import { dashboardConfig } from "@/config/dashboard.config";
 import { normalizeArabic } from "@/lib/arabic";
 import { formatNumber, formatTime12 } from "@/lib/format";
+import { useRepAttendance } from "@/lib/useRepAttendance";
+import type { RepPresence } from "@/lib/types";
 import {
   buildInsights, DISTRIBUTORS, isLost, isMisfit, SEG_OF, segStat, type CustomerStatus, type InsightLink, type SegKey,
 } from "@/lib/customer-insights";
@@ -769,7 +771,12 @@ const vanNumber = (van: string) => /\d+/.exec(van)?.[0] ?? "";
 // شاشة واسعة (4 في صف): العنوان فوق والمندوب تحته. أقل من 1600 (2×2): العنوان والمندوب في سطر واحد عشان الكارت يكفي
 // A route card: the route is the big title ("خط 1" in its color), the rep with photo and van under it; then a 3×2
 // stats grid, the areas line and "افتح الخط". Wide (4 in a row): title above the rep. Under 1600 (2×2): one row
-function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void }) {
+function RouteCard({ name, rep, rows, onOpen, presence, arrived = false }: {
+  name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void; presence?: RepPresence; arrived?: boolean;
+}) {
+  // بصم النهارده = العربية ماشية (وأول ما يبصم والصفحة مفتوحة: فلاش الفوانيس الأول) - punched today = the van drives
+  const present = !!presence?.present;
+  const driving = present && !arrived;
   const k = kpisOf(rows);
   const month = rows.reduce((t, r) => t + r.month.packets, 0);
   const areas = useMemo(() => {
@@ -821,13 +828,19 @@ function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRe
           <div className="min-w-0">
             <p className="text-[12px] text-gray-500 leading-[1.3]">المندوب</p>
             <p className="text-[18px] max-[1599px]:text-[15px] font-extrabold text-white leading-[1.35] truncate">{rep.name}</p>
+            {/* بصم: "في الشغل من 7:42 ص". مبصمش: ولا حاجة - punched: "at work since 7:42 ص"; not punched: nothing */}
+            {present && (
+              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-statusGreen/50 bg-statusGreen/15 px-2 text-[12px] font-bold text-statusGreen whitespace-nowrap leading-[1.6]">
+                🟢 في الشغل{presence?.since ? <> من {formatTime12(presence.since)}</> : null}
+              </span>
+            )}
           </div>
         </div>
         <span className="max-[1599px]:hidden min-[1600px]:order-2 min-[1600px]:ms-auto">
-          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={90} />
+          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={90} driving={driving} flash={arrived} />
         </span>
         <span className="hidden max-[1599px]:block">
-          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={72} />
+          <VanIllustration number={vanNumber(rep.van)} color={rep.color} title={rep.van} width={72} driving={driving} flash={arrived} />
         </span>
       </div>
 
@@ -997,6 +1010,8 @@ export default function CustomersPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("top");
   const [localNotes, setLocalNotes] = useState<Record<string, CustomerNote | null>>({});
+  // حضور المناديب (لعربية كل خط) كل دقيقة والخطوط ظاهرة بس - rep attendance (each route's van), every minute on the landing only
+  const { presence, arrived } = useRepAttendance(!nav.route && !nav.view);
 
   // الرابط ← المكان، وزرار الرجوع في المتصفح - the URL → the place, and the browser back button
   useEffect(() => {
@@ -1127,7 +1142,17 @@ export default function CustomersPage() {
               {data.routes.map((route) => {
                 const rep = reps.get(route.repId);
                 if (!rep) return null;
-                return <RouteCard key={route.repId} name={route.name} rep={rep} rows={byRoute.get(route.repId) ?? []} onOpen={() => go({ route: route.repId })} />;
+                return (
+                  <RouteCard
+                    key={route.repId}
+                    name={route.name}
+                    rep={rep}
+                    rows={byRoute.get(route.repId) ?? []}
+                    onOpen={() => go({ route: route.repId })}
+                    presence={presence[route.repId]}
+                    arrived={arrived.has(route.repId)}
+                  />
+                );
               })}
             </div>
           </div>

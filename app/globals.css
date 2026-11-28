@@ -792,3 +792,65 @@ main .bg-card.rounded-2xl:not([class*="shadow-"]):hover {
     animation: none;
   }
 }
+
+/* ===== عربية الخط ماشية (المندوب بصم النهارده) - the route van driving (the rep punched today) =====
+   transform / opacity بس عشان تبقى ناعمة على كمبيوتر التلفزيون - transform / opacity only, smooth on the TV PC */
+.van-driving .van-shake {
+  transform-box: fill-box;
+  animation: van-shake 0.42s ease-in-out infinite;
+}
+@keyframes van-shake {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+.van-driving .van-lights {
+  animation: van-lights-hum 2.4s ease-in-out infinite;
+}
+@keyframes van-lights-hum {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; }
+}
+/* خطوط الطريق بتقرب ناحيتنا وتختفي - road dashes coming towards us and fading */
+.van-road {
+  transform-box: fill-box;
+  opacity: 0;
+  animation: van-road 0.9s linear infinite;
+}
+.van-road-1 { animation-delay: 0.3s; }
+.van-road-2 { animation-delay: 0.6s; }
+@keyframes van-road {
+  0% { transform: translateY(-4px) scaleY(0.6); opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { transform: translateY(12px) scaleY(1.4); opacity: 0; }
+}
+/* تراب خفيف ورا الكاوتش - light dust puffs by the tyres */
+.van-dust {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: van-dust 1.4s ease-out infinite;
+}
+.van-dust-1 { animation-delay: 0.35s; }
+.van-dust-2 { animation-delay: 0.7s; }
+.van-dust-3 { animation-delay: 1.05s; }
+@keyframes van-dust {
+  0% { transform: translateY(0) scale(0.4); opacity: 0; }
+  20% { opacity: 0.45; }
+  100% { transform: translateY(4px) scale(1.8); opacity: 0; }
+}
+/* البصمة لسه جاية: الفوانيس بتنوّر مرتين - the punch just arrived: the headlights flash twice */
+.van-flash .van-lights {
+  animation: van-flash 1.5s ease-in-out 1 both;
+}
+@keyframes van-flash {
+  0%, 30%, 60% { opacity: 0; }
+  15%, 45%, 75%, 100% { opacity: 1; }
+}
+/* حركة أقل: عربية منورة واقفة - reduced motion: a lit van standing still */
+@media (prefers-reduced-motion: reduce) {
+  .van-driving .van-shake,
+  .van-driving .van-lights,
+  .van-flash .van-lights { animation: none; opacity: 1; }
+  .van-road,
+  .van-dust { animation: none; opacity: 0; }
+}
