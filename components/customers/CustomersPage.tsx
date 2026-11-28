@@ -480,44 +480,6 @@ function KpiRow({ rows, inactiveDays, status, onStatus, split = false }: {
 }
 
 // ===== جملة / قطاعي في صفحة الخط - wholesale / retail on a route page =====
-// شريط المقارنة: نصيب الجملة من العملاء والباكت والمبلغ - the comparison bar: wholesale's share of customers, packets, amount
-function CompareBar({ rows }: { rows: CustomerRow[] }) {
-  const w = rows.filter((r) => r.segment === "جملة");
-  const r = rows.filter((x) => x.segment === "قطاعي");
-  const sum = (list: CustomerRow[], pick: (x: CustomerRow) => number) => list.reduce((t, x) => t + pick(x), 0);
-  const bars = [
-    { label: "العملاء", w: w.length, r: r.length, money: false },
-    { label: "باكت الشهر", w: sum(w, (x) => x.month.packets), r: sum(r, (x) => x.month.packets), money: false },
-    { label: "مبلغ الشهر", w: sum(w, (x) => x.month.amount), r: sum(r, (x) => x.month.amount), money: true },
-  ];
-  return (
-    <div className="shrink-0 grid gap-3 grid-cols-3 rounded-2xl border border-cardBorder bg-card/80 px-4 py-2">
-      {bars.map((b) => {
-        const total = b.w + b.r;
-        const wp = total > 0 ? Math.round((b.w / total) * 100) : 0;
-        return (
-          <div key={b.label} className="min-w-0">
-            <div className="flex items-center gap-2 text-[13px] leading-[1.7]">
-              <span className="font-bold" style={{ color: SEG_COLOR["جملة"] }}>🏪 {wp}%</span>
-              <span className="flex-1 text-center text-gray-400 font-semibold truncate">{b.label}</span>
-              <span className="font-bold" style={{ color: SEG_COLOR["قطاعي"] }}>{total > 0 ? 100 - wp : 0}% 🛒</span>
-            </div>
-            {/* الجملة من اليمين والقطاعي من الشمال، بينهم فاصل - wholesale from the right, retail from the left, a gap between */}
-            <div className="flex h-3 gap-[2px] rounded-full overflow-hidden bg-background" title={`جملة ${formatNumber(Math.round(b.w))} · قطاعي ${formatNumber(Math.round(b.r))}`}>
-              {total > 0 && wp > 0 && <div className="h-full rounded-s-full" style={{ width: `${wp}%`, background: SEG_COLOR["جملة"] }} />}
-              {total > 0 && wp < 100 && <div className="h-full flex-1 rounded-e-full" style={{ background: SEG_COLOR["قطاعي"] }} />}
-            </div>
-            <div className="flex justify-between text-[12px] text-gray-500 leading-[1.6]">
-              <span><N value={b.w} className="text-gray-300" /></span>
-              <span><N value={b.r} className="text-gray-300" /></span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // كارت تاب (جملة / قطاعي / الكل) بأرقامه - a tab card (wholesale / retail / all) with its numbers
 function SegCard({ title, color, rows, selected, onClick, inactiveDays }: {
   title: string; color: string; rows: CustomerRow[]; selected: boolean; onClick: () => void; inactiveDays: number;
@@ -1252,16 +1214,16 @@ export default function CustomersPage() {
               </button>
             </div>
           </div>
-          {/* جملة / قطاعي: شريط المقارنة وتلات تابات كبيرة - wholesale / retail: the comparison bar and 3 big tabs */}
-          {!nav.view && <CompareBar rows={routeRows} />}
+          {/* تلات تابات كبيرة: الكل (أول واحد على اليمين، ومختار لما الخط يتفتح) ثم جملة ثم قطاعي
+              Three big tabs: الكل first (on the right, selected when the route opens), then جملة, then قطاعي */}
           {!nav.view && (
             <div className="shrink-0 grid gap-3 grid-cols-3">
+              <SegCard title="الكل" color={routeRep.color} rows={routeRows} selected={nav.seg === null} inactiveDays={inactiveDays}
+                onClick={() => go({ route: routeRep.id }, { replace: true })} />
               <SegCard title="🏪 جملة" color={SEG_COLOR["جملة"]} rows={routeRows.filter((r) => r.segment === "جملة")} selected={nav.seg === "wholesale"} inactiveDays={inactiveDays}
                 onClick={() => go({ route: routeRep.id, seg: "wholesale" }, { replace: true })} />
               <SegCard title="🛒 قطاعي" color={SEG_COLOR["قطاعي"]} rows={routeRows.filter((r) => r.segment === "قطاعي")} selected={nav.seg === "retail"} inactiveDays={inactiveDays}
                 onClick={() => go({ route: routeRep.id, seg: "retail" }, { replace: true })} />
-              <SegCard title="الكل" color={routeRep.color} rows={routeRows} selected={nav.seg === null} inactiveDays={inactiveDays}
-                onClick={() => go({ route: routeRep.id }, { replace: true })} />
             </div>
           )}
           <KpiRow rows={segRows} inactiveDays={inactiveDays} status={nav.status} onStatus={(s) => go({ route: routeRep.id, seg: nav.seg, area: nav.area, status: s }, { replace: true })} />
