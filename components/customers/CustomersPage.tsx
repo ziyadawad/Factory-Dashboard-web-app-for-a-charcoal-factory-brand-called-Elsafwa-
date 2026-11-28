@@ -740,8 +740,10 @@ function AreaGroups({ rows, notes, inactiveDays, color, onOpen }: {
   );
 }
 
-// كارت خط بلون المندوب ونور حواليه. شاشة واسعة (4 في صف): طولي بصورة ~110px. أقل من 1600 (2×2): أفقي ومضغوط
-// A route card in the rep's color with a glow. Wide screen (4 in a row): tall, photo ~110px. Under 1600 (2×2): compact, horizontal
+// كارت خط: الخط هو العنوان الكبير ("خط 1" بلونه)، وتحته المندوب بصورته وعربيته. بعدين 3×2 أرقام، وسطر المناطق، و"افتح الخط".
+// شاشة واسعة (4 في صف): العنوان فوق والمندوب تحته. أقل من 1600 (2×2): العنوان والمندوب في سطر واحد عشان الكارت يكفي
+// A route card: the route is the big title ("خط 1" in its color), the rep with photo and van under it; then a 3×2
+// stats grid, the areas line and "افتح الخط". Wide (4 in a row): title above the rep. Under 1600 (2×2): one row
 function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void }) {
   const k = kpisOf(rows);
   const month = rows.reduce((t, r) => t + r.month.packets, 0);
@@ -757,89 +759,69 @@ function RouteCard({ name, rep, rows, onOpen }: { name: string; rep: CustomersRe
   }, [rows]);
   const stats: { label: string; value: number; cls: string }[] = [
     { label: "👥 العملاء", value: k.total, cls: "text-white" },
-    { label: "🟢 اشتروا الشهر ده", value: k.activeMonth, cls: "text-statusGreen" },
+    { label: "🟢 اشتروا الشهر", value: k.activeMonth, cls: "text-statusGreen" },
     { label: "🔴 متوقفين", value: k.inactive, cls: "text-statusRed" },
-    { label: "✨ جداد الشهر ده", value: k.isNew, cls: "text-sky-300" },
+    { label: "✨ جداد الشهر", value: k.isNew, cls: "text-sky-300" },
     { label: "📦 باكت الشهر", value: month, cls: "text-brandYellow" },
     { label: "💰 المديونية", value: k.debt, cls: "text-brandOrange" },
   ];
-  const chips = (
-    <>
-      <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[14px] font-extrabold text-white whitespace-nowrap" style={{ background: `${rep.color}55`, border: `1px solid ${rep.color}` }}>
-        {name}
-      </span>
-      <span className="shrink-0 flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap">
-        <Truck size={14} /> {rep.van}
-      </span>
-    </>
-  );
-  const areaChip = (a: { label: string; count: number }) => (
-    <span key={a.label} className="shrink-0 rounded-full px-2 py-0.5 text-[13px] font-bold text-gray-100 whitespace-nowrap" style={{ background: `${rep.color}26`, border: `1px solid ${rep.color}66` }}>
-      {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
-    </span>
-  );
+  const areasText = areas
+    .slice(0, 3)
+    .map((a) => `${a.label} ${formatNumber(a.count)}`)
+    .join(" · ");
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group min-w-0 min-h-0 h-full text-start rounded-3xl border-2 overflow-hidden transition-transform hover:-translate-y-0.5"
+      className="group min-w-0 min-h-0 h-full text-start rounded-3xl border-2 overflow-hidden transition-transform hover:-translate-y-0.5 flex flex-col justify-between max-[1599px]:justify-start p-4 max-[1599px]:p-3 gap-3 max-[1599px]:gap-2"
       style={{
         borderColor: `${rep.color}99`,
         background: `radial-gradient(circle at 50% -10%, ${rep.color}40, transparent 55%), #141A2A`,
         boxShadow: `0 0 30px ${rep.color}33, inset 0 0 0 1px ${rep.color}22`,
       }}
     >
-      {/* شاشة واسعة: طولي - wide screen: tall */}
-      <div className="h-full p-3.5 flex flex-col justify-between gap-2.5 max-[1599px]:hidden">
-        <div className="shrink-0 flex items-center justify-between gap-2">{chips}</div>
-        <div className="shrink-0 flex flex-col items-center gap-1.5">
-          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={110} />
-          <p className="text-[24px] font-extrabold text-white leading-[1.4] text-center truncate max-w-full">{rep.name}</p>
-        </div>
-        <div className="shrink-0 grid grid-cols-2 gap-1.5">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border border-white/[0.07] bg-background/50 px-2 py-1 min-w-0">
-              <p className="text-[12px] text-gray-400 font-semibold truncate">{s.label}</p>
-              <N value={s.value} className={`text-[21px] font-extrabold leading-[1.3] ${s.cls}`} />
-            </div>
-          ))}
-        </div>
-        <div className="shrink-0 rounded-xl border border-white/[0.07] bg-background/50 px-2.5 py-1.5 min-w-0">
-          <p className="text-[12px] text-gray-400 font-semibold">
-            📍 <N value={areas.length} className="text-white font-bold" /> منطقة — أكبر 3:
-          </p>
-          <div className="flex flex-wrap gap-1 mt-1">
-            {areas.slice(0, 3).map(areaChip)}
-            {areas.length === 0 && <span className="text-gray-500 text-[13px]">—</span>}
+      {/* العنوان: الخط، وتحته (أو جنبه في 2×2) المندوب والعربية - the title: the route, then (or beside it in 2×2) the rep and van */}
+      <div className="shrink-0 flex flex-col max-[1599px]:flex-row max-[1599px]:items-center gap-2 max-[1599px]:gap-3 min-w-0">
+        <p className="shrink-0 text-[34px] font-extrabold leading-[1.25] whitespace-nowrap" style={{ color: rep.color }}>
+          {name}
+        </p>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={56} />
+          <div className="min-w-0 flex flex-col gap-1">
+            <p className="text-[16px] text-gray-300 leading-[1.4] truncate">
+              <span className="text-gray-500">المندوب:</span> <span className="font-extrabold text-white">{rep.name}</span>
+            </p>
+            <span className="self-start flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap leading-[1.4]">
+              <Truck size={14} /> {rep.van}
+            </span>
           </div>
         </div>
-        <p className="shrink-0 text-center text-[13px] font-bold opacity-80 group-hover:opacity-100" style={{ color: rep.color }}>
-          افتح الخط ←
-        </p>
       </div>
 
-      {/* شاشة أصغر (2×2): أفقي ومضغوط - smaller screen (2×2): compact and horizontal */}
-      <div className="hidden max-[1599px]:flex h-full p-3 flex-col gap-2 min-w-0">
-        <div className="shrink-0 flex items-center gap-2.5 min-w-0">
-          <RepAvatar id={rep.id} name={rep.name} color={rep.color} size={58} />
-          <div className="min-w-0 flex-1">
-            <p className="text-[20px] font-extrabold text-white leading-[1.35] truncate">{rep.name}</p>
-            <div className="flex items-center gap-1.5 min-w-0">{chips}</div>
+      {/* 3×2 أرقام: واسعة = ارتفاع ثابت والمسافات بتتوزع بالتساوي على الكارت، 2×2 = بتملا الباقي
+          A 3×2 stats grid: wide = a fixed height with the card's spacing spread evenly; 2×2 = fills what is left */}
+      <div className="shrink-0 h-[230px] max-[1599px]:h-auto max-[1599px]:flex-1 max-[1599px]:min-h-0 grid grid-cols-3 grid-rows-2 gap-2 max-[1599px]:gap-1.5">
+        {stats.map((s) => (
+          // واسعة: خانة في النص برقم كبير. 2×2: العنوان والرقم في سطر واحد عشان الخانة القصيرة متقطعش
+          // Wide: a centered tile with a big number. 2×2: label and number on one line so the short cell never clips
+          <div
+            key={s.label}
+            className="min-w-0 rounded-xl border border-white/[0.07] bg-background/50 px-2 py-1 flex flex-col items-center justify-center text-center gap-1 max-[1599px]:flex-row max-[1599px]:justify-between max-[1599px]:text-start max-[1599px]:gap-1.5"
+          >
+            <p className="min-w-0 text-[13px] max-[1599px]:text-[11px] text-gray-400 font-semibold max-w-full leading-[1.35] max-[1599px]:truncate">{s.label}</p>
+            <N value={s.value} className={`text-[26px] max-[1599px]:text-[17px] font-extrabold leading-[1.15] ${s.cls}`} />
           </div>
-        </div>
-        <div className="shrink-0 grid grid-cols-3 gap-1.5">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-lg border border-white/[0.07] bg-background/50 px-2 py-0.5 min-w-0">
-              <p className="text-[11px] text-gray-400 font-semibold truncate">{s.label}</p>
-              <N value={s.value} className={`text-[17px] font-extrabold leading-[1.3] ${s.cls}`} />
-            </div>
-          ))}
-        </div>
-        <div className="shrink-0 flex items-center gap-1 min-w-0 overflow-hidden text-[12px] text-gray-400">
-          <span className="shrink-0">📍 {formatNumber(areas.length)} منطقة:</span>
-          {areas.slice(0, 3).map(areaChip)}
-        </div>
+        ))}
       </div>
+
+      {/* المناطق في سطر واحد (بيتقطع بـ ...) - the areas on one line (ellipsis) */}
+      <p className="shrink-0 text-[14px] max-[1599px]:text-[13px] text-gray-300 truncate leading-[1.6]" title={areasText}>
+        📍 <span className="font-bold text-white">{formatNumber(areas.length)} منطقة</span>
+        {areasText && <span className="text-gray-400"> — {areasText}</span>}
+      </p>
+      <p className="shrink-0 text-center text-[14px] max-[1599px]:text-[13px] font-bold opacity-80 group-hover:opacity-100 leading-[1.4]" style={{ color: rep.color }}>
+        افتح الخط ←
+      </p>
     </button>
   );
 }
@@ -1171,17 +1153,20 @@ export default function CustomersPage() {
         <>
           <div className="shrink-0 flex flex-wrap items-center gap-3">
             <BackButton onClick={() => (nav.view ? go({ route: routeRep.id }) : go({}))} label={nav.view ? "رجوع للخط" : "رجوع للخطوط"} />
-            <RepAvatar id={routeRep.id} name={routeRep.name} color={routeRep.color} size={56} />
+            {/* الخط هو العنوان الكبير، والمندوب والعربية تحته - the route is the big title, the rep and van under it */}
             <div className="min-w-0">
-              <h1 className="text-[26px] font-extrabold text-white leading-[1.3]">{routeRep.name}</h1>
-              <p className="flex items-center gap-2 text-[14px]">
-                <span className="rounded-full px-2.5 font-extrabold text-white" style={{ background: `${routeRep.color}55`, border: `1px solid ${routeRep.color}` }}>
-                  {routeName}
+              <h1 className="text-[34px] font-extrabold leading-[1.2]" style={{ color: routeRep.color }}>
+                {routeName}
+              </h1>
+              <div className="flex items-center gap-2 mt-1">
+                <RepAvatar id={routeRep.id} name={routeRep.name} color={routeRep.color} size={32} />
+                <span className="text-[15px] text-gray-300">
+                  <span className="text-gray-500">المندوب:</span> <span className="font-extrabold text-white">{routeRep.name}</span>
                 </span>
-                <span className="flex items-center gap-1 text-brandOrange font-bold">
+                <span className="flex items-center gap-1 rounded-full border border-brandOrange/40 bg-brandOrange/10 px-2 py-0.5 text-[13px] font-bold text-brandOrange whitespace-nowrap">
                   <Truck size={14} /> {routeRep.van}
                 </span>
-              </p>
+              </div>
             </div>
             <div className="ms-auto flex items-center gap-2">
               <button
