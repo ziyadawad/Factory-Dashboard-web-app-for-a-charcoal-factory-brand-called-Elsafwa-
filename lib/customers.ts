@@ -184,6 +184,9 @@ async function loadModel(): Promise<Model> {
   // ===== العملاء - customers =====
   const lookbackFrom = addDays(today, -cfg.repLookbackDays);
   const threeFrom = addDays(today, -90);
+  const [ty, tm] = today.split("-").map(Number);
+  const prevMonth = tm === 1 ? `${ty - 1}-12` : `${ty}-${String(tm - 1).padStart(2, "0")}`;
+  const prevSameDay = `${prevMonth}-${today.slice(8, 10)}`;
   const repIds = new Set(sales.reps.map((r) => r.id));
   const areaSpellings = new Map<string, Map<string, number>>();
   const zero = (): Totals => ({ packets: 0, amount: 0, invoices: 0 });
@@ -201,6 +204,8 @@ async function loadModel(): Promise<Model> {
     const addressLine = a ? [a.address_line1, a.city].map((x) => (x ?? "").trim()).filter(Boolean).join(" — ") : "";
     const arr = invoicesBy.get(c.name) ?? [];
     const month_ = zero();
+    const lastMonth = zero();
+    const lastMonthToDate = zero();
     const three = zero();
     const all = zero();
     const productTotals = sales.products.map(() => 0);
@@ -219,6 +224,10 @@ async function loadModel(): Promise<Model> {
       add(all);
       if (inv.date >= threeFrom) add(three);
       if (inv.date.startsWith(month)) add(month_);
+      if (inv.date.startsWith(prevMonth)) {
+        add(lastMonth);
+        if (inv.date <= prevSameDay) add(lastMonthToDate);
+      }
       inv.products.forEach((p, i) => (productTotals[i] += p));
       if (!inv.isReturn) {
         firstDate ??= inv.date;
@@ -263,6 +272,8 @@ async function loadModel(): Promise<Model> {
       lastDate,
       daysSince,
       month: round(month_),
+      lastMonth: round(lastMonth),
+      lastMonthToDate: round(lastMonthToDate),
       three: round(three),
       all: round(all),
       avgOrder: all.invoices > 0 ? money(all.amount / all.invoices) : 0,

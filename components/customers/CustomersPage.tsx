@@ -6,31 +6,34 @@
 // The customers page: KPIs, filters, then 4 tabs (by rep, table, areas, data quality). A customer opens his panel.
 // Fetched only while this page is open (5-minute server cache)
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, Download, MapPin, Maximize2, Minimize2, RefreshCw, Search, Users } from "lucide-react";
+import { ArrowRight, Download, MapPin, RefreshCw, Search, Truck, Users } from "lucide-react";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { normalizeArabic } from "@/lib/arabic";
 import { formatTime12 } from "@/lib/format";
+import { buildInsights, isLost, type CustomerStatus, type InsightLink } from "@/lib/customer-insights";
+import Header from "../Header";
 import type { CustomerNote, CustomerRow, CustomersData, CustomersRep } from "@/lib/customer-types";
 import { fetcher, fmtDate, Money, N, NO_REP, recency, RepChip } from "./common";
 import CustomerPanel from "./CustomerPanel";
+import InsightsPanel from "./InsightsPanel";
 
 const ambient = dashboardConfig.sizes.ambient;
 const REFRESH_MS = dashboardConfig.customers.cacheMinutes * 60_000;
 
 type View = "reps" | "table" | "areas" | "quality";
-type Status = "active" | "inactive" | "new" | "debt";
+type Status = CustomerStatus;
 type Sort = "top" | "recent" | "debt" | "oldest";
 type TableKey =
   | "name" | "mobile" | "area" | "type" | "rep" | "last" | "invoices" | "monthPackets" | "monthAmount"
   | "threePackets" | "allPackets" | "allAmount" | "avg" | "debt" | "oldestUnpaid";
 
-const STATUS: { id: Status; label: string }[] = [
-  { id: "active", label: "🟢 نشط" },
-  { id: "inactive", label: "🔴 متوقف" },
-  { id: "new", label: "✨ جديد" },
-  { id: "debt", label: "💰 عليه مديونية" },
+const STATUS: { id: Status; label: string; test: (r: CustomerRow) => boolean }[] = [
+  { id: "active", label: "🟢 نشط", test: (r) => !r.inactive },
+  { id: "new", label: "✨ جديد", test: (r) => r.isNew },
+  { id: "inactive", label: "🔴 متوقف", test: (r) => r.inactive },
+  { id: "debt", label: "💰 عليه مديونية", test: (r) => r.debt > 0.5 },
 ];
 const SORTS: { id: Sort; label: string }[] = [
   { id: "top", label: "الأكثر شراء" },
@@ -38,19 +41,6 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: "debt", label: "المديونية" },
   { id: "oldest", label: "الأقدم" },
 ];
-// تكبير الصفحة للقراية من بعيد (90%–130%)، محفوظ في المتصفح - page zoom for reading from a distance, kept in localStorage
-const ZOOM_KEY = "elsafwa:customers-zoom";
-const ZOOM_MIN = 0.9;
-const ZOOM_MAX = 1.3;
-const ZOOM_STEP = 0.1;
-const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
-
-// يفتح أو يقفل ملء الشاشة (لو المتصفح رفض مفيش حاجة بتحصل) - enter or leave fullscreen (ignored if the browser refuses)
-function toggleFullscreen() {
-  const request = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-  request?.catch((error) => console.log("Fullscreen error:", error));
-}
-
 const VIEWS: { id: View; label: string }[] = [
   { id: "reps", label: "🚚 حسب المندوب" },
   { id: "table", label: "📋 جدول" },
@@ -74,15 +64,49 @@ function sortRows(rows: CustomerRow[], sort: Sort): CustomerRow[] {
   return out;
 }
 
-function Kpi({ label, value, sub, color = "text-white", money = false }: { label: string; value: number; sub?: string; color?: string; money?: boolean }) {
+// كارت مندوب (الخطوة 1): لونه واسمه وعربيته وأرقامه، والمختار بيتنور بلونه
+// A rep card (step 1): color, name, van and numbers; the selected one lights up in its color
+function RepCard({ title, sub, color, rows, selected, onClick }: {
+  title: string; sub: string; color: string; rows: CustomerRow[]; selected: boolean; onClick: () => void;
+}) {
+  const active = rows.filter((r) => !r.inactive).length;
+  const month = rows.reduce((t, r) => t + r.month.packets, 0);
+  const debt = rows.reduce((t, r) => t + r.debt, 0);
   return (
-    <div className="flex-1 min-w-[170px] rounded-2xl border border-cardBorder bg-card/90 px-4 py-2.5">
-      <p className="text-gray-400 font-semibold text-[15px] leading-[1.7]">{label}</p>
-      <p className="leading-[1.25]">
-        {money ? <Money value={value} className={`text-[30px] font-extrabold ${color}`} /> : <N value={value} className={`text-[30px] font-extrabold ${color}`} />}
-        {sub && <span className="text-gray-500 text-[14px] ms-2">{sub}</span>}
-      </p>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`min-w-0 text-start rounded-2xl border px-3 py-2 transition-colors ${selected ? "" : "border-cardBorder bg-card/90 hover:bg-white/[0.05]"}`}
+      style={{
+        borderTopWidth: 4,
+        borderTopColor: color,
+        ...(selected ? { borderColor: color, background: `${color}22`, boxShadow: `0 0 18px ${color}55` } : {}),
+      }}
+    >
+      <div className="flex items-baseline gap-2 min-w-0">
+        <p className="text-[19px] font-extrabold text-white truncate leading-[1.6]">{title}</p>
+        <p className="text-[13px] text-gray-400 truncate">{sub}</p>
+      </div>
+      <div className="grid grid-cols-4 gap-1 text-[12px] text-gray-400 leading-[1.5]">
+        <div>
+          <p>عملاء</p>
+          <N value={rows.length} className="text-[18px] font-extrabold text-white" />
+        </div>
+        <div>
+          <p>نشطين</p>
+          <N value={active} className="text-[18px] font-extrabold text-statusGreen" />
+        </div>
+        <div>
+          <p>باكت الشهر</p>
+          <N value={month} className="text-[18px] font-extrabold text-brandYellow" />
+        </div>
+        <div>
+          <p>مديونية</p>
+          <N value={debt} className="text-[18px] font-extrabold text-brandOrange" />
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -437,48 +461,8 @@ export default function CustomersPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("top");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [showAllAreas, setShowAllAreas] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const [localNotes, setLocalNotes] = useState<Record<string, CustomerNote | null>>({});
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [zoom, setZoom] = useState(1);
-
-  // ملء الشاشة: الأيقونة بتتظبط من fullscreenchange (حتى لو خرجت بـ Esc)، وزرار F بيفتح/يقفل (زي الداشبورد)
-  // Fullscreen: the icon follows fullscreenchange (also when leaving with Esc); the F key toggles it (like the dashboard)
-  useEffect(() => {
-    const update = () => setIsFullscreen(!!document.fullscreenElement);
-    update();
-    document.addEventListener("fullscreenchange", update);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "f" && e.key !== "F" && e.code !== "KeyF") return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
-      e.preventDefault();
-      toggleFullscreen();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("fullscreenchange", update);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, []);
-
-  // التكبير المحفوظ - the saved zoom
-  useEffect(() => {
-    try {
-      const saved = Number(window.localStorage.getItem(ZOOM_KEY));
-      if (saved) setZoom(clampZoom(saved));
-    } catch {}
-  }, []);
-  const changeZoom = useCallback((step: number) => {
-    setZoom((was) => {
-      const next = clampZoom(was + step);
-      try {
-        window.localStorage.setItem(ZOOM_KEY, String(next));
-      } catch {}
-      return next;
-    });
-  }, []);
 
   const reps = useMemo(() => new Map((data?.reps ?? []).map((r) => [r.id, r])), [data]);
   const notes = useMemo(() => {
@@ -491,28 +475,28 @@ export default function CustomersPage() {
   }, [data, localNotes]);
   const all = useMemo(() => data?.customers ?? [], [data]);
   const byRep = useMemo(() => (repFilter === "all" ? all : all.filter((r) => (r.repId ?? NO_REP) === repFilter)), [all, repFilter]);
+  const rowsOf = useCallback((id: string) => all.filter((r) => (r.repId ?? NO_REP) === id), [all]);
 
-  // المناطق (من الداتا، الأكبر الأول) - the areas (from the data, biggest first)
+  // الخطوة 2: مناطق المندوب المختار (الأكبر الأول) - step 2: the chosen rep's areas (biggest first)
   const areaChips = useMemo(() => {
     const map = new Map<string, { key: string; label: string; count: number }>();
     for (const r of byRep) {
-      if (!r.areaKey) continue;
-      const a = map.get(r.areaKey) ?? { key: r.areaKey, label: r.area ?? "", count: 0 };
+      const a = map.get(r.areaKey) ?? { key: r.areaKey, label: r.area ?? "بدون منطقة", count: 0 };
       a.count += 1;
       map.set(r.areaKey, a);
     }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    return Array.from(map.values()).sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : b.count - a.count));
   }, [byRep]);
+  // الحالات بعددها (جوه المنطقة المختارة لو فيه) - status counts (within the chosen area, if any)
+  const inArea = useMemo(() => (area === null ? byRep : byRep.filter((r) => r.areaKey === area)), [byRep, area]);
 
   const filtered = useMemo(() => {
     const q = normalizeArabic(query);
     const qDigits = query.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\D/g, "");
-    const rows = byRep.filter((r) => {
-      if (area !== null && r.areaKey !== area) return false;
-      if (status === "active" && r.inactive) return false;
-      if (status === "inactive" && !r.inactive) return false;
-      if (status === "new" && !r.isNew) return false;
-      if (status === "debt" && !(r.debt > 0.5)) return false;
+    const inactiveDays = data?.inactiveDays ?? 14;
+    const test = status === "lost" ? (r: CustomerRow) => isLost(r, inactiveDays) : STATUS.find((x) => x.id === status)?.test;
+    const rows = inArea.filter((r) => {
+      if (test && !test(r)) return false;
       if (q) {
         const inName = normalizeArabic(r.name).includes(q);
         const inMobile = qDigits.length >= 3 && (r.mobile ?? "").replace(/\D/g, "").includes(qDigits);
@@ -521,7 +505,7 @@ export default function CustomersPage() {
       return true;
     });
     return sortRows(rows, sort);
-  }, [byRep, area, status, query, sort]);
+  }, [inArea, status, query, sort, data]);
 
   const kpi = useMemo(
     () => ({
@@ -529,23 +513,45 @@ export default function CustomersPage() {
       activeMonth: byRep.filter((r) => r.activeMonth).length,
       isNew: byRep.filter((r) => r.isNew).length,
       inactive: byRep.filter((r) => r.inactive).length,
-      debt: byRep.reduce((s, r) => s + r.debt, 0),
-      debtors: byRep.filter((r) => r.debt > 0.5).length,
+      debt: byRep.reduce((t, r) => t + r.debt, 0),
     }),
     [byRep]
   );
 
+  const insights = useMemo(
+    () => (insightsOpen && data ? buildInsights(byRep, all, repFilter, reps, data.inactiveDays) : null),
+    [insightsOpen, data, byRep, all, repFilter, reps]
+  );
+
   const open = openId ? all.find((r) => r.id === openId) : undefined;
   const closePanel = useCallback(() => setOpenId(null), []);
+  const closeInsights = useCallback(() => setInsightsOpen(false), []);
   const onNoteSaved = useCallback((id: string, note: CustomerNote | null) => setLocalNotes((was) => ({ ...was, [id]: note })), []);
+  const pickRep = useCallback((id: string) => {
+    setRepFilter(id);
+    setArea(null);
+    setStatus(null);
+  }, []);
   const pickArea = useCallback((key: string) => {
     setArea(key);
     setView("reps");
   }, []);
-  const visibleAreas = showAllAreas ? areaChips : areaChips.slice(0, 14);
+  // اقتراح → قايمة العملاء بالفلتر بتاعه - a suggestion → the customers list with its filter
+  const applyLink = useCallback((link: InsightLink) => {
+    setRepFilter(link.rep);
+    setArea(link.area);
+    setStatus(link.status);
+    setQuery("");
+    setView("reps");
+    setInsightsOpen(false);
+  }, []);
+  const selectedRep =
+    repFilter === "all" ? null : repFilter === NO_REP ? { name: "بدون مندوب", van: "مبيعات المصنع", color: "#6B7280" } : reps.get(repFilter) ?? null;
+  const areaLabel = area === null ? null : area === "" ? "بدون منطقة" : all.find((r) => r.areaKey === area)?.area ?? area;
 
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-background">
+      {/* نفس خلفية وإضاءة الداشبورد - the dashboard's background and ambient light */}
       {ambient.enabled && (
         <div className="ambient-light" aria-hidden style={{ opacity: ambient.opacity }}>
           <span className="ambient-blob ambient-blob-1" />
@@ -554,165 +560,143 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* الهيدر: رجوع واللوجو والعنوان - header: back, logo and title */}
-      {/* الهيدر والمحتوى متكبرين بالـ zoom (والارتفاع متظبط عشان يفضلوا مالين الشاشة) - header + content zoomed, height compensated */}
-      <div className="relative z-[1] flex flex-col min-h-0" style={{ zoom, height: `${100 / zoom}vh` }}>
-      <header className="relative z-[1] shrink-0 flex items-center gap-4 px-4 py-2.5 border-b border-cardBorder bg-card/80 backdrop-blur">
-        <a
-          href="/?page=sales"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-cardBorder bg-background hover:bg-cardBorder text-gray-200 font-bold whitespace-nowrap"
-        >
-          <ArrowRight size={18} /> رجوع للداشبورد
-        </a>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="الصفوة" className="h-11 w-11 object-contain" />
-        <h1 className="text-[26px] font-extrabold text-white flex items-center gap-2">
-          <Users className="text-brandOrange" size={26} /> العملاء
-        </h1>
-        <p className="text-gray-500 text-[14px] hidden md:block">قاعدة بيانات العملاء بالمندوب والمنطقة — من ERPNext</p>
-        <div className="ms-auto flex items-center gap-3">
-          {error && <span className="text-statusRed font-bold text-[14px]">⚠️ غير متصل</span>}
-          {data && <span className="text-gray-400 text-[14px]">آخر تحديث {formatTime12(data.updatedAt)}</span>}
-          <button
-            type="button"
-            onClick={() => mutate()}
-            className="p-2 rounded-xl border border-cardBorder bg-background hover:bg-cardBorder text-gray-300"
-            title="تحديث"
-            aria-label="تحديث"
-          >
-            <RefreshCw size={18} className={isLoading ? "animate-spin" : ""} />
-          </button>
-          {/* التكبير − / + - zoom */}
-          <div className="flex items-center rounded-xl border border-cardBorder bg-background overflow-hidden" dir="ltr">
+      {/* نفس هيدر الداشبورد (اللوجو والساعة وملء الشاشة و F)، والحبة مكتوب فيها "العملاء" - the dashboard header, pill = "العملاء" */}
+      <Header
+        isConnected={!error}
+        page={{ id: "customers", title: "العملاء" }}
+        actions={
+          <div className="flex items-center gap-2">
+            {data && <span className="text-gray-400 text-[13px] whitespace-nowrap">آخر تحديث {formatTime12(data.updatedAt)}</span>}
             <button
               type="button"
-              onClick={() => changeZoom(-ZOOM_STEP)}
-              disabled={zoom <= ZOOM_MIN}
-              className="px-2.5 py-1 text-[20px] font-extrabold leading-none text-gray-300 hover:bg-cardBorder disabled:opacity-30"
-              title="تصغير"
-              aria-label="تصغير"
+              onClick={() => mutate()}
+              className="p-2 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors"
+              title="تحديث"
+              aria-label="تحديث"
             >
-              −
-            </button>
-            <span className="px-1.5 min-w-[52px] text-center font-numbers text-[14px] font-bold text-gray-300 border-x border-cardBorder leading-[2.1]">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => changeZoom(ZOOM_STEP)}
-              disabled={zoom >= ZOOM_MAX}
-              className="px-2.5 py-1 text-[20px] font-extrabold leading-none text-gray-300 hover:bg-cardBorder disabled:opacity-30"
-              title="تكبير"
-              aria-label="تكبير"
-            >
-              +
+              <RefreshCw className={`w-5 h-5 text-gray-300 ${isLoading ? "animate-spin" : ""}`} />
             </button>
           </div>
-          {/* ملء الشاشة (نفس زرار الداشبورد) - fullscreen (same as the dashboard button) */}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="p-2 bg-background border border-cardBorder rounded-xl hover:bg-cardBorder transition-colors"
-            title={isFullscreen ? "خروج من ملء الشاشة (F)" : "ملء الشاشة (F)"}
-            aria-label={isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"}
-          >
-            {isFullscreen ? <Minimize2 className="w-5 h-5 text-gray-300" /> : <Maximize2 className="w-5 h-5 text-gray-300" />}
-          </button>
-        </div>
-      </header>
+        }
+      />
 
       {!data ? (
-        <div className="relative z-[1] flex-1 flex flex-col items-center justify-center gap-3 text-gray-400 text-xl">
+        <div className="relative flex-1 flex flex-col items-center justify-center gap-3 text-gray-400 text-xl">
           {error ? (
             <>
               <p>⚠️ ERPNext مش بيرد دلوقتي</p>
-              <button type="button" onClick={() => mutate()} className={chip(false)}>جرّب تاني</button>
+              <button type="button" onClick={() => mutate()} className={chip(false)}>
+                جرّب تاني
+              </button>
             </>
           ) : (
             <p>جاري تحميل العملاء...</p>
           )}
         </div>
       ) : (
-        <main className="relative z-[1] flex-1 min-h-0 flex flex-col gap-3 p-4">
-          {/* المؤشرات - KPIs */}
-          <div className="shrink-0 flex flex-wrap gap-3">
-            <Kpi label="👥 إجمالي العملاء" value={kpi.total} />
-            <Kpi label="🟢 اشتروا الشهر ده" value={kpi.activeMonth} color="text-statusGreen" />
-            <Kpi label="✨ جداد الشهر ده" value={kpi.isNew} color="text-sky-300" />
-            <Kpi label={`🔴 متوقفين (أكتر من ${data.inactiveDays} يوم)`} value={kpi.inactive} color="text-statusRed" />
-            <Kpi label="💰 إجمالي المديونية" value={kpi.debt} sub={`عند ${kpi.debtors} عميل`} color="text-brandOrange" money />
+        <main className="relative flex-1 min-h-0 flex flex-col gap-3 p-4">
+          {/* سطر العنوان: رجوع، العنوان، البحث والترتيب، والأرقام - title row: back, title, search & sort, numbers */}
+          <div className="shrink-0 flex flex-wrap items-center gap-3">
+            <a
+              href="/?page=sales"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-cardBorder bg-card text-gray-300 hover:text-white hover:bg-cardBorder text-[14px] font-bold"
+              title="رجوع لصفحة مبيعات المناديب"
+            >
+              <ArrowRight size={16} /> رجوع
+            </a>
+            <h1 className="text-[24px] font-extrabold text-white flex items-center gap-2">
+              <Users className="text-brandOrange" size={24} /> العملاء
+            </h1>
+            <div className="relative">
+              <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="بحث بالاسم أو الموبايل"
+                className="w-[210px] ps-8 pe-2 py-1 rounded-xl border border-cardBorder bg-card text-[14px] text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
+              />
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              className="py-1 px-2 rounded-xl border border-cardBorder bg-card text-[14px] text-gray-200 outline-none focus:border-brandOrange"
+              aria-label="الترتيب"
+            >
+              {SORTS.map((x) => (
+                <option key={x.id} value={x.id}>
+                  ترتيب: {x.label}
+                </option>
+              ))}
+            </select>
+            <div className="ms-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-gray-400">
+              <span>
+                <N value={kpi.total} className="text-white font-extrabold text-[17px]" /> عميل
+              </span>
+              <span>
+                🟢 اشتروا الشهر ده <N value={kpi.activeMonth} className="text-statusGreen font-extrabold text-[17px]" />
+              </span>
+              <span>
+                ✨ جداد <N value={kpi.isNew} className="text-sky-300 font-extrabold text-[17px]" />
+              </span>
+              <span>
+                🔴 متوقفين <N value={kpi.inactive} className="text-statusRed font-extrabold text-[17px]" />
+              </span>
+              <span>
+                💰 <Money value={kpi.debt} className="text-brandOrange font-extrabold text-[17px]" />
+              </span>
+            </div>
           </div>
 
-          {/* الفلاتر - filters */}
-          <div className="shrink-0 flex flex-col gap-2 rounded-2xl border border-cardBorder bg-card/80 px-3 py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-gray-500 text-[13px] font-bold">المندوب:</span>
-              <button type="button" className={chip(repFilter === "all")} onClick={() => setRepFilter("all")}>الكل</button>
-              {data.reps.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={chip(repFilter === r.id)}
-                  style={repFilter === r.id ? { borderColor: r.color, background: `${r.color}33` } : { borderInlineStartColor: r.color, borderInlineStartWidth: 4 }}
-                  onClick={() => setRepFilter(r.id)}
-                >
-                  {r.name}
-                </button>
-              ))}
-              <span className="w-px h-6 bg-cardBorder mx-1" />
-              <span className="text-gray-500 text-[13px] font-bold">الحالة:</span>
-              {STATUS.map((s) => (
-                <button key={s.id} type="button" className={chip(status === s.id)} onClick={() => setStatus(status === s.id ? null : s.id)}>
-                  {s.label}
-                </button>
-              ))}
-              <div className="ms-auto flex items-center gap-2">
-                <div className="relative">
-                  <Search size={16} className="absolute top-1/2 -translate-y-1/2 start-2.5 text-gray-500" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="بحث بالاسم أو الموبايل"
-                    className="w-[240px] ps-8 pe-3 py-1.5 rounded-xl border border-cardBorder bg-background text-white placeholder:text-gray-500 outline-none focus:border-brandOrange"
-                  />
-                </div>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as Sort)}
-                  className="py-1.5 px-2 rounded-xl border border-cardBorder bg-background text-gray-200 outline-none focus:border-brandOrange"
-                  aria-label="الترتيب"
-                >
-                  {SORTS.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      ترتيب: {s.label}
-                    </option>
+          {/* الخطوة 1: كروت المناديب - step 1: the rep cards */}
+          <div className="shrink-0 grid gap-3" style={{ gridTemplateColumns: `repeat(${data.reps.length + 1}, minmax(0, 1fr))` }}>
+            <RepCard title="الكل" sub="كل العملاء" color="#9CA3AF" rows={all} selected={repFilter === "all"} onClick={() => pickRep("all")} />
+            {data.reps.map((r) => (
+              <RepCard key={r.id} title={r.name} sub={r.van} color={r.color} rows={rowsOf(r.id)} selected={repFilter === r.id} onClick={() => pickRep(r.id)} />
+            ))}
+          </div>
+
+          {/* الخطوة 2 (بعد اختيار مندوب): الحالة بعددها ومناطقه - step 2 (after picking a rep): statuses with counts and his areas */}
+          {selectedRep && (
+            <div
+              className="shrink-0 flex items-center gap-2 rounded-2xl border bg-card/80 px-3 py-2 min-w-0"
+              style={{ borderColor: `${selectedRep.color}88`, borderInlineStartWidth: 4, borderInlineStartColor: selectedRep.color }}
+            >
+              <span className="shrink-0 flex items-center gap-1 text-[14px] font-bold text-white whitespace-nowrap">
+                <Truck size={15} style={{ color: selectedRep.color }} /> {selectedRep.name}
+              </span>
+              <div className="shrink-0 flex items-center gap-1.5">
+                {STATUS.map((x) => (
+                  <button key={x.id} type="button" className={chip(status === x.id)} onClick={() => setStatus(status === x.id ? null : x.id)}>
+                    {x.label} <span className="font-numbers text-gray-400">{inArea.filter(x.test).length}</span>
+                  </button>
+                ))}
+                {/* "وقفوا قريب" بيظهر بس لما اقتراح يفتحه - "stopped recently" shows only when a suggestion opens it */}
+                {status === "lost" && (
+                  <button type="button" className={chip(true)} onClick={() => setStatus(null)} title="اشتروا آخر 3 شهور ووقفوا">
+                    🚶 وقفوا قريب <span className="font-numbers text-gray-300">{inArea.filter((r) => isLost(r, data.inactiveDays)).length}</span> ✕
+                  </button>
+                )}
+              </div>
+              <span className="shrink-0 w-px h-6 bg-cardBorder mx-1" />
+              <MapPin size={15} className="shrink-0 text-gray-500" />
+              {/* المناطق بتتزحلق بالعرض - areas scroll sideways */}
+              <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:thin]">
+                <div className="flex items-center gap-1.5 w-max pb-0.5">
+                  <button type="button" className={chip(area === null)} onClick={() => setArea(null)}>
+                    كل المناطق <span className="font-numbers text-gray-400">{byRep.length}</span>
+                  </button>
+                  {areaChips.map((a) => (
+                    <button key={a.key || "none"} type="button" className={chip(area === a.key)} onClick={() => setArea(area === a.key ? null : a.key)}>
+                      {a.label} <span className="font-numbers text-gray-400">{a.count}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-gray-500 text-[13px] font-bold">المنطقة:</span>
-              <button type="button" className={chip(area === null)} onClick={() => setArea(null)}>الكل</button>
-              {visibleAreas.map((a) => (
-                <button key={a.key} type="button" className={chip(area === a.key)} onClick={() => setArea(area === a.key ? null : a.key)}>
-                  {a.label} <span className="text-gray-500 font-numbers">{a.count}</span>
-                </button>
-              ))}
-              {area === "" || (area !== null && !visibleAreas.some((a) => a.key === area)) ? (
-                <button type="button" className={chip(true)} onClick={() => setArea(null)}>
-                  {area === "" ? "بدون منطقة" : areaChips.find((a) => a.key === area)?.label ?? area} ✕
-                </button>
-              ) : null}
-              {areaChips.length > 14 && (
-                <button type="button" className="text-brandOrange text-[14px] font-bold px-2" onClick={() => setShowAllAreas(!showAllAreas)}>
-                  {showAllAreas ? "أقل" : `+${areaChips.length - 14} منطقة`}
-                </button>
-              )}
-            </div>
-          </div>
+          )}
 
-          {/* التابات - tabs */}
-          <div className="shrink-0 flex items-center gap-2">
+          {/* التابات وزرار التحليل - the tabs and the insights button */}
+          <div className="shrink-0 flex flex-wrap items-center gap-2">
             {VIEWS.map((v) => (
               <button
                 key={v.id}
@@ -725,6 +709,24 @@ export default function CustomersPage() {
                 {v.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setInsightsOpen(true)}
+              className="px-4 py-1.5 rounded-xl text-[16px] font-extrabold border border-sky-400/50 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20 transition-colors"
+            >
+              🧠 تحليل واقتراحات
+            </button>
+            {/* منطقة متختارة من غير مندوب (من تاب المناطق) - an area picked without a rep (from the areas tab) */}
+            {!selectedRep && areaLabel !== null && (
+              <button type="button" className={chip(true)} onClick={() => setArea(null)}>
+                📍 {areaLabel} ✕
+              </button>
+            )}
+            {!selectedRep && status !== null && (
+              <button type="button" className={chip(true)} onClick={() => setStatus(null)}>
+                {status === "lost" ? "🚶 وقفوا قريب" : STATUS.find((x) => x.id === status)?.label} ✕
+              </button>
+            )}
             <p className="ms-auto text-gray-400 text-[14px]">
               ظاهر <N value={filtered.length} className="text-white font-bold" /> من <N value={byRep.length} /> عميل
             </p>
@@ -738,8 +740,18 @@ export default function CustomersPage() {
           </div>
         </main>
       )}
-      </div>
 
+      {insights && data && (
+        <InsightsPanel
+          insights={insights}
+          scope={selectedRep ? `${selectedRep.name} · ${selectedRep.van}` : "كل المناديب"}
+          repId={repFilter}
+          reps={reps}
+          inactiveDays={data.inactiveDays}
+          onPick={applyLink}
+          onClose={closeInsights}
+        />
+      )}
       {open && data && (
         <CustomerPanel
           key={open.id}
@@ -747,7 +759,6 @@ export default function CustomersPage() {
           reps={reps}
           inactiveDays={data.inactiveDays}
           tags={data.tags}
-          zoom={zoom}
           note={notes[open.id] ?? null}
           notesEnabled={data.notesEnabled}
           onNoteSaved={onNoteSaved}

@@ -152,12 +152,11 @@ function Notes({ id, note, tags, enabled, onSaved }: { id: string; note: Custome
   );
 }
 
-export default function CustomerPanel({ row, reps, inactiveDays, tags, zoom = 1, note, notesEnabled, onNoteSaved, onClose }: {
+export default function CustomerPanel({ row, reps, inactiveDays, tags, note, notesEnabled, onNoteSaved, onClose }: {
   row: CustomerRow;
   reps: Map<string, CustomersRep>;
   inactiveDays: number;
   tags: string[];
-  zoom?: number; // نفس تكبير الصفحة - the page zoom
   note: CustomerNote | null;
   notesEnabled: boolean;
   onNoteSaved: (id: string, note: CustomerNote | null) => void;
@@ -180,9 +179,7 @@ export default function CustomerPanel({ row, reps, inactiveDays, tags, zoom = 1,
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3" onClick={onClose} role="dialog" aria-modal="true" aria-label={row.name}>
       <div
-        // المقاس متظبط بالتكبير عشان اللوحة تفضل جوه الشاشة - size compensated for the zoom so it stays on screen
-        style={{ zoom, width: `min(1200px, ${97 / zoom}vw)`, height: `${94 / zoom}vh` }}
-        className="relative flex flex-col rounded-2xl border border-cardBorder bg-card shadow-2xl overflow-hidden"
+        className="relative w-[min(1200px,97vw)] h-[94vh] flex flex-col rounded-2xl border border-cardBorder bg-card shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* الاسم والمندوب والحالة - name, rep and status */}

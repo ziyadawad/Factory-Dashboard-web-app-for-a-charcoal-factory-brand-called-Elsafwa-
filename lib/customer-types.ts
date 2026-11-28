@@ -21,6 +21,8 @@ export type CustomerRow = {
   lastDate: string | null; // آخر شرا - last purchase
   daysSince: number | null;
   month: Totals;
+  lastMonth: Totals; // الشهر اللي فات كله - the whole previous month
+  lastMonthToDate: Totals; // الشهر اللي فات لحد نفس اليوم (للمقارنة العادلة) - previous month up to the same day
   three: Totals; // آخر 3 شهور (90 يوم) - last 3 months (90 days)
   all: Totals;
   avgOrder: number;

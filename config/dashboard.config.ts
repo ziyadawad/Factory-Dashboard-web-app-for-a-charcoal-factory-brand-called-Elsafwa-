@@ -820,6 +820,22 @@ export const dashboardConfig = {
     repOverrides: {} as Record<string, string>,
     // التاجات الجاهزة في ملاحظات العميل - the ready-made tags in a customer's notes
     tags: ["عميل مهم", "بيدفع متأخر", "بيدفع كاش", "محتاج متابعة", "زبون جديد"] as string[],
+    // ===== "🧠 تحليل واقتراحات": قواعد ثابتة من الداتا (من غير AI) - rule-based insights from the data (no AI) =====
+    // الشهر ده بيتقارن بالشهر اللي فات لحد نفس اليوم - this month is compared with last month up to the same day
+    insights: {
+      minAreaPackets: 50, // منطقة أقل من كده (الشهر ده والشهر اللي فات) مش بتتحسب في النمو - smaller areas skip growth
+      growthUpPercent: 20, // نمو أكتر من كده = 📈 - growth above this = up
+      growthDownPercent: -20, // نزول أكتر من كده = 📉 "زوّد زيارات" - a drop below this = down
+      lostMinCustomers: 3, // كام عميل متوقف (اشتروا آخر 90 يوم ووقفوا) في منطقة عشان تبقى "بتخسر عملاء" - lost customers per area
+      highDebtAmount: 20000, // مديونية منطقة أكتر من كده (ج.م) = عالية - an area's debt above this (EGP) = high
+      highDebtRatio: 0.5, // أو المديونية أكتر من نص مبيعات آخر 3 شهور - or debt above half of the last 3 months' sales
+      avgOrderMinInvoices: 5, // منطقة محتاجة كام فاتورة آخر 3 شهور عشان متوسط الفاتورة يتحسب - invoices needed for the average
+      // "انقل منطقة" بس لو المندوب التاني عنده لحد 40% من عملاء المنطقة دي (أكتر = مشاركة، مش نقل)
+      // "move area" only when the second rep has up to 40% of that area's customers (more = shared, not a move)
+      moveMaxShare: 0.4,
+      overlapMinCustomers: 2, // كل مندوب لازم يبقى عنده كده عملاء على الأقل في المنطقة عشان تبقى "تداخل" - per rep, for an overlap
+      maxSuggestions: 14, // أكتر عدد اقتراحات - the most suggestions shown
+    },
   },
 
   pages: {
