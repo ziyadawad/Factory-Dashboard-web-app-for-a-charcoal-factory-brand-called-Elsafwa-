@@ -774,9 +774,9 @@ const vanNumber = (van: string) => /\d+/.exec(van)?.[0] ?? "";
 function RouteCard({ name, rep, rows, onOpen, presence, arrived = false }: {
   name: string; rep: CustomersRep; rows: CustomerRow[]; onOpen: () => void; presence?: RepPresence; arrived?: boolean;
 }) {
-  // بصم النهارده = العربية ماشية (وأول ما يبصم والصفحة مفتوحة: فلاش الفوانيس الأول) - punched today = the van drives
-  const present = !!presence?.present;
-  const driving = present && !arrived;
+  // بصم النهارده = العربية ماشية ومنورة (وأول ما يبصم والصفحة مفتوحة: فلاش الفوانيس الأول)، من غير أي كلام
+  // Punched today = the van drives with its lights on (a headlight flash first if it arrives while open), no text
+  const driving = !!presence?.present && !arrived;
   const k = kpisOf(rows);
   const month = rows.reduce((t, r) => t + r.month.packets, 0);
   const areas = useMemo(() => {
@@ -828,12 +828,6 @@ function RouteCard({ name, rep, rows, onOpen, presence, arrived = false }: {
           <div className="min-w-0">
             <p className="text-[12px] text-gray-500 leading-[1.3]">المندوب</p>
             <p className="text-[18px] max-[1599px]:text-[15px] font-extrabold text-white leading-[1.35] truncate">{rep.name}</p>
-            {/* بصم: "في الشغل من 7:42 ص". مبصمش: ولا حاجة - punched: "at work since 7:42 ص"; not punched: nothing */}
-            {present && (
-              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-statusGreen/50 bg-statusGreen/15 px-2 text-[12px] font-bold text-statusGreen whitespace-nowrap leading-[1.6]">
-                🟢 في الشغل{presence?.since ? <> من {formatTime12(presence.since)}</> : null}
-              </span>
-            )}
           </div>
         </div>
         <span className="max-[1599px]:hidden min-[1600px]:order-2 min-[1600px]:ms-auto">

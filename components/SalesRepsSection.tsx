@@ -3,14 +3,11 @@
 import { CalendarDays, Crown, Truck } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
 import { RepDebtSummary, RepSales, SalesReps } from "@/lib/types";
-import { formatDayName, formatTime12, toEnglishDigits } from "@/lib/format";
+import { formatDayName, toEnglishDigits } from "@/lib/format";
 import { dashboardConfig } from "@/config/dashboard.config";
 import { OfflineBadge } from "./OfflineBadge";
 import RepDetailsPanel from "./RepDetailsPanel";
 import RepAvatar from "./RepAvatar";
-import VanIllustration from "./VanIllustration";
-import { useRepAttendance } from "@/lib/useRepAttendance";
-import type { RepPresence } from "@/lib/types";
 import { useCallback, useEffect, useState } from "react";
 import { monthName, Num, Percent, ProductChips, SummaryStrip, useCompactRows } from "./SalesCommon";
 
@@ -104,14 +101,7 @@ const REP_META = new Map(
 );
 
 // كارت مندوب - one rep's card
-function RepCard({ rep, offline, sizes, onOpen, presence, arrived = false }: {
-  rep: RepSales; offline: boolean; sizes: Sizes; onOpen: () => void; presence?: RepPresence; arrived?: boolean;
-}) {
-  // بصم النهارده = عربيته ماشية جنب اسمه، ومبصمش = العربية واقفة زي ما هي - punched today = his van drives next to his name
-  const present = !!presence?.present;
-  const meta = REP_META.get(rep.name);
-  // مقاسات اللابتوب (الكروت القصيرة): الشرايح بتتختصر عشان الاسم ميتقطعش - laptop sizes: chips shorten so the name never cuts
-  const compact = sizes.nameFontSize < dashboardConfig.sizes.salesPage.nameFontSize;
+function RepCard({ rep, offline, sizes, onOpen }: { rep: RepSales; offline: boolean; sizes: Sizes; onOpen: () => void }) {
   const percent = rep.target > 0 ? Math.round((rep.monthPackets / rep.target) * 100) : 0;
   const reached = rep.target > 0 && rep.monthPackets >= rep.target;
   const remaining = Math.max(0, rep.target - rep.monthPackets);
@@ -132,26 +122,13 @@ function RepCard({ rep, offline, sizes, onOpen, presence, arrived = false }: {
         {REP_META.has(rep.name) && (
           <RepAvatar id={REP_META.get(rep.name)!.id} name={rep.name} color={REP_META.get(rep.name)!.color} size={sizes.avatarSize} />
         )}
-        <h3 className="shrink-0 font-extrabold text-white leading-[1.75] whitespace-nowrap" style={{ fontSize: sizes.nameFontSize }}>
+        <h3 className="font-extrabold text-white truncate leading-[1.75]" style={{ fontSize: sizes.nameFontSize }}>
           {toEnglishDigits(rep.name)}
         </h3>
-        {meta && (
-          <VanIllustration
-            number={/\d+/.exec(rep.van)?.[0] ?? ""}
-            color={meta.color}
-            title={rep.van}
-            width={sizes.avatarSize}
-            driving={present && !arrived}
-            flash={arrived}
-          />
-        )}
-        {/* من غير رسمة العربية (مندوب مش في الكونفج): شريحة العربية زي الأول - without the drawing: the van chip as before */}
-        {!meta && (
-          <span className={`${pill} border-brandOrange/40 bg-brandOrange/10 text-brandOrange`} style={{ fontSize: sizes.vanFontSize }}>
-            <Truck size={sizes.vanFontSize + 2} />
-            {toEnglishDigits(rep.van)}
-          </span>
-        )}
+        <span className={`${pill} border-brandOrange/40 bg-brandOrange/10 text-brandOrange`} style={{ fontSize: sizes.vanFontSize }}>
+          <Truck size={sizes.vanFontSize + 2} />
+          {toEnglishDigits(rep.van)}
+        </span>
         {/* خصومات الشهر على فواتيره (لو فيه) - this month's discounts on his invoices (when any) */}
         {(rep.monthDiscount ?? 0) > 0 && (
           <span
@@ -159,7 +136,7 @@ function RepCard({ rep, offline, sizes, onOpen, presence, arrived = false }: {
             style={{ fontSize: sizes.vanFontSize }}
             title="خصومات الشهر على فواتير المندوب"
           >
-            🏷️ {!compact && "خصومات "}<Num value={Math.round(rep.monthDiscount ?? 0)} className="font-bold" /> ج.م
+            🏷️ خصومات <Num value={Math.round(rep.monthDiscount ?? 0)} className="font-bold" /> ج.م
           </span>
         )}
         {rep.isTop && (
@@ -169,22 +146,12 @@ function RepCard({ rep, offline, sizes, onOpen, presence, arrived = false }: {
           </span>
         )}
         <div className="ms-auto flex items-center gap-2 shrink-0">
-          {/* بصم: "🟢 7:42 ص" (والتلميح "في الشغل من ...")، مبصمش: ولا حاجة - punched: "🟢 7:42 ص"; not punched: nothing */}
-          {present && (
-            <span
-              className={`${pill} border-statusGreen/50 bg-statusGreen/15 text-statusGreen whitespace-nowrap`}
-              style={{ fontSize: sizes.vanFontSize }}
-              title={presence?.since ? `في الشغل من ${formatTime12(presence.since, true)}` : "في الشغل"}
-            >
-              🟢 {presence?.since ? formatTime12(presence.since) : "في الشغل"}
-            </span>
-          )}
           {reached && (
             <span
               className={`${pill} font-bold border-statusGreen/70 bg-statusGreen/20 text-statusGreen shadow-[0_0_14px_rgba(34,197,94,0.55)] animate-pulse-dot`}
               style={{ fontSize: sizes.vanFontSize + 1 }}
             >
-              {compact ? "✅ وصل" : "✅ وصل للتارجت"}
+              ✅ وصل للتارجت
             </span>
           )}
           {offline && <OfflineBadge />}
@@ -283,9 +250,8 @@ function RepCard({ rep, offline, sizes, onOpen, presence, arrived = false }: {
   );
 }
 
-export default function SalesRepsSection({ data, onDetailsChange, active = true }: {
+export default function SalesRepsSection({ data, onDetailsChange }: {
   data: SalesReps | null;
-  active?: boolean; // الصفحة ظاهرة (حضور المناديب بيتسأل بس ساعتها) - the page is visible (rep attendance polled only then)
   onDetailsChange?: (open: boolean) => void; // عشان التقليب يقف واللوحة مفتوحة - pauses the rotation while open
 }) {
   const { compact, ...normal } = dashboardConfig.sizes.salesPage;
@@ -295,7 +261,6 @@ export default function SalesRepsSection({ data, onDetailsChange, active = true 
   useEffect(() => onDetailsChange?.(openRep !== null), [openRep, onDetailsChange]);
   const closeDetails = useCallback(() => setOpenRep(null), []);
   const detailsRep = openRep ? data?.reps.find((r) => r.name === openRep) : undefined;
-  const { presence, arrived } = useRepAttendance(active);
 
   if (!data) {
     return (
@@ -345,15 +310,7 @@ export default function SalesRepsSection({ data, onDetailsChange, active = true 
       {/* 4 كروت 2×2 - 4 equal cards */}
       <div ref={ref} className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-4">
         {data.reps.map((rep) => (
-          <RepCard
-            key={rep.name}
-            rep={rep}
-            offline={data.offline}
-            sizes={sizes}
-            onOpen={() => setOpenRep(rep.name)}
-            presence={REP_META.get(rep.name) ? presence[REP_META.get(rep.name)!.id] : undefined}
-            arrived={!!REP_META.get(rep.name) && arrived.has(REP_META.get(rep.name)!.id)}
-          />
+          <RepCard key={rep.name} rep={rep} offline={data.offline} sizes={sizes} onOpen={() => setOpenRep(rep.name)} />
         ))}
       </div>
 
